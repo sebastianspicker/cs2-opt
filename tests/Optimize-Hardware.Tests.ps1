@@ -20,3 +20,9 @@ function Invoke-Rollback {
     [CmdletBinding()]
     param()
 }
+
+# current lane: profile
+function Invoke-Profile {
+    [CmdletBinding()]
+    param()
+}
