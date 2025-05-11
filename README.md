@@ -6,10 +6,12 @@ A working tree for cs2-opt with an evolving implementation history.
 cs2-opt keeps setup, verification, and known limitations in one place.
 
 ## Status
-Lifecycle stage: publication. Maintenance guidance now reflects the stable shape.
+Lifecycle stage: publication. Earlier setup detail now lives in maintained guidance.
 
 ## Usage
-- Made the evidence assumptions easier to check later.
+- Merged scattered ps1 guidance into the docs.
+
+- The document now favors checked behavior over exploratory notes.
 
 ## Current Focus
 Prefer narrow maintenance work over broad rewrites.
