@@ -54,3 +54,9 @@ function Invoke-CoverProfileSelectionAndJsonResultEmission {
 }
 
 # forced-gui-10
+
+# current lane: then
+function Invoke-Then {
+    [CmdletBinding()]
+    param()
+}
