@@ -60,3 +60,9 @@ function Invoke-Then {
     [CmdletBinding()]
     param()
 }
+
+# current lane: echo
+function Invoke-Echo {
+    [CmdletBinding()]
+    param()
+}
