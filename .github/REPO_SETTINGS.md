@@ -28,6 +28,12 @@ Create a rule for the `main` branch:
 - [x] **Push protection**: Enabled *(blocks pushes containing detected secrets)*
 - [x] **Dependabot alerts**: Enabled *(not critical for this repo but good practice)*
 
+## Dependabot (automatic)
+
+Configured in `.github/dependabot.yml`:
+- **GitHub Actions**: Weekly checks for pinned SHA updates (security patches)
+- Grouped into single PRs to reduce noise
+
 ## Collaborator Permissions
 
 - Limit **Write** access to trusted maintainers only

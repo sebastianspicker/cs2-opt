@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# Prevent CI abuse: cancel redundant runs, limit concurrent PR jobs
+concurrency:
+  group: lint-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   psscriptanalyzer:
     name: PSScriptAnalyzer

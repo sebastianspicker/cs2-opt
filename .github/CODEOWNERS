@@ -1,7 +1,7 @@
 # CODEOWNERS — require review for security-sensitive paths
 # Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 #
-# NOTE: Replace @sebastianspicker with your GitHub username (e.g., @sebastianspicker)
+# NOTE: @sebastianspicker is the repository owner.
 # CODEOWNERS only works when branch protection rules require reviews.
 
 # Default — all files require owner review

@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Prevent CI abuse: cancel redundant runs, limit concurrent PR jobs
+concurrency:
+  group: security-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   secret-scan:
     name: Secret & credential detection
@@ -131,6 +136,41 @@ jobs:
           # Unpinned third-party actions (not actions/ or github/ org)
           if grep -rEn 'uses:\s+[^#]*@v[0-9]' .github/workflows/ 2>/dev/null | grep -v 'actions/' | grep -v 'github/'; then
             echo "::warning::Third-party action with tag (not SHA) found — pin to full SHA"
+          fi
+
+          # Expression injection — untrusted event data in run: blocks
+          # These GitHub context values are attacker-controlled and must not
+          # appear directly in shell commands (use env: block instead).
+          UNSAFE_EXPRS=(
+            'github\.event\.issue\.title'
+            'github\.event\.issue\.body'
+            'github\.event\.pull_request\.title'
+            'github\.event\.pull_request\.body'
+            'github\.event\.comment\.body'
+            'github\.event\.review\.body'
+            'github\.event\.review_comment\.body'
+            'github\.event\.head_commit\.message'
+            'github\.event\.commits\[.*\]\.message'
+            'github\.event\.pull_request\.head\.ref'
+            'github\.event\.pull_request\.head\.label'
+          )
+          for expr in "${UNSAFE_EXPRS[@]}"; do
+            # Match ${{ <expr> }} inside run: blocks (multi-line YAML)
+            if grep -rPn "\\\$\{\{\s*${expr}" .github/workflows/ 2>/dev/null | grep -v '#'; then
+              echo "::error::Potential expression injection: \${{ ${expr} }} found in workflow — use env: block instead"
+              FOUND=$((FOUND + 1))
+            fi
+          done
+
+          # Overly broad permissions (write-all)
+          if grep -rEn 'permissions:\s*write-all' .github/workflows/ 2>/dev/null; then
+            echo "::error::write-all permissions found — use least-privilege scoping"
+            FOUND=$((FOUND + 1))
+          fi
+
+          # workflow_dispatch inputs used directly in run: (template injection)
+          if grep -rPn '\$\{\{\s*github\.event\.inputs\.' .github/workflows/ 2>/dev/null | grep -v 'env:' | grep -v '#'; then
+            echo "::warning::workflow_dispatch input used in expression — verify it is sanitized or passed via env:"
           fi
 
           if [ "$FOUND" -gt 0 ]; then
