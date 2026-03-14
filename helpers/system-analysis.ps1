@@ -230,7 +230,7 @@ function Invoke-CheckNetwork {
     try {
         $build = [System.Environment]::OSVersion.Version.Build
         if ($build -ge 22000) {
-            $uro = & netsh int udp show global 2>$null | Select-String "uro"
+            $uro = & netsh int udp show global 2>&1 | Select-String "uro"
             $uroVal = if ($uro -match "disabled") { "disabled" } else { "enabled" }
             $st = if ($uroVal -eq "disabled") { "OK" } else { "WARN" }
             $r.Add((New-CheckItem "Network" "Stack" "URO (UDP Receive Offload)" $uroVal "disabled" $st "P1-16" "URO batches UDP datagrams causing receive jitter on Win11"))
@@ -307,14 +307,13 @@ function Invoke-CheckCS2 {
         # Check key CVars in optimization.cfg
         $optContent = Get-Content $optPath -Raw -ErrorAction SilentlyContinue
         $keyChecks = @(
-            @{ CVar="m_rawinput";    Expected="1"; Impact="Raw input — must be 1 to bypass Windows pointer processing" }
             @{ CVar="snd_use_hrtf"; Expected="1"; Impact="Steam Audio HRTF enable" }
             @{ CVar="cl_autowepswitch"; Expected="0"; Impact="Prevents auto weapon switch on pickup" }
             @{ CVar="rate";         Expected="1000000"; Impact="CS2 max bandwidth rate" }
             @{ CVar="speaker_config"; Expected="1"; Impact="Headphones mode — required for HRTF" }
         )
         foreach ($ck in $keyChecks) {
-            if ($optContent -match "(?m)^\s*$([regex]::Escape($ck.CVar))\s+(.+)$") {
+            if ($optContent -match "(?m)^\s*$([regex]::Escape($ck.CVar))\s+(\S+)") {
                 $val = $Matches[1].Trim()
                 $st = if ($val -eq $ck.Expected) { "OK" } else { "WARN" }
                 $r.Add((New-CheckItem "CS2" "Autoexec" $ck.CVar $val $ck.Expected $st "P1-34" $ck.Impact))

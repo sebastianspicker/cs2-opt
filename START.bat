@@ -100,11 +100,11 @@ pause
 goto :menu
 
 :restore
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'; . '%~dp0config.env.ps1'; . '%~dp0helpers.ps1'; Initialize-ScriptDefaults; Restore-Interactive"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'.TrimEnd('\'); . '%~dp0config.env.ps1'; . '%~dp0helpers.ps1'; Initialize-ScriptDefaults; Restore-Interactive"
 pause
 goto :menu
 
 :backupsummary
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'; . '%~dp0config.env.ps1'; . '%~dp0helpers.ps1'; Initialize-ScriptDefaults; Show-BackupSummary"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'.TrimEnd('\'); . '%~dp0config.env.ps1'; . '%~dp0helpers.ps1'; Initialize-ScriptDefaults; Show-BackupSummary"
 pause
 goto :menu

@@ -122,6 +122,15 @@ function Install-NvidiaDriverClean {
         [string]$DriverExe
     )
 
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would extract and install NVIDIA driver: $DriverExe" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   1. Extract driver package" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   2. Remove bloat components (GFE, telemetry)" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   3. Silent install with essential components only" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   4. Apply post-install registry tweaks" -ForegroundColor Magenta
+        return $true
+    }
+
     if (-not (Test-Path $DriverExe)) {
         Write-Err "Driver file not found: $DriverExe"
         return $false
@@ -228,7 +237,7 @@ function Apply-NvidiaPostInstallTweaks {
     foreach ($t in $telemetryPaths) {
         Set-RegistryValue $t.Path $t.Name $t.Value "DWord" "NVIDIA telemetry disable"
     }
-    Write-OK "NVIDIA telemetry disabled."
+    if (-not $SCRIPT:DryRun) { Write-OK "NVIDIA telemetry disabled." }
 
     # ── Disable HDCP ─────────────────────────────────────────────────────────
     $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$CFG_GUID_Display"
@@ -245,13 +254,13 @@ function Apply-NvidiaPostInstallTweaks {
 
     # ── Enable Write Combining ───────────────────────────────────────────────
     $gfxPath = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
-    if (-not (Test-Path $gfxPath)) { New-Item -Path $gfxPath -Force | Out-Null }
+    if (-not $SCRIPT:DryRun -and -not (Test-Path $gfxPath)) { New-Item -Path $gfxPath -Force | Out-Null }
     Set-RegistryValue $gfxPath "EnableWriteCombining" 1 "DWord" "GPU write combining"
-    Write-OK "Write Combining enabled."
+    if (-not $SCRIPT:DryRun) { Write-OK "Write Combining enabled." }
 
     # ── Disable MPO (Multiplane Overlay) ─────────────────────────────────────
     Set-RegistryValue "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode" 5 "DWord" "MPO disable"
-    Write-OK "MPO disabled."
+    if (-not $SCRIPT:DryRun) { Write-OK "MPO disabled." }
 
     # ── Disable NVIDIA telemetry services ────────────────────────────────────
     $nvTelServices = @("NvTelemetryContainer", "NvContainerNetworkService")
@@ -266,7 +275,7 @@ function Apply-NvidiaPostInstallTweaks {
             }
         } catch { Write-Debug "Telemetry service ${svc}: $_" }
     }
-    Write-OK "NVIDIA telemetry services disabled."
+    if (-not $SCRIPT:DryRun) { Write-OK "NVIDIA telemetry services disabled." }
 
-    Write-Info "Post-install tweaks applied. Restart recommended."
+    if (-not $SCRIPT:DryRun) { Write-Info "Post-install tweaks applied. Restart recommended." }
 }

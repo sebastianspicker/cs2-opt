@@ -169,7 +169,7 @@ function Install-CS2AffinityTask {
     }
 
     # Backup task existence before creation
-    Backup-ScheduledTask -TaskName $CS2_AffinityTaskName -StepTitle $SCRIPT:CurrentStepTitle
+    Backup-ScheduledTask -TaskName $CS2_AffinityTaskName -StepTitle $SCRIPT:CurrentStepTitle -ScriptPath $CS2_AffinityScriptPath
 
     # Create the affinity setter script
     # Use [long] cast to prevent Int32 truncation on high-core-count CPUs (>32 logical processors)

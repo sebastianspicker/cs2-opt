@@ -143,8 +143,8 @@ function Clear-Dir($path, $label) {
     $mb = [math]::Round(($files | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum / 1MB, 1)
     Write-Step "$label  ($n files · $mb MB)"
     $items | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    $remaining = (Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue).Count
-    $del = $n - $remaining
+    $remaining = @(Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
+    $del = [math]::Max(0, $n - $remaining)
     Write-OK "${label}: $del deleted$(if($remaining){" ($remaining locked — normal)"})"
     Write-Debug "${label}: del=$del locked=$remaining path=$path"
     return $del

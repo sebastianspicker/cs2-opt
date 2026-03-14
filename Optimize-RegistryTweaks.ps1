@@ -270,11 +270,17 @@ if ($startStep -le 29) {
             Set-RegistryValue $mousePath "MouseThreshold2"  "0" "String" "Acceleration threshold 2 off"
             $flatX = [byte[]](0x00,0x00,0x00,0x00, 0x00,0xa0,0x00,0x00, 0x00,0x40,0x01,0x00, 0x00,0x80,0x02,0x00, 0x00,0x00,0x05,0x00)
             $flatY = [byte[]](0x00,0x00,0x00,0x00, 0x00,0xa0,0x00,0x00, 0x00,0x40,0x01,0x00, 0x00,0x80,0x02,0x00, 0x00,0x00,0x05,0x00)
-            try {
-                Set-ItemProperty -Path $mousePath -Name "SmoothMouseXCurve" -Value $flatX -Type Binary
-                Set-ItemProperty -Path $mousePath -Name "SmoothMouseYCurve" -Value $flatY -Type Binary
-                Write-OK "Flat mouse curve set (1:1 movement)."
-            } catch { Write-Warn "SmoothMouse curve could not be set: $_" }
+            if (-not $SCRIPT:DryRun) {
+                try {
+                    Backup-RegistryValue -Path $mousePath -Name "SmoothMouseXCurve" -StepTitle $SCRIPT:CurrentStepTitle
+                    Backup-RegistryValue -Path $mousePath -Name "SmoothMouseYCurve" -StepTitle $SCRIPT:CurrentStepTitle
+                    Set-ItemProperty -Path $mousePath -Name "SmoothMouseXCurve" -Value $flatX -Type Binary
+                    Set-ItemProperty -Path $mousePath -Name "SmoothMouseYCurve" -Value $flatY -Type Binary
+                    Write-OK "Flat mouse curve set (1:1 movement)."
+                } catch { Write-Warn "SmoothMouse curve could not be set: $_" }
+            } else {
+                Write-Host "  [DRY-RUN] Would set flat mouse curves (SmoothMouseX/YCurve)" -ForegroundColor Magenta
+            }
             Write-OK "Mouse acceleration disabled. Takes effect after re-login."
 
             # ── mouclass kernel input queue depth ────────────────────────────────────

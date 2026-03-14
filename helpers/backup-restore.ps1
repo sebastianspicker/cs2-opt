@@ -166,7 +166,7 @@ function Backup-BootConfig {
 
 function Backup-ScheduledTask {
     <#  Records whether a scheduled task existed before we create/replace it.  #>
-    param([string]$TaskName, [string]$StepTitle)
+    param([string]$TaskName, [string]$StepTitle, [string]$ScriptPath = "")
     $backup = Get-BackupData
     $existed = $false
     try {
@@ -178,7 +178,7 @@ function Backup-ScheduledTask {
         type       = "scheduledtask"
         taskName   = $TaskName
         existed    = $existed
-        scriptPath = "$CFG_WorkDir\cs2_affinity.ps1"
+        scriptPath = $ScriptPath
         step       = $StepTitle
         timestamp  = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
@@ -458,7 +458,7 @@ function Restore-StepChanges {
             }
         } catch {
             $restoreFail++
-            Write-Warn "Restore failed for $($e.type) $(if($e.name){$e.name}else{$e.profile}): $_"
+            Write-Warn "Restore failed for $($e.type) $(if($e.name){$e.name}elseif($e.profile){$e.profile}elseif($e.originalName){$e.originalName}elseif($e.taskName){$e.taskName}else{$e.type}): $_"
         }
     }
 

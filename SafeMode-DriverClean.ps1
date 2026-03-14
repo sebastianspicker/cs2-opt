@@ -24,7 +24,7 @@ if (-not $env:SAFEBOOT_OPTION) {
 }
 
 Write-Section "Step 1 — Disable Safe Mode"
-bcdedit /deletevalue safeboot 2>$null | Out-Null
+bcdedit /deletevalue safeboot 2>&1 | Out-Null
 Write-OK "Safe Mode disabled (next boot = normal)."
 Complete-Step $PHASE 1 "SafeMode off"
 
