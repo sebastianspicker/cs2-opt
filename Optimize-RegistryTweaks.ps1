@@ -315,8 +315,7 @@ if ($startStep -le 30) {
             if ($cs2Path) {
                 $cs2Exe = "$cs2Path\game\bin\win64\cs2.exe"
                 $regPath = "HKCU:\SOFTWARE\Microsoft\DirectX\UserGpuPreferences"
-                if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
-                Set-ItemProperty -Path $regPath -Name $cs2Exe -Value "GpuPreference=2;" -Type String
+                Set-RegistryValue $regPath $cs2Exe "GpuPreference=2;" "String" "CS2 GPU preference: High Performance"
                 Write-OK "GPU Preference = High Performance for: $cs2Exe"
             } else {
                 Write-Warn "CS2 not found — manual: Windows Settings -> System -> Display -> Graphics settings"

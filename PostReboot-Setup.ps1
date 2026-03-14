@@ -30,8 +30,27 @@ $avgFps   = $state.avgFps
 $gpuInput = $state.gpuInput
 $PHASE    = 3
 
+# Guard: if Phase 1 was run in DRY-RUN, warn and confirm before Phase 3 applies real changes
+if ($SCRIPT:DryRun) {
+    Write-Host ""
+    Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
+    Write-Host "  ║  DRY-RUN MODE INHERITED FROM PHASE 1                       ║" -ForegroundColor Magenta
+    Write-Host "  ║  Phase 3 will preview changes only — nothing will be       ║" -ForegroundColor Magenta
+    Write-Host "  ║  applied unless you switch to a live profile.              ║" -ForegroundColor Magenta
+    Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+    $drChoice = Read-Host "  Continue in DRY-RUN mode? [Y/n]"
+    if ($drChoice -match "^[nN]$") {
+        $SCRIPT:DryRun = $false
+        $SCRIPT:Mode = "CONTROL"
+        Write-Host "  Switched to CONTROL mode — changes WILL be applied." -ForegroundColor Yellow
+    }
+}
+
 # Initialize backup system for this phase
 Initialize-Backup
+
+# Load Phase 1 applied steps so improvement estimates are cumulative
+Load-AppliedSteps
 
 Ensure-Dir $CFG_LogDir
 Initialize-Log

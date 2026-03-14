@@ -67,6 +67,8 @@ $PHASE = 1
 . "$ScriptRoot\Optimize-GameConfig.ps1"
 
 # ── Phase 1 complete ─────────────────────────────────────────────────────────
+# Persist applied step keys so Phase 3 improvement estimates are cumulative
+Save-AppliedSteps
 Write-Blank
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "  ║  PHASE 1 COMPLETE                                   ║" -ForegroundColor Green

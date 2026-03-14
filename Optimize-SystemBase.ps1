@@ -390,7 +390,10 @@ if ($startStep -le 8) {
     $ram = Get-RamInfo
     $ramGB = if ($ram) { $ram.TotalGB } else { 0 }
 
-    if ($ramGB -ge 32) {
+    if ($ramGB -eq 0) {
+        Write-Warn "Could not detect RAM — skipping pagefile configuration."
+        Skip-Step $PHASE 8 "Pagefile (no RAM info)"
+    } elseif ($ramGB -ge 32) {
         Write-Info "RAM: ${ramGB} GB — pagefile fix has little effect on CS2 with >= 32 GB RAM."
         Write-Info "CS2 fits entirely in RAM. Pagefile only used on RAM overflow."
         Skip-Step $PHASE 8 "Pagefile (sufficient RAM)"

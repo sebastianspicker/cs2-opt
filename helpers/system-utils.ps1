@@ -6,36 +6,42 @@ function Invoke-Download($url, $dest, $name) {
     Write-Step "Download: $name"
     Write-Debug "URL: $url -> $dest"
     $maxAttempts = 2
-    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-        try {
-            $ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -TimeoutSec 120
-            $fileSize = (Get-Item $dest).Length
-            $mb = [math]::Round($fileSize / 1MB, 2)
-            # Sanity check: NVIDIA drivers are >100 MB; reject obviously truncated files
-            if ($fileSize -lt 1MB) {
-                Write-Warn "Download appears truncated ($mb MB) — removing corrupt file."
-                Remove-Item $dest -Force -ErrorAction SilentlyContinue
-                if ($attempt -lt $maxAttempts) { Write-Info "Retrying..."; continue }
-                Write-Err "Download failed after $maxAttempts attempts (file too small)."
-                Write-Warn "Manual: $url"
-                return $false
-            }
-            Write-OK "$name ($mb MB)"
-            return $true
-        } catch {
-            if ($attempt -lt $maxAttempts) {
-                Write-Warn "Download attempt $attempt failed: $_ — retrying..."
-                Remove-Item $dest -Force -ErrorAction SilentlyContinue
-            } else {
-                Write-Err "Download failed after $maxAttempts attempts: $_"
-                Write-Warn "Manual: $url"
-                Remove-Item $dest -Force -ErrorAction SilentlyContinue
-                return $false
+    # Set $global: scope so PS 5.1's Invoke-WebRequest sees it (function-scope has no effect in 5.1)
+    $oldProgressPref = $global:ProgressPreference
+    try {
+        $global:ProgressPreference = 'SilentlyContinue'
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -TimeoutSec 120
+                $fileSize = (Get-Item $dest).Length
+                $mb = [math]::Round($fileSize / 1MB, 2)
+                # Sanity check: NVIDIA drivers are >100 MB; reject obviously truncated files
+                if ($fileSize -lt 1MB) {
+                    Write-Warn "Download appears truncated ($mb MB) — removing corrupt file."
+                    Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                    if ($attempt -lt $maxAttempts) { Write-Info "Retrying..."; continue }
+                    Write-Err "Download failed after $maxAttempts attempts (file too small)."
+                    Write-Warn "Manual: $url"
+                    return $false
+                }
+                Write-OK "$name ($mb MB)"
+                return $true
+            } catch {
+                if ($attempt -lt $maxAttempts) {
+                    Write-Warn "Download attempt $attempt failed: $_ — retrying..."
+                    Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                } else {
+                    Write-Err "Download failed after $maxAttempts attempts: $_"
+                    Write-Warn "Manual: $url"
+                    Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                    return $false
+                }
             }
         }
+        return $false
+    } finally {
+        $global:ProgressPreference = $oldProgressPref
     }
-    return $false
 }
 
 function Save-JsonAtomic {
@@ -44,7 +50,7 @@ function Save-JsonAtomic {
     param(
         [Parameter(Mandatory)][object]$Data,
         [Parameter(Mandatory)][string]$Path,
-        [int]$Depth = 5
+        [int]$Depth = 10
     )
     $tmp = "$Path.tmp"
     $Data | ConvertTo-Json -Depth $Depth | Set-Content $tmp -Encoding UTF8
@@ -56,7 +62,7 @@ function Save-State($obj, $path) {
 }
 
 function Load-State($path) {
-    if (-not (Test-Path $path)) { Write-Err "state.json missing — run Phase 1 first."; exit 1 }
+    if (-not (Test-Path $path)) { throw "state.json missing at '$path' — run Phase 1 first." }
     $s = Get-Content $path | ConvertFrom-Json
     $SCRIPT:Mode     = $s.mode
     $SCRIPT:LogLevel = if ($s.logLevel) { $s.logLevel } else { "NORMAL" }
@@ -214,7 +220,13 @@ function Test-ServiceCheck {
     )
     try {
         $svc = Get-Service -Name $ServiceName -ErrorAction Stop
-        $startType = (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'").StartMode
+        $rawStartType = (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'").StartMode
+        # WMI returns "Auto" but Set-Service uses "Automatic" — normalize for comparison
+        $startType = switch ($rawStartType) {
+            "Auto"         { "Automatic" }
+            "Auto Delayed" { "AutomaticDelayedStart" }
+            default        { $rawStartType }
+        }
         if ($startType -eq $ExpectedStartType) {
             Write-Host "  ✓  OK        $Label  (StartType: $startType, Status: $($svc.Status))" -ForegroundColor Green
             $global:_verifyOkCount++

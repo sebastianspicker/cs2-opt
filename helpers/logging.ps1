@@ -66,6 +66,7 @@ function Write-TierBadge($tier, $label) {
         1 { "[T1 · Proven Effect]" }
         2 { "[T2 · Setup-Dependent]" }
         3 { "[T3 · Community Consensus]" }
+        default { "[T? · Unknown Tier]" }
     }
     Write-Host "  $badge  $label" -ForegroundColor $color
     Write-Log "T$tier" "$label"

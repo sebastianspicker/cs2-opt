@@ -60,6 +60,7 @@ function Invoke-GamingDebloat {
     foreach ($svc in $telemetryServices) {
         try {
             if (-not $SCRIPT:DryRun) {
+                Backup-ServiceState -ServiceName $svc.Name -StepTitle $SCRIPT:CurrentStepTitle
                 Stop-Service $svc.Name -Force -ErrorAction SilentlyContinue
                 Set-Service $svc.Name -StartupType Disabled -ErrorAction Stop
                 Write-OK "Disabled: $($svc.Label) ($($svc.Name))"
@@ -82,6 +83,7 @@ function Invoke-GamingDebloat {
             $tasks = Get-ScheduledTask -TaskPath $tp -ErrorAction SilentlyContinue
             foreach ($t in $tasks) {
                 if (-not $SCRIPT:DryRun) {
+                    Backup-ScheduledTask -TaskName $t.TaskName -StepTitle $SCRIPT:CurrentStepTitle
                     Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction SilentlyContinue | Out-Null
                     Write-OK "Disabled task: $($t.TaskName)"
                 } else {

@@ -2,7 +2,7 @@
 #  helpers.ps1  —  Backward-compatible loader (dot-sources all helper modules)
 # ==============================================================================
 
-$helpersRoot = "$PSScriptRoot\helpers"
+$helpersRoot = if ($PSScriptRoot) { "$PSScriptRoot\helpers" } elseif ($ScriptRoot) { "$ScriptRoot\helpers" } else { ".\helpers" }
 
 # ── Core modules (CLI + GUI) ──────────────────────────────────────────────
 . "$helpersRoot\logging.ps1"

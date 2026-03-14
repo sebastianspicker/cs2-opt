@@ -13,7 +13,7 @@
 $CFG_BackupFile = "$CFG_WorkDir\backup.json"
 # Sentinel used when DRS profile was found via app registration rather than by name.
 # Must match between Backup-DrsSettings (write) and Restore-DrsSettings (read).
-$DRS_FOUND_VIA_APP = "(found via cs2.exe)"
+$SCRIPT:DRS_FOUND_VIA_APP = "(found via cs2.exe)"
 
 function Initialize-Backup {
     if (-not (Test-Path $CFG_BackupFile)) {
@@ -25,7 +25,7 @@ function Get-BackupData {
     if (-not (Test-Path $CFG_BackupFile)) { Initialize-Backup }
     try {
         $raw = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
-        if (-not $raw.entries) { $raw | Add-Member -NotePropertyName "entries" -NotePropertyValue @() -Force }
+        if ($null -eq $raw.entries) { $raw | Add-Member -NotePropertyName "entries" -NotePropertyValue @() -Force }
         return $raw
     } catch {
         # Preserve corrupted file for recovery before overwriting
@@ -255,7 +255,7 @@ function Restore-DrsSettings {
 
             # Find the profile
             $drsProfile = [IntPtr]::Zero
-            if ($Entry.profile -and $Entry.profile -ne $DRS_FOUND_VIA_APP) {
+            if ($Entry.profile -and $Entry.profile -ne $SCRIPT:DRS_FOUND_VIA_APP) {
                 $drsProfile = [NvApiDrs]::FindProfileByName($session, $Entry.profile)
             }
             if ($drsProfile -eq [IntPtr]::Zero) {
@@ -362,7 +362,12 @@ function Restore-StepChanges {
                 "registry" {
                     if ($e.existed) {
                         $restoreType = if ($e.originalType) { $e.originalType } else { "DWord" }
-                        Set-ItemProperty -Path $e.path -Name $e.name -Value $e.originalValue -Type $restoreType -ErrorAction Stop
+                        $restoreValue = $e.originalValue
+                        # Binary values are serialized as int arrays in JSON; cast back to byte[]
+                        if ($restoreType -eq "Binary" -and $restoreValue -is [array]) {
+                            $restoreValue = [byte[]]@($restoreValue | ForEach-Object { [byte]$_ })
+                        }
+                        Set-ItemProperty -Path $e.path -Name $e.name -Value $restoreValue -Type $restoreType -ErrorAction Stop
                         Write-OK "Restored: $($e.name) = $($e.originalValue)"
                     } else {
                         Remove-ItemProperty -Path $e.path -Name $e.name -ErrorAction Stop
@@ -371,8 +376,14 @@ function Restore-StepChanges {
                     $restoreOk++
                 }
                 "service" {
-                    $startMap = @{ "Auto"="Automatic"; "Manual"="Manual"; "Disabled"="Disabled" }
+                    $startMap = @{ "Auto"="Automatic"; "Manual"="Manual"; "Disabled"="Disabled"; "Auto Delayed"="AutomaticDelayedStart" }
                     $mapped = if ($startMap[$e.originalStartType]) { $startMap[$e.originalStartType] } else { $e.originalStartType }
+                    # Boot/System/Unknown are kernel driver start types — Set-Service cannot change them
+                    if ($e.originalStartType -in @("Boot","System","Unknown")) {
+                        Write-Warn "Service $($e.name) has start type '$mapped' — cannot restore via Set-Service (kernel driver)."
+                        $restoreOk++
+                        continue
+                    }
                     Set-Service -Name $e.name -StartupType $mapped -ErrorAction SilentlyContinue
                     # Restore DelayedAutoStart flag if it was set (Auto + Delayed = "Automatic (Delayed Start)")
                     if ($e.delayedAutoStart) {
@@ -403,11 +414,11 @@ function Restore-StepChanges {
                     # Delete any FPSHeaven/CS2 Optimized plans we created
                     $allPlans = powercfg /list 2>&1
                     foreach ($line in $allPlans) {
-                        if ($line -match "([a-f0-9-]{36})" -and ($line -match "FPSHeaven" -or $line -match "CS2 Optimized")) {
-                            $delGuid = $Matches[1]
-                            if ($delGuid -ne $e.originalGuid) {
-                                powercfg /delete $delGuid 2>&1 | Out-Null
-                                Write-OK "Deleted imported plan: $delGuid"
+                        if ($line -match "([a-f0-9-]{36})") {
+                            $planGuid = $Matches[1]
+                            if (($line -match "FPSHeaven" -or $line -match "CS2 Optimized") -and $planGuid -ne $e.originalGuid) {
+                                powercfg /delete $planGuid 2>&1 | Out-Null
+                                Write-OK "Deleted imported plan: $planGuid"
                             }
                         }
                     }
@@ -467,10 +478,10 @@ function Restore-AllChanges {
     $r = Read-Host "  Proceed with full restore? [y/N]"
     if ($r -notmatch "^[jJyY]$") { Write-Info "Cancelled."; return }
 
-    $grouped = $backup.entries | Group-Object -Property step
+    $stepNames = @(($backup.entries | Group-Object -Property step).Name)
     $failures = 0
-    foreach ($group in $grouped) {
-        $result = Restore-StepChanges -StepTitle $group.Name
+    foreach ($stepName in $stepNames) {
+        $result = Restore-StepChanges -StepTitle $stepName
         if (-not $result) { $failures++ }
     }
     if ($failures -eq 0) {

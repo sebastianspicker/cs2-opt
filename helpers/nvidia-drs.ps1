@@ -318,7 +318,14 @@ public class NvApiDrs
         try
         {
             int status = _createApplication(session, profile, handle.AddrOfPinnedObject());
-            if (status != 0 && status != EXECUTABLE_ALREADY_IN_USE)
+            if (status == EXECUTABLE_ALREADY_IN_USE)
+            {
+                // -179: exe is already bound to a profile (possibly this one, possibly another).
+                // This is benign when re-running on the same profile but problematic when
+                // the exe is in a DIFFERENT profile — settings written here won't apply.
+                // Caller should verify the target profile owns the exe.
+            }
+            else if (status != 0)
                 CheckStatus(status, string.Format("DRS_CreateApplication({0})", exeName));
         }
         finally { handle.Free(); }
@@ -377,7 +384,7 @@ function Initialize-NvApiDrs {
         Result is cached — safe to call multiple times.
     #>
     if ($SCRIPT:NvApiAvailable -eq $true) { return $true }
-    $SCRIPT:NvApiAvailable = $false
+    if ($SCRIPT:NvApiAvailable -eq $false) { return $false }  # Don't re-attempt after a failure
 
     # Only attempt on 64-bit PowerShell (nvapi64.dll is 64-bit only)
     if ([IntPtr]::Size -ne 8) {

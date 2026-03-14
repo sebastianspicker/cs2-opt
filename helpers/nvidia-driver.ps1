@@ -26,13 +26,11 @@ function Get-LatestNvidiaDriver {
     # NVIDIA driver lookup API
     # psid = Product Series ID, pfid = Product Family ID
     # osid = 57 (Windows 10/11 64-bit), lid = 1 (English), whql = 1
-    # We use the general GeForce driver lookup which covers most consumer cards
-    $lookupUrl = "https://www.nvidia.com/Download/processFind.aspx?" +
-                 "psid=127&pfid=945&osid=57&lid=1&whql=1&dtcid=1"
 
     # Map common GPU series to NVIDIA product series/family IDs
+    # [ordered] ensures deterministic match order (longest/newest series first)
     $gpuName = $gpu.Name
-    $seriesMap = @{
+    $seriesMap = [ordered]@{
         "RTX 50"  = @{ psid = 129; pfid = 1010 }   # GeForce RTX 50 Series
         "RTX 40"  = @{ psid = 128; pfid = 993 }     # GeForce RTX 40 Series
         "RTX 30"  = @{ psid = 127; pfid = 945 }     # GeForce RTX 30 Series
@@ -64,9 +62,10 @@ function Get-LatestNvidiaDriver {
                  "psid=$($matchedSeries.psid)&pfid=$($matchedSeries.pfid)" +
                  "&osid=57&lid=1&whql=1&dtcid=1"
 
+    $oldPP = $global:ProgressPreference
     try {
         Write-Step "Querying NVIDIA driver API..."
-        $ProgressPreference = 'SilentlyContinue'
+        $global:ProgressPreference = 'SilentlyContinue'
         $response = Invoke-WebRequest -Uri $lookupUrl -UseBasicParsing -TimeoutSec 30
 
         # Parse the response for download link and version
@@ -77,6 +76,7 @@ function Get-LatestNvidiaDriver {
             $downloadUrl = $Matches[1]
         }
 
+        $version = $null
         if ($content -match "Version:\s*([\d.]+)") {
             $version = $Matches[1]
         }
@@ -86,7 +86,8 @@ function Get-LatestNvidiaDriver {
             if ($downloadUrl -notmatch "^https?://") {
                 $downloadUrl = "https://www.nvidia.com$downloadUrl"
             }
-            Write-OK "Found driver: Version $version"
+            if (-not $version) { Write-Warn "Could not parse driver version from API response." }
+            Write-OK "Found driver: Version $(if ($version) { $version } else { '(unknown)' })"
             Write-Info "URL: $downloadUrl"
             return @{
                 ManualDownload = $false
@@ -97,6 +98,8 @@ function Get-LatestNvidiaDriver {
         }
     } catch {
         Write-Debug "NVIDIA API lookup failed: $_"
+    } finally {
+        $global:ProgressPreference = $oldPP
     }
 
     # Fallback to manual download
@@ -131,14 +134,12 @@ function Install-NvidiaDriverClean {
     Write-Step "Extracting NVIDIA driver package..."
     Write-Info "This may take 1-2 minutes..."
 
-    try {
-        Start-Process -FilePath $DriverExe -ArgumentList "-extract:`"$tempDir`" -noeula" -Wait -NoNewWindow
-    } catch {
-        # Some versions use different extraction flags
-        try {
-            Start-Process -FilePath $DriverExe -ArgumentList "-y -gm2 -InstallPath=`"$tempDir`"" -Wait -NoNewWindow
-        } catch {
-            Write-Err "Could not extract driver: $_"
+    $extractProc = Start-Process -FilePath $DriverExe -ArgumentList "-extract:`"$tempDir`" -noeula" -Wait -PassThru -NoNewWindow
+    if ($extractProc.ExitCode -ne 0 -or -not (Test-Path "$tempDir\setup.exe")) {
+        # Try alternate extraction flags
+        $extractProc2 = Start-Process -FilePath $DriverExe -ArgumentList "-y -gm2 -InstallPath=`"$tempDir`"" -Wait -PassThru -NoNewWindow
+        if ($extractProc2.ExitCode -ne 0) {
+            Write-Err "Could not extract driver (exit codes: $($extractProc.ExitCode), $($extractProc2.ExitCode))"
             return $false
         }
     }
@@ -258,7 +259,7 @@ function Apply-NvidiaPostInstallTweaks {
         try {
             Stop-Service $svc -Force -ErrorAction SilentlyContinue
             Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
-        } catch { Write-Debug "Telemetry service $svc: $_" }
+        } catch { Write-Debug "Telemetry service ${svc}: $_" }
     }
     Write-OK "NVIDIA telemetry services disabled."
 

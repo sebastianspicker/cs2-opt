@@ -52,7 +52,7 @@ $NV_DRS_SETTINGS = @(
     @{ Id=282245910;  Value=0;          Name="Anisotropic mode: App Controlled" }
 
     # ── FXAA ─────────────────────────────────────────────────────────────────
-    @{ Id=276089202;  Value=1;          Name="Enable FXAA: OFF (NPI gate)" }
+    @{ Id=276089202;  Value=0;          Name="FXAA Default: OFF" }
     @{ Id=271895433;  Value=0;          Name="NVIDIA Predefined FXAA Usage: 0" }
 
     # ── VSync / Frame Rate ───────────────────────────────────────────────────
@@ -60,7 +60,7 @@ $NV_DRS_SETTINGS = @(
     @{ Id=6600001;    Value=1;          Name="Preferred refresh rate: Highest" }
     @{ Id=277041152;  Value=0;          Name="FRL Low Latency: OFF" }
     @{ Id=277041154;  Value=0;          Name="Frame Rate Limiter (legacy): OFF" }
-    @{ Id=277041162;  Value=500;        Name="FRL NVCPL: 500 (unlimited)" }
+    @{ Id=277041162;  Value=500;        Name="FRL NVCPL: 500 FPS cap (effectively unlimited for most monitors)" }
 
     # ── VRR / G-SYNC (all disabled for competitive) ─────────────────────────
     @{ Id=278196567;  Value=0;          Name="VRR global feature: OFF" }
@@ -209,7 +209,8 @@ function Apply-NvidiaCS2Profile {
     Write-Host "  │  ✔  FXAA / Ansel:        OFF                                │" -ForegroundColor White
     Write-Host "  │  ✔  Max Pre-rendered:    1 frame                            │" -ForegroundColor White
     Write-Host "  │  ✔  Frame Rate Limiter:  $frlLabel$((' ' * [math]::Max(0, 36 - $frlLabel.Length)))│" -ForegroundColor White
-    Write-Host "  │  ✔  + $($settingCount - 9) more DRS settings (AA, LOD, Optimus, cache...)     │" -ForegroundColor DarkGray
+    $summaryDisplayed = 9  # Number of settings explicitly listed in the summary box above
+    Write-Host "  │  ✔  + $($settingCount - $summaryDisplayed) more DRS settings (AA, LOD, Optimus, cache...)     │" -ForegroundColor DarkGray
     Write-Host "  │                                                              │" -ForegroundColor Green
     Write-Host "  │  Verify: open NVIDIA Profile Inspector → Counter-strike 2   │" -ForegroundColor DarkGray
     Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Green
@@ -280,7 +281,7 @@ function Apply-NvidiaCS2ProfileDrs {
                     Backup-DrsSettings -Session $session -DrsProfile $drsProfile `
                         -SettingIds ($NV_DRS_SETTINGS | ForEach-Object { $_.Id }) `
                         -StepTitle $effectiveTitle `
-                        -ProfileName $(if ($profileName) { $profileName } else { $DRS_FOUND_VIA_APP }) `
+                        -ProfileName $(if ($profileName) { $profileName } else { $SCRIPT:DRS_FOUND_VIA_APP }) `
                         -ProfileCreated $profileCreated
                 } catch {
                     Write-Warn "DRS backup failed (settings will still be applied): $_"

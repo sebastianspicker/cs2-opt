@@ -14,26 +14,33 @@ function Save-Progress($prog) {
     Write-Debug "Progress saved: Phase $($prog.phase) Step $($prog.lastCompletedStep)"
 }
 
-function Complete-Step($phase, $stepNum, $stepName) {
+function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     $prog = Load-Progress
     if (-not $prog) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=@{} }
     }
     $prog.phase             = $phase
     $prog.lastCompletedStep = $stepNum
-    if ($stepNum -notin $prog.completedSteps) { $prog.completedSteps = @($prog.completedSteps) + $stepNum }
+    # Use composite key "P{phase}:{step}" to disambiguate Phase 1 vs Phase 3 step numbers
+    $stepKey = "P${phase}:${stepNum}"
+    if ($stepKey -notin $prog.completedSteps) {
+        $prog.completedSteps = @($prog.completedSteps) + $stepKey
+    }
     $prog.timestamps | Add-Member -NotePropertyName "$phase-$stepNum" `
         -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm:ss") -Force
     Save-Progress $prog
     Write-Debug "Step $stepNum completed: $stepName"
 }
 
-function Skip-Step($phase, $stepNum, $stepName) {
+function Skip-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     $prog = Load-Progress
     if (-not $prog) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=@{} }
     }
-    if ($stepNum -notin $prog.skippedSteps) { $prog.skippedSteps = @($prog.skippedSteps) + $stepNum }
+    $stepKey = "P${phase}:${stepNum}"
+    if ($stepKey -notin $prog.skippedSteps) {
+        $prog.skippedSteps = @($prog.skippedSteps) + $stepKey
+    }
     # Do NOT add to completedSteps — skippedSteps is a separate semantic.
     # Test-StepDone checks both arrays for resume purposes.
     $prog.phase = $phase
@@ -41,11 +48,14 @@ function Skip-Step($phase, $stepNum, $stepName) {
     Save-Progress $prog
 }
 
-function Test-StepDone($phase, $stepNum) {
+function Test-StepDone([int]$phase, [int]$stepNum) {
     $prog = Load-Progress
-    if (-not $prog -or $prog.phase -ne $phase) { return $false }
+    if (-not $prog) { return $false }
     # A step is "done" for resume purposes if it was either completed or skipped
-    return ($stepNum -in $prog.completedSteps -or $stepNum -in $prog.skippedSteps)
+    # Support both composite key "P{phase}:{step}" (new) and bare step number (legacy)
+    $stepKey = "P${phase}:${stepNum}"
+    return ($stepKey -in $prog.completedSteps -or $stepNum -in $prog.completedSteps -or
+            $stepKey -in $prog.skippedSteps   -or $stepNum -in $prog.skippedSteps)
 }
 
 function Show-ResumePrompt($phase, $totalSteps) {
@@ -56,7 +66,7 @@ function Show-ResumePrompt($phase, $totalSteps) {
         Write-Info "All steps in this phase already completed."
         $r = Read-Host "  Start over anyway? [y/N]"
         if ($r -match "^[jJyY]$") { Clear-Progress $phase; return 1 }
-        return ($totalSteps + 1)
+        return ($totalSteps + 1)  # Sentinel: callers use `for ($step = $startStep; $step -le $totalSteps; ...)` — this skips the loop
     }
     if ($SCRIPT:Mode -eq "AUTO") {
         Write-Info "Auto-resume from step $nextStep."
@@ -93,13 +103,13 @@ function Clear-Progress($phase = $null) {
     $prog = Load-Progress
     if (-not $prog) { return }
 
-    if (-not $phase -or $prog.phase -eq $phase) {
+    if ($null -eq $phase -or $prog.phase -eq $phase) {
         # Reset to empty progress rather than deleting the file — avoids race conditions
         # and makes intent clear (file exists but no steps are done)
         $empty = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=@{} }
         Save-Progress $empty
         Write-Debug "Progress reset$(if($phase){" (Phase $phase)"})"
     } else {
-        Write-Debug "Progress not reset — file tracks Phase $($prog.phase), requested Phase $phase"
+        Write-Warn "Progress not reset — file tracks Phase $($prog.phase), requested Phase $phase. Use START.bat [5] for full reset."
     }
 }

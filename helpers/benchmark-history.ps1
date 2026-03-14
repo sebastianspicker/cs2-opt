@@ -179,8 +179,10 @@ function Invoke-BenchmarkCapture {
         Write-Blank
         Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor $pColor
         Write-Host "  │  COMPARISON WITH PREVIOUS:                                   │" -ForegroundColor $pColor
-        Write-Host "  │  Avg FPS: $($prev.avgFps.ToString('F1')) -> $($result.Avg.ToString('F1'))  ($(if($avgDiff -ge 0){'+'})$($avgDiff.ToString('F1')))$((' ' * (32 - "$($prev.avgFps)$($result.Avg)$avgDiff".Length)))│" -ForegroundColor White
-        Write-Host "  │  1% Lows: $($prev.p1Fps.ToString('F1')) -> $($result.P1.ToString('F1'))  ($(if($p1Diff -ge 0){'+'})$($p1Diff.ToString('F1')))$((' ' * (32 - "$($prev.p1Fps)$($result.P1)$p1Diff".Length)))│" -ForegroundColor White
+        $avgLine = "Avg FPS: $($prev.avgFps.ToString('F1')) -> $($result.Avg.ToString('F1'))  ($(if($avgDiff -ge 0){'+'})$($avgDiff.ToString('F1')))"
+        $p1Line  = "1% Lows: $($prev.p1Fps.ToString('F1')) -> $($result.P1.ToString('F1'))  ($(if($p1Diff -ge 0){'+'})$($p1Diff.ToString('F1')))"
+        Write-Host "  │  $avgLine$((' ' * [math]::Max(0, 60 - $avgLine.Length)))│" -ForegroundColor White
+        Write-Host "  │  $p1Line$((' ' * [math]::Max(0, 60 - $p1Line.Length)))│" -ForegroundColor White
         Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor $pColor
 
         if ($p1Diff -gt 5) {

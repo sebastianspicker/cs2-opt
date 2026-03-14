@@ -16,7 +16,7 @@ function Get-RamInfo {
             SpeedMhz   = $speedMhz        # Rated module frequency
             ActiveMhz  = $configMhz       # Actually active frequency
             Sticks     = $sticks.Count
-            XmpActive  = ($configMhz -ge ($speedMhz * 0.9))  # active if >= 90% of rated
+            XmpActive  = ($configMhz -gt 0 -and $speedMhz -gt 0 -and $configMhz -ge ($speedMhz * 0.9))  # active if >= 90% of rated; may false-positive on DDR5 JEDEC sticks
         }
     } catch {
         Write-Debug "RAM info error: $_"
@@ -36,10 +36,18 @@ function Get-NvidiaDriverVersion {
     try {
         $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
         if (-not $gpu) { return $null }
-        # DriverVersion format "31.0.15.5762" -> last two segments = 576.20
+        # DriverVersion format "31.0.15.5762" -> NVIDIA version 576.20
+        # Last segment encodes the user-facing version: "5762" -> major=576, minor=20
         $parts = $gpu.DriverVersion.Split('.')
-        $ver   = "$($parts[-2]).$($parts[-1])"
-        $major = [int]$parts[-2]
+        $lastSeg = $parts[-1]
+        if ($lastSeg.Length -ge 4) {
+            $major = [int]$lastSeg.Substring(0, $lastSeg.Length - 2)
+            $minor = [int]$lastSeg.Substring($lastSeg.Length - 2)
+            $ver   = "$major.$minor"
+        } else {
+            $major = [int]$lastSeg
+            $ver   = "$major"
+        }
         return @{ Version = $ver; Major = $major; Name = $gpu.Name }
     } catch { return $null }
 }
@@ -73,7 +81,8 @@ function Calculate-FpsCap($avgFps) {
 
 function Get-CS2InstallPath {
     <#  Finds CS2 install directory via Steam registry + libraryfolders.vdf  #>
-    $steamPath = (Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue)?.SteamPath
+    $steamReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
+    $steamPath = if ($steamReg) { $steamReg.SteamPath } else { $null }
     if (-not $steamPath) { return $null }
 
     $defaultCS2 = "$steamPath\steamapps\common\Counter-Strike Global Offensive"
@@ -82,7 +91,7 @@ function Get-CS2InstallPath {
     $vdf = "$steamPath\steamapps\libraryfolders.vdf"
     if (Test-Path $vdf) {
         $content = Get-Content $vdf -Raw
-        $paths = [regex]::Matches($content, '"path"\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+        $paths = [regex]::Matches($content, '"path"\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value -replace '/', '\' }
         foreach ($lp in $paths) {
             $cs2Path = "$lp\steamapps\common\Counter-Strike Global Offensive"
             if (Test-Path "$cs2Path\game\bin\win64\cs2.exe") { return $cs2Path }
@@ -102,7 +111,8 @@ function Get-CS2InstallPath {
 
 function Get-ActiveNicAdapter {
     <#  Returns the active (Up) wired network adapter object, or $null.
-        Centralized NIC selection logic — used by NIC tweaks, RSS config, etc.  #>
+        Centralized NIC selection logic — used by NIC tweaks, RSS config, etc.
+        Best-effort heuristic: may exclude USB Ethernet or include unintended adapters.  #>
     try {
         return Get-NetAdapter -ErrorAction Stop | Where-Object {
             $_.Status -eq "Up" -and

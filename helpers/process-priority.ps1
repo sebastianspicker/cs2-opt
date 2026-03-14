@@ -37,7 +37,7 @@ function Get-X3DCcdInfo {
     if ($cpu.Name -notmatch "X3D") { return $null }
 
     # Single CCD X3D — all cores on V-Cache, no pinning needed
-    if ($cpu.Name -match "(5700X3D|5800X3D|7800X3D|9800X3D)") {
+    if ($cpu.Name -match "(5700X3D|5800X3D|7800X3D|9700X3D|9800X3D)") {
         return @{
             IsX3D   = $true
             DualCCD = $false
@@ -56,9 +56,9 @@ function Get-X3DCcdInfo {
         # Build affinity mask for CCD0 (V-Cache CCD)
         [long]$mask = 0
         for ($i = 0; $i -lt $ccd0Cores; $i++) {
-            $mask = $mask -bor (1L -shl $i)                     # First thread
+            $mask = $mask -bor ([long]1 -shl $i)                     # First thread
             if ($smtEnabled) {
-                $mask = $mask -bor (1L -shl ($totalCores + $i))  # SMT partner
+                $mask = $mask -bor ([long]1 -shl ($totalCores + $i))  # SMT partner
             }
         }
 
@@ -142,7 +142,7 @@ function Set-CS2ProcessPriority {
         } elseif ($x3d.DualCCD -eq $false) {
             Write-Info "X3D detected ($($x3d.CpuName)): $($x3d.Reason)"
         } else {
-            Write-Info "X3D detected ($($x3d.CpuName)): $($x3d.Reason)"
+            Write-Warn "X3D detected ($($x3d.CpuName)): $($x3d.Reason) — verify CCD layout manually."
         }
     }
 

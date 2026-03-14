@@ -186,7 +186,7 @@ function Invoke-CheckInput {
     $r.Add((New-CheckItem "Input" "Mouse" "Mouse Acceleration (Windows)" "Speed=$ms1 Thr1=$ms2 Thr2=$ms3" "All 0" $st "P1-29" "EnhancePointerPrecision — adds non-linear speed scaling"))
 
     $queueSize = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Services\mouclass\Parameters" "MouseDataQueueSize"
-    $st = if ($queueSize -eq 50) { "OK" } elseif ($null -eq $queueSize) { "WARN" } else { "WARN" }
+    $st = if ($queueSize -eq 50) { "OK" } else { "WARN" }
     $r.Add((New-CheckItem "Input" "Mouse" "mouclass Queue Size" $(if ($null -ne $queueSize) {"$queueSize"} else {"Default (100)"}) "50" $st "P1-29" "Default 100; values below 30 cause input skipping; 50 = safe minimum"))
 
     return $r
@@ -196,13 +196,21 @@ function Invoke-CheckInput {
 function Invoke-CheckNetwork {
     $r = [System.Collections.Generic.List[object]]::new()
 
-    # Nagle (check any adapter interface, using first active NIC GUID)
+    # Nagle (check the active NIC interface specifically, not any random interface)
     try {
-        $interfaces = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -ErrorAction SilentlyContinue
+        $activeGuid = Get-ActiveNicGuid
         $nagleOk = $false
-        foreach ($iface in $interfaces) {
-            $nd = Get-RegVal $iface.PSPath "TcpNoDelay"
-            if ($nd -eq 1) { $nagleOk = $true; break }
+        if ($activeGuid) {
+            $ifacePath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$activeGuid"
+            $nd = Get-RegVal $ifacePath "TcpNoDelay"
+            if ($nd -eq 1) { $nagleOk = $true }
+        } else {
+            # Fallback: check all interfaces if active NIC detection failed
+            $interfaces = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -ErrorAction SilentlyContinue
+            foreach ($iface in $interfaces) {
+                $nd = Get-RegVal $iface.PSPath "TcpNoDelay"
+                if ($nd -eq 1) { $nagleOk = $true; break }
+            }
         }
         $r.Add((New-CheckItem "Network" "TCP" "Nagle Disable (TcpNoDelay)" $(if ($nagleOk) {"Disabled on active NIC"} else {"Enabled / Not set"}) "1 (disabled)" $(if ($nagleOk) {"OK"} else {"WARN"}) "P1-25" "Nagle bundles small TCP packets → increases latency"))
     } catch {}
@@ -246,9 +254,9 @@ function Invoke-CheckServices {
     $checks = @(
         @{ Name="SysMain"; Label="SysMain (Superfetch)"; Target="Disabled" }
         @{ Name="WSearch"; Label="Windows Search";       Target="Disabled" }
-    ) + ($CFG_XboxServices | ForEach-Object {
+    ) + $(if ($CFG_XboxServices) { $CFG_XboxServices | ForEach-Object {
         @{ Name=$_; Label=$(if ($xboxLabels[$_]) { $xboxLabels[$_] } else { $_ }); Target="Disabled" }
-    }) + @(
+    } } else { @() }) + @(
         @{ Name="qWave";  Label="qWave (QoS probe)";    Target="Disabled" }
     )
 
@@ -272,6 +280,10 @@ function Invoke-CheckServices {
 # ── CS2 Config ────────────────────────────────────────────────────────────────
 function Invoke-CheckCS2 {
     $r = [System.Collections.Generic.List[object]]::new()
+
+    # Shared SteamPath read — used for video.txt and launch options below
+    $steamReg = Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
+    $steamPath = if ($steamReg) { $steamReg.SteamPath } else { $null }
 
     # Find CS2 install
     $cs2Path = $null
@@ -312,7 +324,6 @@ function Invoke-CheckCS2 {
 
     # video.txt
     try {
-        $steamPath = (Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue).SteamPath
         if ($steamPath) {
             $vtxt = Get-ChildItem "$steamPath\userdata\*\730\local\cfg\video.txt" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -342,13 +353,12 @@ function Invoke-CheckCS2 {
 
     # Launch options (localconfig.vdf)
     try {
-        $steamPath = (Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue).SteamPath
         if ($steamPath) {
             $lcVdf = Get-ChildItem "$steamPath\userdata\*\config\localconfig.vdf" -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($lcVdf) {
                 $lc = Get-Content $lcVdf.FullName -Raw -ErrorAction SilentlyContinue
-                if ($lc -match '"730"[^}]+?"LaunchOptions"\s+"([^"]*)"') {
+                if ($lc -match '"730"[\s\S]*?"LaunchOptions"\s+"([^"]*)"') {
                     $lo = $Matches[1]
                     $hasConsole = $lo -match "-console"
                     $hasExec    = $lo -match "\+exec"

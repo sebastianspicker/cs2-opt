@@ -36,6 +36,13 @@ function Enable-DeviceMSI {
                     if (-not (Test-Path $msiPath)) {
                         New-Item -Path $msiPath -Force | Out-Null
                     }
+                    # Backup before modifying
+                    if ($SCRIPT:CurrentStepTitle) {
+                        Backup-RegistryValue -Path $msiPath -Name "MSISupported" -StepTitle $SCRIPT:CurrentStepTitle
+                        if ($dc.MsiLimit -gt 0) {
+                            Backup-RegistryValue -Path $msiPath -Name "MessageNumberLimit" -StepTitle $SCRIPT:CurrentStepTitle
+                        }
+                    }
                     Set-ItemProperty -Path $msiPath -Name "MSISupported" -Value 1 -Type DWord
 
                     # Set MSI vector count limit for GPU (16 vectors = full multi-queue support)
@@ -44,13 +51,14 @@ function Enable-DeviceMSI {
                     }
 
                     Write-OK "$($dc.Label) MSI enabled: $($dev.FriendlyName)"
+                    $modified++
                 } else {
                     Write-Host "  [DRY-RUN] Would enable MSI for $($dc.Label): $($dev.FriendlyName)" -ForegroundColor Magenta
                     if ($dc.MsiLimit -gt 0) {
                         Write-Host "  [DRY-RUN]   MessageNumberLimit = $($dc.MsiLimit)" -ForegroundColor DarkMagenta
                     }
+                    $modified++
                 }
-                $modified++
             } catch {
                 Write-Warn "Could not set MSI for $($dev.FriendlyName): $_"
             }
@@ -193,23 +201,40 @@ function Set-NicInterruptAffinity {
 
     Write-Step "Setting NIC interrupt affinity..."
 
-    # Find active wired NIC (PCI only)
-    $nic = Get-PnpDevice -Class Net -Status OK -ErrorAction SilentlyContinue |
-        Where-Object { $_.InstanceId -match "^PCI\\" }
-
-    if (-not $nic) {
-        Write-Warn "No PCI network adapter found."
+    # Use the active wired adapter (consistent with Set-NicRssConfig)
+    $activeNic = Get-ActiveNicAdapter
+    if (-not $activeNic) {
+        Write-Warn "No active wired NIC found — skipping affinity."
         return
     }
+
+    # Match PnP device for registry path
+    $nic = Get-PnpDevice -Class Net -Status OK -ErrorAction SilentlyContinue |
+        Where-Object { $_.InstanceId -match "^PCI\\" -and $_.FriendlyName -eq $activeNic.InterfaceDescription }
+
+    if (-not $nic) {
+        # Fallback: try matching by description substring
+        $nic = Get-PnpDevice -Class Net -Status OK -ErrorAction SilentlyContinue |
+            Where-Object { $_.InstanceId -match "^PCI\\" -and $activeNic.InterfaceDescription -like "*$($_.FriendlyName)*" } |
+            Select-Object -First 1
+    }
+
+    if (-not $nic) {
+        Write-Warn "Active NIC '$($activeNic.InterfaceDescription)' not found as PCI device — skipping affinity."
+        return
+    }
+
+    # Ensure single device (not array)
+    if ($nic -is [array]) { $nic = $nic | Select-Object -First 1 }
 
     # Get physical core count (need physical, not logical, for correct core targeting)
     try {
         $coreCount = (Get-CimInstance Win32_Processor | Select-Object -First 1).NumberOfCores
     } catch {
-        # Fallback: assume SMT (2 threads per core) to avoid targeting a non-existent core
+        # Fallback: use logical count directly (safer than assuming SMT factor)
         $logicalCount = [Environment]::ProcessorCount
-        $coreCount = [math]::Max(1, [math]::Floor($logicalCount / 2))
-        Write-Debug "CIM failed — estimated $coreCount physical cores from $logicalCount logical processors"
+        $coreCount = [math]::Max(2, $logicalCount)
+        Write-Debug "CIM failed — using $coreCount logical processors as core count"
     }
 
     if ($coreCount -lt 2) {
@@ -226,28 +251,32 @@ function Set-NicInterruptAffinity {
     # Convert mask to 8-byte array for registry (binary value)
     $maskBytes = [BitConverter]::GetBytes([uint64]$mask)
 
-    foreach ($dev in $nic) {
-        $regBase = "HKLM:\SYSTEM\CurrentControlSet\Enum\$($dev.InstanceId)"
-        $affinityPath = "$regBase\Device Parameters\Interrupt Management\Affinity Policy"
+    $regBase = "HKLM:\SYSTEM\CurrentControlSet\Enum\$($nic.InstanceId)"
+    $affinityPath = "$regBase\Device Parameters\Interrupt Management\Affinity Policy"
 
-        try {
-            if (-not $SCRIPT:DryRun) {
-                if (-not (Test-Path $affinityPath)) {
-                    New-Item -Path $affinityPath -Force | Out-Null
-                }
-
-                # DevicePolicy = 4 means "Specified Processors"
-                Set-ItemProperty -Path $affinityPath -Name "DevicePolicy" -Value 4 -Type DWord
-                Set-ItemProperty -Path $affinityPath -Name "AssignmentSetOverride" -Value ([byte[]]$maskBytes) -Type Binary
-
-                Write-OK "NIC affinity set: $($dev.FriendlyName) -> Core $targetCore"
-                Write-Info "Affinity mask: 0x$($mask.ToString('X')) (Core $targetCore of $coreCount)"
-            } else {
-                Write-Host "  [DRY-RUN] Would set NIC affinity: $($dev.FriendlyName) -> Core $targetCore (mask 0x$($mask.ToString('X')))" -ForegroundColor Magenta
+    try {
+        if (-not $SCRIPT:DryRun) {
+            if (-not (Test-Path $affinityPath)) {
+                New-Item -Path $affinityPath -Force | Out-Null
             }
-        } catch {
-            Write-Warn "Could not set affinity for $($dev.FriendlyName): $_"
+
+            # Backup before modifying
+            if ($SCRIPT:CurrentStepTitle) {
+                Backup-RegistryValue -Path $affinityPath -Name "DevicePolicy" -StepTitle $SCRIPT:CurrentStepTitle
+                Backup-RegistryValue -Path $affinityPath -Name "AssignmentSetOverride" -StepTitle $SCRIPT:CurrentStepTitle
+            }
+
+            # DevicePolicy = 4 means "Specified Processors"
+            Set-ItemProperty -Path $affinityPath -Name "DevicePolicy" -Value 4 -Type DWord
+            Set-ItemProperty -Path $affinityPath -Name "AssignmentSetOverride" -Value ([byte[]]$maskBytes) -Type Binary
+
+            Write-OK "NIC affinity set: $($nic.FriendlyName) -> Core $targetCore"
+            Write-Info "Affinity mask: 0x$($mask.ToString('X')) (Core $targetCore of $coreCount)"
+        } else {
+            Write-Host "  [DRY-RUN] Would set NIC affinity: $($nic.FriendlyName) -> Core $targetCore (mask 0x$($mask.ToString('X')))" -ForegroundColor Magenta
         }
+    } catch {
+        Write-Warn "Could not set affinity for $($nic.FriendlyName): $_"
     }
 
     Write-Info "Restart required for affinity changes to take effect."

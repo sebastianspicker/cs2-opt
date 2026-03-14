@@ -249,7 +249,7 @@ function Apply-PowerPlan {
         # GPU high performance mode — even when GPU load is momentarily low
         Set-PowerPlanValue $PlanGuid $PP_SUB_GPUPREF $PP_GPUPREF 4 "GPU preference (high performance)"
 
-        $t2Count = if ($isAMD) { 16 } else { 17 }
+        $t2Count = if ($isAMD) { 15 } else { 16 }
         Write-OK "T2: $t2Count settings applied ($vendor config)."
     }
 

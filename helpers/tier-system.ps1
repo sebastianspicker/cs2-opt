@@ -43,8 +43,33 @@
 $SCRIPT:RiskOrder = @{ "SAFE"=1; "MODERATE"=2; "AGGRESSIVE"=3; "CRITICAL"=4 }
 $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
 
+function Save-AppliedSteps {
+    <#  Persists $SCRIPT:AppliedSteps to state.json so Phase 3 can read Phase 1 estimates.  #>
+    if (-not (Test-Path $CFG_StateFile)) { return }
+    try {
+        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+        $st | Add-Member -NotePropertyName "appliedSteps" -NotePropertyValue @($SCRIPT:AppliedSteps) -Force
+        Save-JsonAtomic -Data $st -Path $CFG_StateFile
+    } catch { Write-Debug "Could not persist AppliedSteps: $_" }
+}
+
+function Load-AppliedSteps {
+    <#  Loads previously applied step keys from state.json into $SCRIPT:AppliedSteps.  #>
+    if (-not (Test-Path $CFG_StateFile)) { return }
+    try {
+        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+        if ($st.appliedSteps) {
+            foreach ($key in $st.appliedSteps) {
+                if ($key -notin $SCRIPT:AppliedSteps) { $SCRIPT:AppliedSteps.Add($key) }
+            }
+        }
+    } catch { Write-Debug "Could not load AppliedSteps: $_" }
+}
+
 function Get-ProfileMaxRisk {
-    switch ($SCRIPT:Profile) {
+    # Normalize profile to uppercase for case-insensitive matching
+    $p = if ($SCRIPT:Profile) { $SCRIPT:Profile.ToUpper() } else { "" }
+    switch ($p) {
         "SAFE"        { return "SAFE" }
         "RECOMMENDED" { return "MODERATE" }
         "COMPETITIVE" { return "AGGRESSIVE" }
@@ -57,6 +82,10 @@ function Test-RiskAllowed {
     <#  Returns $true if the step's risk is within the profile's threshold.  #>
     param([string]$StepRisk)
     if (-not $StepRisk) { return $true }
+    if (-not $SCRIPT:RiskOrder.ContainsKey($StepRisk)) {
+        Write-Warn "Unknown risk level '$StepRisk' — treating as blocked for safety."
+        return $false
+    }
     $max = Get-ProfileMaxRisk
     return $SCRIPT:RiskOrder[$StepRisk] -le $SCRIPT:RiskOrder[$max]
 }
@@ -179,6 +208,17 @@ function Invoke-TieredStep {
 
     # ── DRY-RUN modifier ────────────────────────────────────────────
     if ($SCRIPT:DryRun) {
+        # Still respect profile tier filtering — SAFE DRY-RUN should not preview T3 steps
+        $wouldSkip = $false
+        switch ($SCRIPT:Profile) {
+            "SAFE"        { if ($Tier -ge 3 -or ($Tier -eq 2 -and $Risk -notin @("SAFE","",$null))) { $wouldSkip = $true } }
+            "RECOMMENDED" { if ($Tier -ge 3 -or ($Tier -eq 2 -and $Risk -and -not (Test-RiskAllowed $Risk))) { $wouldSkip = $true } }
+        }
+        if ($wouldSkip) {
+            Write-Host "  [DRY-RUN] Would SKIP: $Title (filtered by $($SCRIPT:Profile) profile)" -ForegroundColor DarkGray
+            $SCRIPT:CurrentStepTitle = $null
+            return $false
+        }
         Write-Host "  [DRY-RUN] Would execute: $Title" -ForegroundColor Magenta
         if ($Depth)       { Write-Host "  [DRY-RUN] Modifies: $Depth" -ForegroundColor Magenta }
         if ($Improvement) { Write-Host "  [DRY-RUN] Expected: $Improvement" -ForegroundColor Magenta }
@@ -266,8 +306,9 @@ function Invoke-TieredStep {
                 1 { "[T1$rTag] Proven — apply this step?" }
                 2 { "[T2$rTag] Setup-dependent — apply?" }
                 3 { "[T3$rTag] Community tip — apply?" }
+                default { "[T?$rTag] Unknown tier — apply?" }
             }
-            $tColor = switch ($Tier) { 1 {"Green"} 2 {"Yellow"} 3 {"DarkGray"} }
+            $tColor = switch ($Tier) { 1 {"Green"} 2 {"Yellow"} 3 {"DarkGray"} default {"White"} }
             Write-Host "  $tLabel" -ForegroundColor $tColor
             $defaultYes = ($Tier -eq 1)
             if ($defaultYes) {
@@ -292,9 +333,10 @@ function Invoke-TieredStep {
     # ── Execute or skip ─────────────────────────────────────────────
     if ($run) {
         Write-Debug "Executing: '$Title'"
-        & $Action
-        # Track applied steps for improvement estimation
-        if ($EstimateKey -and -not $SCRIPT:DryRun) {
+        $actionOk = $true
+        try { & $Action } catch { Write-Warn "Step '$Title' failed: $_"; $actionOk = $false }
+        # Track applied steps for improvement estimation (only on success)
+        if ($actionOk -and $EstimateKey -and -not $SCRIPT:DryRun) {
             $SCRIPT:AppliedSteps.Add($EstimateKey)
         }
     } else {
@@ -313,7 +355,7 @@ function Get-ImprovementEstimate {
     #>
     $totalP1Min = 0; $totalP1Max = 0
     $totalAvgMin = 0; $totalAvgMax = 0
-    $steps = @()
+    $steps = [System.Collections.Generic.List[object]]::new()
 
     foreach ($key in $SCRIPT:AppliedSteps) {
         if ($CFG_ImprovementEstimates.ContainsKey($key)) {
@@ -322,7 +364,7 @@ function Get-ImprovementEstimate {
             $totalP1Max  += $est.P1LowMax
             $totalAvgMin += $est.AvgMin
             $totalAvgMax += $est.AvgMax
-            $steps += @{ Key=$key; Estimate=$est }
+            $steps.Add(@{ Key=$key; Estimate=$est })
         }
     }
 
@@ -371,8 +413,9 @@ function Show-ImprovementEstimate {
     Write-Host "  │  CUMULATIVE ESTIMATE:" -ForegroundColor White
     Write-Host "  │  1% Lows:  +$($est.P1LowMin)% to +$($est.P1LowMax)%  improvement" -ForegroundColor Cyan
     if ($est.AvgMin -ne 0 -or $est.AvgMax -ne 0) {
-        $avgSign = if ($est.AvgMin -ge 0) { "+" } else { "" }
-        Write-Host "  │  Avg FPS:  ${avgSign}$($est.AvgMin)% to +$($est.AvgMax)%" -ForegroundColor DarkCyan
+        $avgMinSign = if ($est.AvgMin -ge 0) { "+" } else { "" }
+        $avgMaxSign = if ($est.AvgMax -ge 0) { "+" } else { "" }
+        Write-Host "  │  Avg FPS:  ${avgMinSign}$($est.AvgMin)% to ${avgMaxSign}$($est.AvgMax)%" -ForegroundColor DarkCyan
     }
 
     # Compare against actual benchmark if we have data
