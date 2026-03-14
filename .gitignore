@@ -1,0 +1,50 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# PowerShell
+*.psm1.bak
+
+# Third-party binary artifacts (not our property)
+FPSHEAVEN2026.pow
+cs2_blur_fix.nip
+*.nip
+*.pow
+
+# Runtime state (generated on target machine)
+state.json
+progress.json
+backup.json
+backup.json.corrupt.*
+benchmark_history.json
+cs2_optimize.log
+
+# Secrets and credentials — never commit these
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+id_rsa
+id_ed25519
+*.secrets
+credentials.json
+secrets.json
+service-account*.json
+*_token
+*.gpg
+
+# Temp
+*.tmp
+*.bak

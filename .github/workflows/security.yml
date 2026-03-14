@@ -1,0 +1,139 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret & credential detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Scan for secrets and credentials
+        shell: bash
+        run: |
+          echo "=== Scanning for hardcoded secrets ==="
+          FOUND=0
+
+          # Patterns that should never appear in committed code
+          PATTERNS=(
+            'AKIA[0-9A-Z]{16}'                          # AWS Access Key
+            'ghp_[a-zA-Z0-9]{36}'                       # GitHub PAT (fine-grained)
+            'github_pat_[a-zA-Z0-9_]{82}'               # GitHub PAT (classic)
+            'gho_[a-zA-Z0-9]{36}'                       # GitHub OAuth
+            'glpat-[a-zA-Z0-9\-_]{20,}'                 # GitLab PAT
+            'sk-[a-zA-Z0-9]{20,}'                       # OpenAI / Stripe secret key
+            'xox[boaprs]-[a-zA-Z0-9\-]+'                # Slack token
+            'hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[a-zA-Z0-9]+' # Slack webhook
+          )
+
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -rEn "$pattern" --include='*.ps1' --include='*.psd1' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.md' --include='*.txt' --include='*.cfg' --include='*.env' . 2>/dev/null | grep -v '.git/'; then
+              echo "::error::Potential secret found matching pattern: $pattern"
+              FOUND=$((FOUND + 1))
+            fi
+          done
+
+          # Check for generic password/secret assignments
+          if grep -rEin '(password|passwd|secret|token|api_key|apikey|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}' --include='*.ps1' --include='*.psd1' --include='*.yml' --include='*.json' . 2>/dev/null | grep -v '.git/' | grep -v 'CONTRIBUTING' | grep -v 'SECURITY' | grep -v '#'; then
+            echo "::error::Potential hardcoded credential assignment found"
+            FOUND=$((FOUND + 1))
+          fi
+
+          # Check for private keys
+          if grep -rn 'BEGIN.*PRIVATE KEY' . 2>/dev/null | grep -v '.git/'; then
+            echo "::error::Private key found in repository"
+            FOUND=$((FOUND + 1))
+          fi
+
+          if [ "$FOUND" -gt 0 ]; then
+            echo "::error::Found potential secret(s). Review and remove before merging."
+            exit 1
+          fi
+          echo "Secret scan: clean"
+
+  script-safety:
+    name: PowerShell safety patterns
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check for dangerous PowerShell patterns
+        shell: bash
+        run: |
+          echo "=== Checking PowerShell scripts for dangerous patterns ==="
+          FOUND=0
+
+          # Invoke-Expression / iex — remote code execution vector
+          if grep -rEn '\b(Invoke-Expression|iex)\b' --include='*.ps1' . 2>/dev/null | grep -v '.git/' | grep -v '# safe:' | grep -v 'PSScriptAnalyzer'; then
+            echo "::error::Invoke-Expression/iex found — potential code injection vector"
+            FOUND=$((FOUND + 1))
+          fi
+
+          # DownloadString + Invoke-Expression (classic cradle)
+          if grep -rEn 'DownloadString|DownloadFile.*\.(exe|bat|cmd|ps1|vbs)' --include='*.ps1' . 2>/dev/null | grep -v '.git/'; then
+            echo "::error::WebClient DownloadString/DownloadFile to executable found"
+            FOUND=$((FOUND + 1))
+          fi
+
+          # Encoded command execution (obfuscation)
+          if grep -rEin '\-encodedcommand|\-enc ' --include='*.ps1' . 2>/dev/null | grep -v '.git/'; then
+            echo "::error::Encoded command execution found — potential obfuscated payload"
+            FOUND=$((FOUND + 1))
+          fi
+
+          # Unrestricted execution policy set inside scripts
+          if grep -rEn 'Set-ExecutionPolicy\s+Unrestricted' --include='*.ps1' . 2>/dev/null | grep -v '.git/'; then
+            echo "::warning::Set-ExecutionPolicy Unrestricted found — verify necessity"
+          fi
+
+          if [ "$FOUND" -gt 0 ]; then
+            echo "::error::Dangerous pattern(s) found. Review before merging."
+            exit 1
+          fi
+          echo "Script safety check: clean"
+
+  workflow-integrity:
+    name: Workflow file integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check workflow files for dangerous patterns
+        shell: bash
+        run: |
+          echo "=== Checking GitHub Actions workflows ==="
+          FOUND=0
+
+          # pull_request_target — allows fork PRs to run with write access
+          if grep -rn 'pull_request_target' .github/workflows/ 2>/dev/null; then
+            echo "::error::pull_request_target trigger found — risk of fork PR privilege escalation"
+            FOUND=$((FOUND + 1))
+          fi
+
+          # Unpinned third-party actions (not actions/ or github/ org)
+          if grep -rEn 'uses:\s+[^#]*@v[0-9]' .github/workflows/ 2>/dev/null | grep -v 'actions/' | grep -v 'github/'; then
+            echo "::warning::Third-party action with tag (not SHA) found — pin to full SHA"
+          fi
+
+          if [ "$FOUND" -gt 0 ]; then
+            exit 1
+          fi
+          echo "Workflow integrity check: clean"
