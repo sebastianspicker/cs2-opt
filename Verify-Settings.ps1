@@ -77,7 +77,7 @@ Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kerne
 
 # PowerThrottlingOff — Intel 12th gen+ only (E-core mismatch frametime spikes)
 try {
-    $cpuName = (Get-CimInstance Win32_Processor -ErrorAction Stop).Name
+    $cpuName = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).Name
     $isIntelHybrid = $cpuName -match "Intel" -and (
         $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or
         $cpuName -match "\bUltra\b"

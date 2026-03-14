@@ -52,7 +52,7 @@ function Backup-RegistryValue {
         if (Test-Path $Path) {
             $prop = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
             $existing = $prop.$Name
-            $regType  = (Get-Item $Path).GetValueKind($Name).ToString()
+            try { $regType = (Get-Item $Path).GetValueKind($Name).ToString() } catch { $regType = "DWord" }
         }
     } catch {}
 
@@ -442,7 +442,16 @@ function Restore-StepChanges {
                             Write-OK "Removed: $($e.scriptPath)"
                         }
                     } else {
-                        Write-Info "Scheduled task '$($e.taskName)' existed before — kept."
+                        # Task existed before — re-enable it (we disabled it, not removed it)
+                        try {
+                            $task = Get-ScheduledTask -TaskName $e.taskName -ErrorAction SilentlyContinue
+                            if ($task -and $task.State -eq "Disabled") {
+                                Enable-ScheduledTask -TaskName $e.taskName -ErrorAction Stop | Out-Null
+                                Write-OK "Re-enabled scheduled task: $($e.taskName)"
+                            } else {
+                                Write-Info "Scheduled task '$($e.taskName)' already enabled — kept."
+                            }
+                        } catch { Write-Warn "Could not re-enable task $($e.taskName): $_" }
                     }
                     $restoreOk++
                 }

@@ -239,8 +239,9 @@ if ($startStep -le 34) {
             Write-Blank
             $cloudLooksEnabled = $false
             try {
-                $steamPath = (Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" `
-                    -Name "SteamPath" -ErrorAction SilentlyContinue)?.SteamPath
+                $_steamCloudReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" `
+                    -Name "SteamPath" -ErrorAction SilentlyContinue
+                $steamPath = if ($_steamCloudReg) { $_steamCloudReg.SteamPath } else { $null }
                 if ($steamPath -and (Test-Path "$steamPath\userdata")) {
                     # localconfig.vdf is a per-user Valve Data Format file storing
                     # per-app Steam settings. CS2 App ID = 730.
@@ -551,6 +552,7 @@ if ($startStep -le 38) {
 
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would copy scripts to $CFG_WorkDir, set RunOnce, and boot into Safe Mode" -ForegroundColor Magenta
+        Complete-Step $PHASE 38 "SafeMode (DRY-RUN preview)"
     } else {
         # Core scripts (required)
         foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {

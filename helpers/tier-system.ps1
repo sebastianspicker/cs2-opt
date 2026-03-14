@@ -213,6 +213,7 @@ function Invoke-TieredStep {
         switch ($SCRIPT:Profile) {
             "SAFE"        { if ($Tier -ge 3 -or ($Tier -eq 2 -and $Risk -notin @("SAFE","",$null))) { $wouldSkip = $true } }
             "RECOMMENDED" { if ($Tier -ge 3 -or ($Tier -eq 2 -and $Risk -and -not (Test-RiskAllowed $Risk))) { $wouldSkip = $true } }
+            # COMPETITIVE/CUSTOM: intentionally preview all steps in DRY-RUN
         }
         if ($wouldSkip) {
             Write-Host "  [DRY-RUN] Would SKIP: $Title (filtered by $($SCRIPT:Profile) profile)" -ForegroundColor DarkGray
@@ -331,9 +332,9 @@ function Invoke-TieredStep {
     }
 
     # ── Execute or skip ─────────────────────────────────────────────
+    $actionOk = $true
     if ($run) {
         Write-Debug "Executing: '$Title'"
-        $actionOk = $true
         try { & $Action } catch { Write-Warn "Step '$Title' failed: $_"; $actionOk = $false }
         # Track applied steps for improvement estimation (only on success)
         if ($actionOk -and $EstimateKey -and -not $SCRIPT:DryRun) {
@@ -345,7 +346,7 @@ function Invoke-TieredStep {
     }
 
     $SCRIPT:CurrentStepTitle = $null
-    return $run
+    return ($run -and $actionOk)
 }
 
 function Get-ImprovementEstimate {

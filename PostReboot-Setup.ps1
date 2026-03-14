@@ -26,6 +26,7 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $state    = Load-State $CFG_StateFile
 $fpsCap   = $state.fpsCap
+$SCRIPT:fpsCap = $fpsCap
 $avgFps   = $state.avgFps
 $gpuInput = $state.gpuInput
 $PHASE    = 3
@@ -43,6 +44,8 @@ if ($SCRIPT:DryRun) {
         $SCRIPT:DryRun = $false
         $SCRIPT:Mode = "CONTROL"
         Write-Host "  Switched to CONTROL mode — changes WILL be applied." -ForegroundColor Yellow
+        # Persist the mode switch so re-launches don't revert to DRY-RUN
+        try { $state | Add-Member -NotePropertyName "mode" -NotePropertyValue $SCRIPT:Mode -Force; Save-JsonAtomic -Data $state -Path $CFG_StateFile } catch {}
     }
 }
 

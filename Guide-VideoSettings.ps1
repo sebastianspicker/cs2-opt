@@ -291,8 +291,9 @@ function Show-CS2SettingsGuide {
     $videoTxtPath = $null
     $videoTxtDir  = $null
     try {
-        $steamPath = (Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" `
-            -Name "SteamPath" -ErrorAction SilentlyContinue)?.SteamPath
+        $_steamVideoReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" `
+            -Name "SteamPath" -ErrorAction SilentlyContinue
+        $steamPath = if ($_steamVideoReg) { $_steamVideoReg.SteamPath } else { $null }
         if ($steamPath -and (Test-Path "$steamPath\userdata")) {
             # Find the most recently touched video.txt across all Steam accounts
             $found = Get-ChildItem "$steamPath\userdata\*\730\local\cfg\video.txt" `

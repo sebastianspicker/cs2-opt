@@ -236,7 +236,7 @@ if ($startStep -le 28) {
         -SideEffects "Minimal CPU power increase (CPU wakes more frequently)" `
         -Undo "Delete GlobalTimerResolutionRequests from kernel registry key" `
         -Action {
-            $build = [int](Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "CurrentBuildNumber").CurrentBuildNumber
+            $build = [int](Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "CurrentBuildNumber" -ErrorAction SilentlyContinue).CurrentBuildNumber
             if ($build -ge 19041) {
                 Set-RegistryValue "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" `
                     "GlobalTimerResolutionRequests" 1 "DWord" "Timer resolution: allow highest request"

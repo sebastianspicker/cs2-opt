@@ -60,7 +60,8 @@ Write-Section "Quick Refresh  [T1 — measurable effect after driver updates]"
 
 # CS2 Shader Cache
 Write-TierBadge 1 "Clear CS2 Shader Cache"
-$steamReg   = (Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue)?.SteamPath
+$_steamReg  = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
+$steamReg   = if ($_steamReg) { $_steamReg.SteamPath } else { $null }
 $cachePaths = [System.Collections.Generic.List[string]]$CFG_ShaderCache_Paths
 if ($steamReg) { $cachePaths.Add("$steamReg\steamapps\shadercache\730") }
 $cs2Found = $false
@@ -191,7 +192,7 @@ if ($doDriver) {
         Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse
     }
 
-    Clear-Progress 2; Clear-Progress 3
+    Clear-Progress
     Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1"
     Set-BootConfig "safeboot" "minimal" "Driver Refresh — Safe Mode for GPU driver clean"
 

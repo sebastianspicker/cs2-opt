@@ -389,6 +389,7 @@ function Initialize-NvApiDrs {
     # Only attempt on 64-bit PowerShell (nvapi64.dll is 64-bit only)
     if ([IntPtr]::Size -ne 8) {
         Write-Debug "NvApiDrs: 32-bit PowerShell — nvapi64.dll requires 64-bit"
+        $SCRIPT:NvApiAvailable = $false
         return $false
     }
 

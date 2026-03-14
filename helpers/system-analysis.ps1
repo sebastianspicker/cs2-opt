@@ -63,7 +63,7 @@ function Invoke-CheckHardware {
     try {
         $dc = Test-DualChannel
         if ($null -ne $dc) {
-            $st = if ($dc.DualChannel) { "OK" } else { "ERR" }
+            $st = if ($dc.DualChannel -eq $true) { "OK" } elseif ($dc.DualChannel -eq $false) { "ERR" } else { "INFO" }
             $results.Add((New-CheckItem "Hardware" "Memory" "Dual-Channel RAM" $dc.Reason "Dual-channel" $st "P1-24" "Single-channel halves memory bandwidth — 20-40% FPS loss in CS2"))
         }
     } catch {}
@@ -181,7 +181,7 @@ function Invoke-CheckInput {
     $ms1 = Get-RegVal "HKCU:\Control Panel\Mouse" "MouseSpeed"
     $ms2 = Get-RegVal "HKCU:\Control Panel\Mouse" "MouseThreshold1"
     $ms3 = Get-RegVal "HKCU:\Control Panel\Mouse" "MouseThreshold2"
-    $allOff = ($ms1 -eq "0" -or $ms1 -eq 0) -and ($ms2 -eq "0" -or $ms2 -eq 0) -and ($ms3 -eq "0" -or $ms3 -eq 0)
+    $allOff = ("$ms1" -eq "0") -and ("$ms2" -eq "0") -and ("$ms3" -eq "0")
     $st = if ($allOff) { "OK" } else { "WARN" }
     $r.Add((New-CheckItem "Input" "Mouse" "Mouse Acceleration (Windows)" "Speed=$ms1 Thr1=$ms2 Thr2=$ms3" "All 0" $st "P1-29" "EnhancePointerPrecision — adds non-linear speed scaling"))
 
@@ -266,8 +266,10 @@ function Invoke-CheckServices {
             if ($null -eq $s) {
                 $r.Add((New-CheckItem "Services" "Windows" $svc.Label "Not present" $svc.Target "OK" "P1-37" "Service not installed"))
             } else {
-                $st = if ($s.StartType -eq "Disabled") { "OK" } else { "WARN" }
-                $r.Add((New-CheckItem "Services" "Windows" $svc.Label $s.StartType $svc.Target $st "P1-37" "Background service consuming CPU/memory during gaming"))
+                $rawStart = (Get-CimInstance Win32_Service -Filter "Name='$($svc.Name)'" -ErrorAction SilentlyContinue).StartMode
+                $startType = switch ($rawStart) { "Auto" { "Automatic" } "Auto Delayed" { "AutomaticDelayedStart" } default { $rawStart } }
+                $st = if ($startType -eq $svc.Target -or $rawStart -eq $svc.Target) { "OK" } else { "WARN" }
+                $r.Add((New-CheckItem "Services" "Windows" $svc.Label $startType $svc.Target $st "P1-37" "Background service consuming CPU/memory during gaming"))
             }
         } catch {
             $r.Add((New-CheckItem "Services" "Windows" $svc.Label "Query failed" $svc.Target "INFO" "P1-37" ""))

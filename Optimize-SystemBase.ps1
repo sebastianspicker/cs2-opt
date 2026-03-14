@@ -115,7 +115,8 @@ if ($startStep -le 3) {
         -SideEffects "First CS2 launch takes 30-60s longer (shader recompile)" `
         -Undo "Shaders rebuild automatically on next launch" `
         -Action {
-            $steamReg = (Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue)?.SteamPath
+            $_steamReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
+            $steamReg = if ($_steamReg) { $_steamReg.SteamPath } else { $null }
             $paths = [System.Collections.Generic.List[string]]$CFG_ShaderCache_Paths
             if ($steamReg) { $paths.Add("$steamReg\steamapps\shadercache\730") }
             $found = $false
@@ -164,7 +165,8 @@ if ($startStep -le 4) {
                 "$env:ProgramFiles(x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe",
                 "$env:ProgramFiles\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
             )
-            $steamReg = (Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue)?.SteamPath
+            $_steamReg2 = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
+            $steamReg = if ($_steamReg2) { $_steamReg2.SteamPath } else { $null }
             if ($steamReg) {
                 $cs2Paths += "$steamReg\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
             }
@@ -414,16 +416,20 @@ if ($startStep -le 8) {
                     $pfV = 0
                     if ([int]::TryParse($pfIn,[ref]$pfV) -and $pfV -gt 0) { $pfMB = $pfV }
                 }
-                try {
-                    # NOTE: Uses Get-WmiObject (not CIM) because .Put() method is WMI-specific
-                    $cs = Get-WmiObject Win32_ComputerSystem
-                    $cs.AutomaticManagedPagefile = $false; $cs.Put() | Out-Null
-                    $pf = Get-WmiObject -Class Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'"
-                    if (-not $pf) { $pf = ([wmiclass]"Win32_PageFileSetting").CreateInstance() }
-                    $pf.Name = "C:\pagefile.sys"
-                    $pf.InitialSize = $pfMB; $pf.MaximumSize = $pfMB; $pf.Put() | Out-Null
-                    Write-OK "Pagefile: C:\pagefile.sys | ${pfMB} MB fixed (takes effect after restart)"
-                } catch { Write-Warn "Error: $_" }
+                if (-not $SCRIPT:DryRun) {
+                    try {
+                        # NOTE: Uses Get-WmiObject (not CIM) because .Put() method is WMI-specific
+                        $cs = Get-WmiObject Win32_ComputerSystem
+                        $cs.AutomaticManagedPagefile = $false; $cs.Put() | Out-Null
+                        $pf = Get-WmiObject -Class Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'"
+                        if (-not $pf) { $pf = ([wmiclass]"Win32_PageFileSetting").CreateInstance() }
+                        $pf.Name = "C:\pagefile.sys"
+                        $pf.InitialSize = $pfMB; $pf.MaximumSize = $pfMB; $pf.Put() | Out-Null
+                        Write-OK "Pagefile: C:\pagefile.sys | ${pfMB} MB fixed (takes effect after restart)"
+                    } catch { Write-Warn "Error: $_" }
+                } else {
+                    Write-Host "  [DRY-RUN] Would set pagefile to ${pfMB} MB fixed on C:" -ForegroundColor Magenta
+                }
                 Complete-Step $PHASE 8 "Pagefile"
             } `
             -SkipAction { Skip-Step $PHASE 8 "Pagefile" }

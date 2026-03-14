@@ -36,17 +36,18 @@ function Get-NvidiaDriverVersion {
     try {
         $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
         if (-not $gpu) { return $null }
-        # DriverVersion format "31.0.15.5762" -> NVIDIA version 576.20
-        # Last segment encodes the user-facing version: "5762" -> major=576, minor=20
+        # DriverVersion "31.0.15.5762" → NVIDIA 557.62
+        # Decode: concatenate last two segments, drop leading char, split major/minor
         $parts = $gpu.DriverVersion.Split('.')
-        $lastSeg = $parts[-1]
-        if ($lastSeg.Length -ge 4) {
-            $major = [int]$lastSeg.Substring(0, $lastSeg.Length - 2)
-            $minor = [int]$lastSeg.Substring($lastSeg.Length - 2)
-            $ver   = "$major.$minor"
+        $combined = "$($parts[-2])$($parts[-1])"
+        $nvStr = $combined.Substring(1)  # Remove Windows prefix digit
+        if ($nvStr.Length -ge 3) {
+            $major = [int]$nvStr.Substring(0, $nvStr.Length - 2)
+            $minor = [int]$nvStr.Substring($nvStr.Length - 2)
+            $ver = "$major.$minor"
         } else {
-            $major = [int]$lastSeg
-            $ver   = "$major"
+            $major = [int]$nvStr
+            $ver = "$major"
         }
         return @{ Version = $ver; Major = $major; Name = $gpu.Name }
     } catch { return $null }

@@ -21,6 +21,17 @@ function Remove-GpuDriverClean {
     Write-Step "GPU Driver Clean Removal — $GpuVendor"
     Write-Info "This replaces DDU with native PowerShell commands."
 
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would perform complete GPU driver removal for $GpuVendor" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   1. Stop + disable GPU services" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   2. Remove driver packages via pnputil" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   3. Clean GPU class registry keys" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   4. Remove DriverStore orphan folders" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   5. Clean shader caches" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] No files or registry entries will be modified." -ForegroundColor Magenta
+        return
+    }
+
     # ── 1. Stop and Disable GPU Services ─────────────────────────────────────
     Write-Step "Stopping $GpuVendor services..."
 

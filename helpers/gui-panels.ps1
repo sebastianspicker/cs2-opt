@@ -17,11 +17,12 @@ function Load-Dashboard {
     try {
         $prog = Load-Progress
         if ($prog) {
+            $allDone = @($prog.completedSteps) + @($prog.skippedSteps)
             $p1Done = if ($prog.phase -ge 1) {
-                @($prog.completedSteps | Where-Object { $_ -match "^P1:" -or ($_ -is [int] -and $_ -le 38) }).Count
+                @($allDone | Where-Object { $_ -match "^P1:" }).Count
             } else { 0 }
             $p3Done = if ($prog.phase -ge 3) {
-                @($prog.completedSteps | Where-Object { $_ -match "^P3:" }).Count
+                @($allDone | Where-Object { $_ -match "^P3:" }).Count
             } else { 0 }
             $Window.Dispatcher.Invoke({
                 (El "ProgressP1").Value   = $p1Done
@@ -100,12 +101,9 @@ function Load-Dashboard {
     } -WorkArgs @($Script:Root, $Script:UISync) -OnDone {
         $hw = $Script:UISync.Hw
         if (-not $hw) { return }
-        (El "CardCpuName" ).Text = $hw.CpuName ?? "Unknown CPU"
-        (El "CardCpuTier" ).Text = ""
-        (El "CardCpuExtra").Text = ""
-        (El "CardGpuName"  ).Text = $hw.GpuName   ?? "Unknown GPU"
+        (El "CardCpuName" ).Text = if ($hw.CpuName) { $hw.CpuName } else { "Unknown CPU" }
+        (El "CardGpuName"  ).Text = if ($hw.GpuName) { $hw.GpuName } else { "Unknown GPU" }
         (El "CardGpuDriver").Text = $hw.GpuDriver
-        (El "CardGpuVendor").Text = ""
         (El "CardRamSize" ).Text = $hw.RamGb
         (El "CardRamSpeed").Text = $hw.RamSpeed
         (El "CardRamXmp"  ).Text = $hw.RamXmp
@@ -149,7 +147,6 @@ function Start-Analysis {
         . "$ScriptRoot\helpers\system-analysis.ps1"
         try { $UISync.AnalysisResults = Invoke-SystemAnalysis }
         catch { $UISync.AnalysisError = $_.Exception.Message }
-        $UISync.AnalysisDone = $true
     } -WorkArgs @($Script:Root, $Script:UISync) -OnDone {
         $res = $Script:UISync.AnalysisResults
         if (-not $res) { $res = @() }
@@ -164,7 +161,6 @@ function Start-Analysis {
         if ($warn + $err -gt 0) {
             (El "DashIssueHint").Text = "⚠  $($warn+$err) item(s) need attention — see Analyze panel"
         }
-        $Script:UISync.AnalysisDone = $false
     }.GetNewClosure()
 }
 
@@ -202,6 +198,7 @@ function Load-Optimize {
         $isDone  = $stepKey -in $completed -or $s.Step -in $completed
         $isSkip  = $stepKey -in $skipped -or $s.Step -in $skipped
 
+        $statusKey   = if ($s.CheckOnly) { "Check" } elseif ($isDone) { "Done" } elseif ($isSkip) { "Skipped" } else { "Pending" }
         $statusLabel = if ($s.CheckOnly) { "—  Check" } elseif ($isDone) { "✓  Done" } elseif ($isSkip) { "—  Skipped" } else { "○  Pending" }
         $statusColor = if ($s.CheckOnly) { "#6b7280" } elseif ($isDone) { "#22c55e" } elseif ($isSkip) { "#374151" } else { "#fbbf24" }
 
@@ -230,6 +227,7 @@ function Load-Optimize {
             TierColor   = $tierColor
             Risk        = $s.Risk
             RiskColor   = $riskColor
+            StatusKey   = $statusKey
             StatusLabel = $statusLabel
             StatusColor = $statusColor
             RebootLabel = if ($s.Reboot) { "Yes" } else { "" }
@@ -246,7 +244,7 @@ function Load-Optimize {
     (El "OptFilterCat").ItemsSource   = $cats
     (El "OptFilterCat").SelectedIndex = 0
 
-    $statuses = @("All", "Pending", "Done", "Skipped")
+    $statuses = @("All", "Pending", "Done", "Skipped", "Check")
     (El "OptFilterStatus").ItemsSource   = $statuses
     (El "OptFilterStatus").SelectedIndex = 0
 }
@@ -261,7 +259,7 @@ function Filter-OptimizeGrid {
     if (-not $all) { return }
     $filtered = $all | Where-Object {
         ($cat    -eq "All" -or $_.Category -eq $cat) -and
-        ($status -eq "All" -or $_.StatusLabel -match $status)
+        ($status -eq "All" -or $_.StatusKey -eq $status)
     }
     (El "OptimizeGrid").ItemsSource = @($filtered)
 }
@@ -453,7 +451,7 @@ function Draw-BenchChart {
     # P1 line
     $p1Line = [System.Windows.Shapes.Polyline]::new()
     $p1Line.Points = $p1Pts
-    $p1Line.Stroke = New-Brush "#22c55e"; $p1Line.StrokeThickness = 2; $p1Line.StrokeDashArray = "4,3"
+    $p1Line.Stroke = New-Brush "#22c55e"; $p1Line.StrokeThickness = 2; $p1Line.StrokeDashArray = [System.Windows.Media.DoubleCollection]@(4, 3)
     $canvas.Children.Add($p1Line) | Out-Null
 
     # Dots + x-axis labels
@@ -544,6 +542,8 @@ function Load-Video {
     if ($vtxt) {
         $Script:VideoTxtPath = $vtxt.FullName
         (El "VideoTxtPath").Text = $vtxt.FullName
+        (El "BtnVideoWrite").IsEnabled = $true
+        (El "BtnVideoWriteFooter").IsEnabled = $true
     } else {
         (El "VideoTxtPath").Text = "video.txt not found — launch CS2 once to generate it"
         (El "BtnVideoWrite").IsEnabled = $false
@@ -603,7 +603,9 @@ $Script:VideoPresets = @{
 function Get-ResolvedVideoTier {
     param([string]$TierSel)
     if ($TierSel -eq "Auto") {
-        try { $null = Get-NvidiaDriverVersion; return "HIGH" } catch { return "MID" }
+        $nv = Get-NvidiaDriverVersion
+        if ($nv) { return "HIGH" }
+        return "MID"
     }
     return $TierSel
 }

@@ -257,8 +257,13 @@ function Apply-NvidiaPostInstallTweaks {
     $nvTelServices = @("NvTelemetryContainer", "NvContainerNetworkService")
     foreach ($svc in $nvTelServices) {
         try {
-            Stop-Service $svc -Force -ErrorAction SilentlyContinue
-            Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
+            if (-not $SCRIPT:DryRun) {
+                Backup-ServiceState -ServiceName $svc -StepTitle $SCRIPT:CurrentStepTitle
+                Stop-Service $svc -Force -ErrorAction SilentlyContinue
+                Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "  [DRY-RUN] Would stop + disable: ${svc}" -ForegroundColor Magenta
+            }
         } catch { Write-Debug "Telemetry service ${svc}: $_" }
     }
     Write-OK "NVIDIA telemetry services disabled."
