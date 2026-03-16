@@ -24,7 +24,18 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\helpers.ps1"
 . "$ScriptRoot\Guide-VideoSettings.ps1"
 
-$state    = Load-State $CFG_StateFile
+try {
+    $state = Load-State $CFG_StateFile
+} catch {
+    Write-Host "  ERROR: state.json missing or corrupted: $_" -ForegroundColor Red
+    Write-Host "  Phase 1 may not have completed. To recover:" -ForegroundColor Yellow
+    Write-Host "  - Re-run from START.bat, or" -ForegroundColor Yellow
+    Write-Host "  - Press [Y] to continue with defaults." -ForegroundColor Yellow
+    $r = Read-Host "  Continue with defaults? [y/N]"
+    if ($r -notmatch "^[jJyY]$") { exit 1 }
+    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; fpsCap=$null; avgFps=$null; rollbackDriver=$null; nvidiaDriverPath=$null }
+    $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
+}
 $fpsCap   = $state.fpsCap
 $SCRIPT:fpsCap = $fpsCap
 $avgFps   = $state.avgFps
@@ -93,7 +104,7 @@ if ($startStep -le 1) {
         if ($state.rollbackDriver) {
             Write-Blank
             Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
-            Write-Host "  ║  ROLLBACK REQUESTED: Driver $($state.rollbackDriver)$((' ' * (30 - $state.rollbackDriver.Length)))║" -ForegroundColor Yellow
+            Write-Host "  ║  ROLLBACK REQUESTED: Driver $($state.rollbackDriver)$((' ' * [math]::Max(0, 30 - $state.rollbackDriver.Length)))║" -ForegroundColor Yellow
             Write-Host "  ║  Make sure the .exe matches this version!               ║" -ForegroundColor Yellow
             Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
         }
@@ -120,7 +131,12 @@ if ($startStep -le 1) {
         } else {
             Write-Err "No valid driver .exe found."
             Write-Info "Download from: https://www.nvidia.com/en-us/drivers/"
-            Write-Info "Then restart Phase 3."
+            $skipConfirm = Read-Host "  Skip driver install and continue to Step 2? [y/N]"
+            if ($skipConfirm -match "^[jJyY]$") {
+                Skip-Step $PHASE 1 "Driver"
+            } else {
+                Write-Info "Restart Phase 3 when ready."
+            }
         }
 
         if ($gpuInput -eq "1") {
@@ -181,11 +197,11 @@ if ($startStep -le 4) {
     if ($gpuInput -in @("1","2")) {
         Write-Section "Step 4 — NVIDIA CS2 Profile (DRS direct write)"
         Invoke-TieredStep -Tier 3 -Title "Apply NVIDIA CS2 profile settings (DRS + registry)" `
-            -Why "Writes 51 optimized DWORD settings directly to NVIDIA DRS binary database via nvapi64.dll. Falls back to registry if DRS unavailable." `
+            -Why "Writes 52 optimized DWORD settings directly to NVIDIA DRS binary database via nvapi64.dll. Falls back to registry if DRS unavailable." `
             -Evidence "T3: No isolated 1%-low benchmark for the full profile. Individual flags may be T2." `
             -Caveat "Requires nvapi64.dll (NVIDIA driver installed). Falls back to registry if unavailable." `
             -Risk "SAFE" -Depth "DRIVER" `
-            -Improvement "All 51 DWORD settings applied directly to DRS binary database + PerfLevelSrc registry key" `
+            -Improvement "All 52 DWORD settings applied directly to DRS binary database + PerfLevelSrc registry key" `
             -SideEffects "None — all DRS settings backed up automatically. Reversible via rollback or NPI -> Restore Defaults" `
             -Undo "Restore via backup rollback, or NVIDIA CP -> Manage 3D Settings -> Restore Defaults" `
             -Action {
@@ -352,8 +368,12 @@ if ($startStep -le 9) {
                         $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth"
                     } | Sort-Object LinkSpeed -Descending | Select-Object -First 1
                     if ($nic) {
-                        Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $dnsAddrs
-                        Write-OK "DNS set to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))"
+                        if ($SCRIPT:DryRun) {
+                            Write-Host "  [DRY-RUN] Would set DNS to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))" -ForegroundColor Magenta
+                        } else {
+                            Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $dnsAddrs
+                            Write-OK "DNS set to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))"
+                        }
                     } else {
                         Write-Warn "No active network adapter found."
                     }

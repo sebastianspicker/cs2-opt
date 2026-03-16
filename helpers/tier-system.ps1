@@ -59,7 +59,7 @@ function Load-AppliedSteps {
     try {
         $st = Get-Content $CFG_StateFile | ConvertFrom-Json
         if ($st.appliedSteps) {
-            foreach ($key in $st.appliedSteps) {
+            foreach ($key in @($st.appliedSteps)) {
                 if ($key -notin $SCRIPT:AppliedSteps) { $SCRIPT:AppliedSteps.Add($key) }
             }
         }

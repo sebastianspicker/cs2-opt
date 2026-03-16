@@ -56,7 +56,7 @@ if ($ManualAvg -gt 0) {
         "1" {
             Write-Step "Reading clipboard..."
             try {
-                $clip = Get-Clipboard -TextFormatType Text
+                $clip = Get-Clipboard
                 if ($clip) {
                     $result = Parse-BenchmarkOutput $clip
                     if ($result) { Write-OK "Detected: $($result.Runs) run(s)." }

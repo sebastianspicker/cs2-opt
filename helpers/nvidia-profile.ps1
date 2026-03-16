@@ -5,7 +5,7 @@
 #  Applies optimized NVIDIA driver settings for CS2 using TWO methods:
 #
 #  1. DRS Direct Write (preferred):
-#     Calls nvapi64.dll via helpers/nvidia-drs.ps1 to write all 50 DWORD
+#     Calls nvapi64.dll via helpers/nvidia-drs.ps1 to write all 52 DWORD
 #     settings directly to the DRS binary database (nvdrs.dat).
 #     This is the same mechanism NVIDIA Profile Inspector uses.
 #
@@ -23,7 +23,7 @@
 #  Plus 1 registry-only (PerfLevelSrc) — applied via registry always
 #
 
-# ── Settings table: all 51 DWORD settings for DRS ───────────────────────────
+# ── Settings table: all 52 DWORD settings for DRS ───────────────────────────
 # Each entry: Id (NvU32 settingId), Value (NvU32), Name (display label)
 #
 # Settings derived from public NVIDIA DRS IDs, community testing (djdallmann,
@@ -130,7 +130,7 @@ function Apply-NvidiaCS2Profile {
     <#
     .SYNOPSIS  Applies optimized CS2 NVIDIA driver profile settings.
     .DESCRIPTION
-        DRS-first: writes all 51 DWORD settings directly to the NVIDIA DRS
+        DRS-first: writes all 52 DWORD settings directly to the NVIDIA DRS
         binary database via nvapi64.dll P/Invoke.  Falls back to registry
         writes if DRS is unavailable (AMD GPU, missing DLL, 32-bit PS).
 

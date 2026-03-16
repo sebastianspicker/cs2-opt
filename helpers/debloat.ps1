@@ -37,6 +37,10 @@ function Invoke-GamingDebloat {
         if ($apps) {
             if (-not $SCRIPT:DryRun) {
                 $apps | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+                # Also remove provisioned package to prevent reinstall on Windows feature updates
+                Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+                    Where-Object { $_.DisplayName -eq $pkg } |
+                    Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Out-Null
                 Write-OK "Removed: $pkg"
             } else {
                 Write-Host "  [DRY-RUN] Would remove AppX: $pkg" -ForegroundColor Magenta

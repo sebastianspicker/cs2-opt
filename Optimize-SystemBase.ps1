@@ -45,7 +45,7 @@ if ($startStep -le 2) {
                     Write-Err "XMP/EXPO is NOT active!"
                     Write-Blank
                     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
-                    Write-Host "  │  RAM running at $($ram.ActiveMhz) MHz instead of $($ram.SpeedMhz) MHz$((' ' * (34 - "$($ram.ActiveMhz) $($ram.SpeedMhz)".Length)))│" -ForegroundColor Yellow
+                    Write-Host "  │  RAM running at $($ram.ActiveMhz) MHz instead of $($ram.SpeedMhz) MHz$((' ' * [math]::Max(0, 34 - "$($ram.ActiveMhz) $($ram.SpeedMhz)".Length)))│" -ForegroundColor Yellow
                     Write-Host "  │                                                              │" -ForegroundColor Yellow
                     Write-Host "  │  Note: CS2-specific 1%-low effect is not proven by           │" -ForegroundColor DarkGray
                     Write-Host "  │  isolated benchmarks. Generally recommended though —         │" -ForegroundColor DarkGray
@@ -57,7 +57,7 @@ if ($startStep -le 2) {
                     Write-Host "  │  3.  Enable Profile 1                                      │" -ForegroundColor White
                     Write-Host "  │  4.  Save + restart                                        │" -ForegroundColor White
                     Write-Host "  │  5.  Verify: Task Manager -> Performance -> Memory          │" -ForegroundColor White
-                    Write-Host "  │      -> Should show '$($ram.SpeedMhz) MHz'$((' ' * (34 - "$($ram.SpeedMhz) MHz".Length)))│" -ForegroundColor White
+                    Write-Host "  │      -> Should show '$($ram.SpeedMhz) MHz'$((' ' * [math]::Max(0, 34 - "$($ram.SpeedMhz) MHz".Length)))│" -ForegroundColor White
                     Write-Host "  │                                                              │" -ForegroundColor Yellow
                     Write-Host "  │  AFTERWARDS: RAM stability test recommended                 │" -ForegroundColor DarkGray
                     Write-Host "  │  TM5 / HCI MemTest  (github.com/integrityhf/TM5)           │" -ForegroundColor DarkGray
@@ -162,7 +162,7 @@ if ($startStep -le 4) {
         -Undo "Delete AppCompatFlags\Layers entry for cs2.exe" `
         -Action {
             $cs2Paths = @(
-                "$env:ProgramFiles(x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe",
+                "${env:ProgramFiles(x86)}\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe",
                 "$env:ProgramFiles\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
             )
             $_steamReg2 = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue

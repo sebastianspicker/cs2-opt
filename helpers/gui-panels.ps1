@@ -46,7 +46,7 @@ function Load-Dashboard {
                 $sign   = if ($dAvg -gt 0) { "+" } else { "" }
                 $signP1 = if ($dP1  -gt 0) { "+" } else { "" }
                 (El "DashPerfDelta"   ).Text = "Δ avg: ${sign}${dAvg}%   Δ 1%low: ${signP1}${dP1}%"
-                (El "DashPerfDelta"   ).Foreground = if ($dAvg -gt 0) { New-Brush "#22c55e" } else { New-Brush "#ef4444" }
+                (El "DashPerfDelta"   ).Foreground = if ($dAvg -gt 0) { New-Brush "#22c55e" } elseif ($dAvg -lt 0) { New-Brush "#ef4444" } else { New-Brush "#6b7280" }
             })
         } elseif ($hist -and $hist.Count -eq 1) {
             $Window.Dispatcher.Invoke({ (El "DashPerfBaseline").Text = "Baseline: avg $($hist[0].avgFps) fps  1%low $($hist[0].p1Fps) fps" })
@@ -332,7 +332,14 @@ function Load-Backup {
     $r = [System.Windows.MessageBox]::Show("Restore ALL backed-up settings?`nThis will undo every change the suite made.","Restore All","YesNo","Warning")
     if ($r -eq "Yes") {
         try {
-            Restore-AllChanges
+            # Call step restores directly — Restore-AllChanges uses Read-Host which blocks GUI (no console)
+            $bd = Get-BackupData
+            if ($bd.entries -and $bd.entries.Count -gt 0) {
+                $stepNames = @(($bd.entries | Group-Object -Property step).Name)
+                $failures = 0
+                foreach ($sn in $stepNames) { if (-not (Restore-StepChanges -StepTitle $sn)) { $failures++ } }
+                if ($failures -gt 0) { throw "$failures step group(s) had restore failures." }
+            }
             [System.Windows.MessageBox]::Show("All settings restored successfully.","Restore Complete")
             Load-Backup
         } catch {
@@ -386,7 +393,7 @@ function Load-Benchmark {
                 $d = if ($prev.p1Fps -gt 0) { [math]::Round(($h.p1Fps - $prev.p1Fps) / $prev.p1Fps * 100, 1) } else { 0 }
                 if ($d -gt 0) { "+$d%" } else { "$d%" }
             }
-            $dc = if ($i -eq 0 -or $dAvg -eq "—") { "#6b7280" } elseif ($dAvg.StartsWith("+")) { "#22c55e" } else { "#ef4444" }
+            $dc = if ($i -eq 0 -or $dAvg -eq "—") { "#6b7280" } elseif ($dAvg.StartsWith("+")) { "#22c55e" } elseif ($dAvg -eq "0%" -or $dAvg -eq "0.0%") { "#6b7280" } else { "#ef4444" }
             $dateStr = try { [datetime]::ParseExact($h.timestamp,"yyyy-MM-dd HH:mm:ss",$null).ToString("dd-MMM HH:mm") } catch { $h.timestamp }
             [PSCustomObject]@{
                 Index      = $h.index

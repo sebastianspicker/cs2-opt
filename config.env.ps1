@@ -26,7 +26,7 @@ $CFG_FpsCap_Min     = 60
 
 # ── Shader Cache Paths ─────────────────────────────────────────────────────────
 $CFG_ShaderCache_Paths = @(
-    "$env:ProgramFiles(x86)\Steam\steamapps\shadercache\730",
+    "${env:ProgramFiles(x86)}\Steam\steamapps\shadercache\730",
     "$env:ProgramFiles\Steam\steamapps\shadercache\730",
     "D:\Steam\steamapps\shadercache\730",
     "E:\Steam\steamapps\shadercache\730",
@@ -107,7 +107,7 @@ $CFG_DNS_Google     = @("8.8.8.8", "8.8.4.4")
 #     would apply even if Step 29 disabled it in registry (a user re-enabling it in Win settings
 #     would silently affect CS2 again). m_rawinput is the correct layer to enforce this.
 #     m_mouseaccel1/2/customaccel 0 — disable all CS2-side acceleration on top of raw input.
-$CFG_CS2_Autoexec = @{
+$CFG_CS2_Autoexec = [ordered]@{
     # ── Network / Interpolation ────────────────────────────────────────────
     # NOTE: cl_interp_ratio, cl_interp, cl_updaterate are deprecated in CS2 Source 2.
     # The subtick system handles interpolation differently; cl_net_buffer_ticks is the
@@ -225,7 +225,7 @@ $CFG_ImprovementEstimates = @{
     "NIC Tweaks"                 = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=0;  Confidence="LOW";    Note="Only if LatencyMon shows NIC DPC" }
     "MSI Interrupts"             = @{ P1LowMin=0;  P1LowMax=5;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Reduces DPC latency" }
     "Clean Driver Install"       = @{ P1LowMin=2;  P1LowMax=10; AvgMin=0; AvgMax=5;  Confidence="HIGH";   Note="Bloat-free driver" }
-    "Autoexec CVars"             = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="56 CVars: network, engine latency sleep, mouse raw input, audio spatial+HRTF, music mute, video, gameplay" }
+    "Autoexec CVars"             = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="74 CVars: network, engine latency sleep, mouse raw input, audio spatial+HRTF, music mute, video, gameplay" }
     "Defender Exclusions"        = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Eliminates scan-time intercept on CS2 shader cache I/O" }
     "SysMain Disable"            = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Only on HDD or low RAM" }
     "Debloat"                    = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Fewer background processes" }

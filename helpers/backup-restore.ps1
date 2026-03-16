@@ -26,6 +26,8 @@ function Get-BackupData {
     try {
         $raw = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
         if ($null -eq $raw.entries) { $raw | Add-Member -NotePropertyName "entries" -NotePropertyValue @() -Force }
+        # Force entries to array — PS 5.1 ConvertFrom-Json unwraps single-element arrays to scalars
+        $raw.entries = @($raw.entries)
         return $raw
     } catch {
         # Preserve corrupted file for recovery before overwriting
@@ -381,31 +383,32 @@ function Restore-StepChanges {
                     # Boot/System/Unknown are kernel driver start types — Set-Service cannot change them
                     if ($e.originalStartType -in @("Boot","System","Unknown")) {
                         Write-Warn "Service $($e.name) has start type '$mapped' — cannot restore via Set-Service (kernel driver)."
+                        # Don't count kernel-driver skips as successful restores
+                    } else {
+                        Set-Service -Name $e.name -StartupType $mapped -ErrorAction SilentlyContinue
+                        # Restore DelayedAutoStart flag if it was set (Auto + Delayed = "Automatic (Delayed Start)")
+                        if ($e.delayedAutoStart) {
+                            $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$($e.name)"
+                            Set-ItemProperty -Path $regPath -Name "DelayedAutostart" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+                        }
+                        if ($e.originalStatus -eq "Running") {
+                            Start-Service -Name $e.name -ErrorAction SilentlyContinue
+                        }
+                        $delayTag = if ($e.delayedAutoStart) { " (Delayed)" } else { "" }
+                        Write-OK "Restored: $($e.name) -> $($e.originalStartType)$delayTag"
                         $restoreOk++
-                        continue
                     }
-                    Set-Service -Name $e.name -StartupType $mapped -ErrorAction SilentlyContinue
-                    # Restore DelayedAutoStart flag if it was set (Auto + Delayed = "Automatic (Delayed Start)")
-                    if ($e.delayedAutoStart) {
-                        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$($e.name)"
-                        Set-ItemProperty -Path $regPath -Name "DelayedAutostart" -Value 1 -Type DWord -ErrorAction SilentlyContinue
-                    }
-                    if ($e.originalStatus -eq "Running") {
-                        Start-Service -Name $e.name -ErrorAction SilentlyContinue
-                    }
-                    $delayTag = if ($e.delayedAutoStart) { " (Delayed)" } else { "" }
-                    Write-OK "Restored: $($e.name) -> $($e.originalStartType)$delayTag"
-                    $restoreOk++
                 }
                 "bootconfig" {
                     if ($e.existed) {
-                        bcdedit /set $e.key $e.originalValue 2>&1 | Out-Null
-                        Write-OK "Restored: bcdedit $($e.key) = $($e.originalValue)"
+                        $bcdOut = bcdedit /set $e.key $e.originalValue 2>&1
+                        if ($LASTEXITCODE -ne 0) { Write-Warn "bcdedit restore failed for $($e.key): $bcdOut" }
+                        else { Write-OK "Restored: bcdedit $($e.key) = $($e.originalValue)"; $restoreOk++ }
                     } else {
-                        bcdedit /deletevalue $e.key 2>&1 | Out-Null
-                        Write-OK "Removed: bcdedit $($e.key)"
+                        $bcdOut = bcdedit /deletevalue $e.key 2>&1
+                        if ($LASTEXITCODE -ne 0) { Write-Warn "bcdedit deletevalue failed for $($e.key): $bcdOut" }
+                        else { Write-OK "Removed: bcdedit $($e.key)"; $restoreOk++ }
                     }
-                    $restoreOk++
                 }
                 "powerplan" {
                     # Restore original power plan and delete the imported one
@@ -467,10 +470,14 @@ function Restore-StepChanges {
         Write-Warn "Restore '$StepTitle': $restoreOk succeeded, $restoreFail failed — check warnings above."
     }
 
-    # Remove restored entries
-    $backup.entries = @($backup.entries | Where-Object { $_.step -ne $StepTitle })
-    Save-BackupData $backup
-    return $true
+    # Only remove entries when all restores succeeded — keep entries on failure so user can retry
+    if ($restoreFail -eq 0) {
+        $backup.entries = @($backup.entries | Where-Object { $_.step -ne $StepTitle })
+        Save-BackupData $backup
+    } else {
+        Write-Warn "Backup entries retained for '$StepTitle' — retry restore to complete."
+    }
+    return ($restoreFail -eq 0)
 }
 
 function Restore-AllChanges {

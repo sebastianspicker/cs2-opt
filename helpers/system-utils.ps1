@@ -53,8 +53,13 @@ function Save-JsonAtomic {
         [int]$Depth = 10
     )
     $tmp = "$Path.tmp"
-    $Data | ConvertTo-Json -Depth $Depth | Set-Content $tmp -Encoding UTF8
-    Move-Item $tmp $Path -Force
+    try {
+        $Data | ConvertTo-Json -Depth $Depth | Set-Content $tmp -Encoding UTF8 -ErrorAction Stop
+        Move-Item $tmp $Path -Force -ErrorAction Stop
+    } catch {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        throw "Save-JsonAtomic failed for '$Path': $_"
+    }
 }
 
 function Save-State($obj, $path) {
@@ -109,8 +114,9 @@ function Set-BootConfig($key, $val, $why) {
         return
     }
     Write-Step "bcdedit /set $key $val  ($why)"
-    try { bcdedit /set $key $val 2>&1 | Out-Null; Write-OK "Set: $key = $val" }
-    catch { Write-Warn "Error: $_" }
+    $output = bcdedit /set $key $val 2>&1
+    if ($LASTEXITCODE -ne 0) { Write-Warn "bcdedit failed (exit $LASTEXITCODE): $output" }
+    else { Write-OK "Set: $key = $val" }
 }
 
 function Set-RegistryValue($path, $name, $value, $type, $why) {
@@ -125,10 +131,10 @@ function Set-RegistryValue($path, $name, $value, $type, $why) {
     }
     Write-Debug "Registry: $path | $name = $value [$type] — $why"
     try {
-        if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
-        Set-ItemProperty -Path $path -Name $name -Value $value -Type $type
+        if (-not (Test-Path $path)) { New-Item -Path $path -Force -ErrorAction Stop | Out-Null }
+        Set-ItemProperty -Path $path -Name $name -Value $value -Type $type -ErrorAction Stop
         Write-OK "Registry: $name = $value"
-    } catch { Write-Warn "Error: $_" }
+    } catch { Write-Warn "Registry write failed ($name): $_" }
 }
 
 function Ensure-Dir($path) {
@@ -209,7 +215,7 @@ function Test-RegistryCheck {
             $global:_verifyChangedCount++
         }
     }
-    return $status
+    # No return value when not -Quiet — prevents stdout clutter in Verify-Settings.ps1
 }
 
 function Test-ServiceCheck {
@@ -230,15 +236,12 @@ function Test-ServiceCheck {
         if ($startType -eq $ExpectedStartType) {
             Write-Host "  ✓  OK        $Label  (StartType: $startType, Status: $($svc.Status))" -ForegroundColor Green
             $global:_verifyOkCount++
-            return "OK"
         } else {
             Write-Host "  ✗  CHANGED   $Label  (StartType: $startType, expected: $ExpectedStartType)" -ForegroundColor Yellow
             $global:_verifyChangedCount++
-            return "CHANGED"
         }
     } catch {
         Write-Host "  ?  MISSING   $Label  (Service not found)" -ForegroundColor Red
         $global:_verifyMissingCount++
-        return "MISSING"
     }
 }

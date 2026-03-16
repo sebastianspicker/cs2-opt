@@ -185,10 +185,11 @@ function Remove-GpuDriverClean {
     Write-Step "Cleaning DriverStore orphan folders..."
 
     $driverStore = "$env:SystemRoot\System32\DriverStore\FileRepository"
+    # Use precise patterns to avoid matching non-GPU drivers (e.g., nvdimm, amdppm)
     $patterns = switch ($GpuVendor) {
-        "NVIDIA" { @("nv_dispi*","nvd*","nview*","nvlddmkm*") }
-        "AMD"    { @("ati*","amd*") }
-        "Intel"  { @("iigd*","igfx*","igd*") }
+        "NVIDIA" { @("nv_dispi*","nvdsp*","nvlddmkm*","nview*","nvhdc*","nvmdi*") }
+        "AMD"    { @("atiilhag*","atiumdag*","amdkmdap*","amdxe*","atihdw*","radeon*") }
+        "Intel"  { @("iigd_dch*","igfx*","igd10*","igd11*","igd12*") }
     }
 
     $cleanedFolders = 0

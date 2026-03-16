@@ -245,8 +245,10 @@ function Set-NicInterruptAffinity {
     # Calculate affinity mask for last physical core
     # Core 0 = bit 0, Core 1 = bit 1, etc.
     # We want the last physical core to avoid Core 0 (OS-heavy)
-    $targetCore = $coreCount - 1
-    $mask = [uint64][Math]::Pow(2, $targetCore)
+    # Clamp to 63 — processor group 0 supports max 64 logical processors;
+    # systems with >64 LPs require GROUP_AFFINITY which needs a different API.
+    $targetCore = [math]::Min($coreCount - 1, 63)
+    $mask = [uint64]1 -shl $targetCore
 
     # Convert mask to 8-byte array for registry (binary value)
     $maskBytes = [BitConverter]::GetBytes([uint64]$mask)

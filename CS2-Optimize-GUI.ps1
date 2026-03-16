@@ -38,6 +38,7 @@ function Invoke-Async {
         if ($capturedHandle.IsCompleted) {
             $timer.Stop()
             try { $capturedRs.EndInvoke($capturedHandle) } catch { $Script:UISync.AsyncError = $_.Exception.Message }
+            finally { $capturedRs.Dispose() }
             & $capturedDone
         }
     }.GetNewClosure())

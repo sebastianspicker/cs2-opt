@@ -5,8 +5,19 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
 
-$state = Load-State $CFG_StateFile
+try {
+    $state = Load-State $CFG_StateFile
+} catch {
+    Write-Host "  ERROR: state.json missing or corrupted: $_" -ForegroundColor Red
+    Write-Host "  To exit Safe Mode: run 'bcdedit /deletevalue safeboot' then restart." -ForegroundColor Yellow
+    Write-Host "  To continue anyway with defaults, press [Y]." -ForegroundColor Yellow
+    $r = Read-Host "  Continue with defaults? [y/N]"
+    if ($r -notmatch "^[jJyY]$") { exit 1 }
+    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; rollbackDriver=$null; nvidiaDriverPath=$null }
+    $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
+}
 Initialize-Log
+Initialize-Backup
 Write-Banner 2 3 "Safe Mode  ·  GPU Driver Clean Removal"
 Write-Info "Safe Mode active. GPU driver files are unlocked."
 
@@ -24,8 +35,15 @@ if (-not $env:SAFEBOOT_OPTION) {
 }
 
 Write-Section "Step 1 — Disable Safe Mode"
-bcdedit /deletevalue safeboot 2>&1 | Out-Null
-Write-OK "Safe Mode disabled (next boot = normal)."
+$smOutput = bcdedit /deletevalue safeboot 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
+    Write-Err "System may boot into Safe Mode again! Run: bcdedit /deletevalue safeboot"
+    $smConfirm = Read-Host "  Continue anyway? [y/N]"
+    if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+} else {
+    Write-OK "Safe Mode disabled (next boot = normal)."
+}
 Complete-Step $PHASE 1 "SafeMode off"
 
 Write-Section "Step 2 — GPU Driver Clean Removal"

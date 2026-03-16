@@ -170,7 +170,7 @@ if ($startStep -le 27) {
                 )
                 if ($isIntelHybrid) {
                     $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
-                    if (-not (Test-Path $ptPath)) { New-Item -Path $ptPath -Force | Out-Null }
+                    # Set-RegistryValue creates the key path if missing — no need for standalone New-Item
                     Set-RegistryValue $ptPath "PowerThrottlingOff" 1 "DWord" "Disable Intel Power Throttling (E-core mismatch)"
                     Write-OK "Intel hybrid CPU ($cpuName) — Power Throttling disabled."
                 } else {
@@ -198,7 +198,6 @@ if ($startStep -le 27) {
             # Windows schedules RunFullMemoryDiagnostic + disk defrag + scan during gaming.
             # djdallmann xperf captured 12-14% CPU consumption when maintenance fires mid-game.
             $maintPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance"
-            if (-not (Test-Path $maintPath)) { New-Item -Path $maintPath -Force | Out-Null }
             Set-RegistryValue $maintPath "MaintenanceDisabled" 1 "DWord" `
                 "Disable Windows Automatic Maintenance scheduler"
 
@@ -210,7 +209,9 @@ if ($startStep -le 27) {
             # overhead and slightly reduces directory entry sizes.
             # Source: valleyofdoom/PC-Tuning + standard Windows Server performance tuning.
             $fsPath = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
-            Set-RegistryValue $fsPath "NtfsDisableLastAccessUpdate"  1 "DWord" `
+            # 0x80000001 = user-managed + disabled. On Win10 1803+, value 1 alone means
+            # "user-managed + ENABLED" (the opposite of intent). The high bit signals user-managed mode.
+            Set-RegistryValue $fsPath "NtfsDisableLastAccessUpdate" 0x80000001 "DWord" `
                 "NTFS: disable last-access timestamp writes on file reads"
             Set-RegistryValue $fsPath "NtfsDisable8dot3NameCreation" 1 "DWord" `
                 "NTFS: disable 8.3 legacy filename alias generation"
@@ -292,7 +293,6 @@ if ($startStep -le 29) {
             # can cause mouse skipping on some hardware. 50 is a safe conservative reduction.
             # Source: djdallmann/GamingPCSetup — mouclass.sys kernel input buffer analysis.
             $mouPath = "HKLM:\SYSTEM\CurrentControlSet\Services\mouclass\Parameters"
-            if (-not (Test-Path $mouPath)) { New-Item -Path $mouPath -Force | Out-Null }
             Set-RegistryValue $mouPath "MouseDataQueueSize" 50 "DWord" `
                 "mouclass kernel queue depth (50 events, down from default 100)"
             Write-OK "mouclass: kernel mouse event queue = 50 (default: 100). Reboot required."

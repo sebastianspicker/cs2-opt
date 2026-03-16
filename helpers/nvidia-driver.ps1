@@ -149,12 +149,14 @@ function Install-NvidiaDriverClean {
         $extractProc2 = Start-Process -FilePath $DriverExe -ArgumentList "-y -gm2 -InstallPath=`"$tempDir`"" -Wait -PassThru -NoNewWindow
         if ($extractProc2.ExitCode -ne 0) {
             Write-Err "Could not extract driver (exit codes: $($extractProc.ExitCode), $($extractProc2.ExitCode))"
+            Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
             return $false
         }
     }
 
     if (-not (Test-Path "$tempDir\setup.exe")) {
         Write-Err "Extraction failed — setup.exe not found in $tempDir"
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
         return $false
     }
 

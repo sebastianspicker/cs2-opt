@@ -137,8 +137,12 @@ function New-CS2PowerPlan {
         }
     }
 
-    # Duplicate High Performance as base
+    # Duplicate High Performance as base; fall back to Balanced on OEM systems where High Perf is removed
     $output = powercfg /duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>&1
+    if (-not ($output -match "([a-f0-9-]{36})")) {
+        Write-Warn "High Performance plan not found — falling back to Balanced as base."
+        $output = powercfg /duplicatescheme 381b4222-f694-41f0-9685-ff5bb260df2e 2>&1
+    }
     if ($output -match "([a-f0-9-]{36})") {
         $guid = $Matches[1]
     } else {

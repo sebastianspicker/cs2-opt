@@ -45,6 +45,9 @@ service-account*.json
 *_token
 *.gpg
 
+# Personal configurations (internal testing only)
+*_sebastian.*
+
 # Temp
 *.tmp
 *.bak

@@ -168,8 +168,9 @@ function Invoke-CheckSystemLatency {
 
     # NTFS Last Access
     $ntfsLa = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisableLastAccessUpdate"
-    $st = if ($ntfsLa -eq 1) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "Filesystem" "NTFS Last Access" $(if ($ntfsLa -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (1)" $st "P1-27" "Removes metadata write on every file read"))
+    # 0x80000001 = user-managed + disabled (Win10 1803+); 1 = disabled (legacy)
+    $st = if ($ntfsLa -eq 0x80000001 -or $ntfsLa -eq 1) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Filesystem" "NTFS Last Access" $(if ($ntfsLa -eq 0x80000001 -or $ntfsLa -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (0x80000001)" $st "P1-27" "Removes metadata write on every file read"))
 
     return $r
 }

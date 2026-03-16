@@ -91,9 +91,11 @@ public class MemHelper {
     [DllImport("kernel32.dll")] public static extern bool SetSystemFileCacheSize(UIntPtr min, UIntPtr max, uint flags);
 }
 "@ -ErrorAction SilentlyContinue
-    $before = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 0)
+    $before = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB, 0)
     [MemHelper]::SetSystemFileCacheSize([UIntPtr]::new(1), [UIntPtr]::new(1), 0) | Out-Null
-    $after  = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 0)
+    # Reset file cache limits back to system defaults (flag 0x4 = FILE_CACHE_MAX_HARD_DISABLE)
+    [MemHelper]::SetSystemFileCacheSize([UIntPtr]::Zero, [UIntPtr]::Zero, 4) | Out-Null
+    $after  = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB, 0)
     Write-OK "RAM: ${after} MB free (before: ${before} MB)"
 } catch { Write-Info "Working set trim skipped." }
 
@@ -130,7 +132,10 @@ if ($doFull) {
         -Improvement "Fixes corrupted Winsock entries — helps with connection issues" `
         -SideEffects "May need restart for full effect" `
         -Undo "N/A (resets to clean state)" `
-        -Action { netsh winsock reset | Out-Null; Write-OK "Winsock reset." } | Out-Null
+        -Action {
+            if (-not $SCRIPT:DryRun) { netsh winsock reset | Out-Null; Write-OK "Winsock reset." }
+            else { Write-Host "  [DRY-RUN] Would run: netsh winsock reset" -ForegroundColor Magenta }
+        }
 
     # Event Logs  [Hygiene]
     Write-TierBadge 3 "Clear Event Logs  (no 1%-low effect)"
@@ -152,19 +157,19 @@ if ($doFull) {
         -Undo "N/A (verification only)" `
         -Action {
             $steamExe = @(
-                "$env:ProgramFiles(x86)\Steam\steam.exe",
+                "${env:ProgramFiles(x86)}\Steam\steam.exe",
                 "$env:ProgramFiles\Steam\steam.exe",
                 "$(if($steamReg){"$steamReg\steam.exe"})"
             ) | Where-Object { Test-Path $_ } | Select-Object -First 1
             if ($steamExe) {
                 Write-Step "Starting CS2 verification..."
-                Start-Process $steamExe -ArgumentList "-applaunch 730 -verify" -ErrorAction SilentlyContinue
+                Start-Process "steam://validate/730" -ErrorAction SilentlyContinue
                 Write-OK "Steam verification started — wait for Steam to finish."
             } else {
                 Write-Warn "Steam.exe not found."
                 Write-Info "Manual: Steam -> CS2 -> Properties -> Local Files -> Verify"
             }
-        } | Out-Null
+        }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -173,8 +178,18 @@ if ($doFull) {
 if ($doDriver) {
     Write-Section "Driver Refresh  [T1 — restart required]"
     Write-TierBadge 1 "Run native GPU driver clean + reinstall"
-    Write-Warn "Requires restart into Safe Mode."
 
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would perform Driver Refresh:" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   1. Copy scripts to $CFG_WorkDir" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   2. Reset progress tracking" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   3. Set RunOnce for Phase 2" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   4. Boot into Safe Mode → GPU driver clean → Phase 3" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] No changes made." -ForegroundColor Magenta
+        exit 0
+    }
+
+    Write-Warn "Requires restart into Safe Mode."
     Write-Host "  GPU Driver Clean: ✔  (native PowerShell — no tools needed)" -ForegroundColor Green
     Write-Host "  Driver Install:   ✔  (native extract + install)" -ForegroundColor Green
 
@@ -192,7 +207,8 @@ if ($doDriver) {
         Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse
     }
 
-    Clear-Progress
+    # Reset all progress unconditionally — Phase 2+3 will re-run from scratch
+    Clear-Progress $null
     Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1"
     Set-BootConfig "safeboot" "minimal" "Driver Refresh — Safe Mode for GPU driver clean"
 
@@ -206,9 +222,9 @@ Write-Log "SECTION" "=== CLEANUP DONE: $logTag | ${elapsed}s | $total entries ==
 Write-Blank
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "  ║  CLEANUP COMPLETE                                    ║" -ForegroundColor Green
-Write-Host "  ║  Mode:     $logTag$((' ' * (43 - $logTag.Length)))║" -ForegroundColor Green
-Write-Host "  ║  Duration: ${elapsed}s$((' ' * (44 - "$elapsed".Length)))║" -ForegroundColor Green
-Write-Host "  ║  Deleted:  $total entries$((' ' * (39 - "$total".Length)))║" -ForegroundColor Green
+Write-Host "  ║  Mode:     $logTag$((' ' * [math]::Max(0, 43 - $logTag.Length)))║" -ForegroundColor Green
+Write-Host "  ║  Duration: ${elapsed}s$((' ' * [math]::Max(0, 44 - "$elapsed".Length)))║" -ForegroundColor Green
+Write-Host "  ║  Deleted:  $total entries$((' ' * [math]::Max(0, 39 - "$total".Length)))║" -ForegroundColor Green
 Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Blank
 Write-Sub "Launch CS2 -> 'Compiling Shaders' briefly visible -> normal"

@@ -397,14 +397,14 @@ if ($startStep -le 36) {
                 $mpAvailable = Get-Command Add-MpPreference -ErrorAction Stop
                 # Exclusion paths — common Steam install locations + shader caches
                 $excludePaths = @(
-                    "$env:ProgramFiles(x86)\Steam\steamapps\common\Counter-Strike Global Offensive",
+                    "${env:ProgramFiles(x86)}\Steam\steamapps\common\Counter-Strike Global Offensive",
                     "$env:ProgramFiles\Steam\steamapps\common\Counter-Strike Global Offensive",
                     "D:\Steam\steamapps\common\Counter-Strike Global Offensive",
                     "E:\Steam\steamapps\common\Counter-Strike Global Offensive",
                     "$env:LOCALAPPDATA\NVIDIA\DXCache",
                     "$env:LOCALAPPDATA\NVIDIA\GLCache",
                     "$env:LOCALAPPDATA\D3DSCache",
-                    "$env:ProgramFiles(x86)\Steam\steamapps\shadercache\730",
+                    "${env:ProgramFiles(x86)}\Steam\steamapps\shadercache\730",
                     "$env:ProgramFiles\Steam\steamapps\shadercache\730"
                 )
                 # Filter to existing paths only — Add-MpPreference accepts non-existent paths but
@@ -562,7 +562,7 @@ if ($startStep -le 38) {
                 Write-OK "Copied: $f"
             } else {
                 Write-Err "Missing: $f — all scripts must be in the same folder."
-                exit 1
+                throw "Required file missing: $f"
             }
         }
         # NOTE: FPSHEAVEN2026.pow replaced by native helpers/power-plan.ps1

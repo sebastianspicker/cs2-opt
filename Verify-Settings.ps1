@@ -67,6 +67,7 @@ Test-RegistryCheck $mmPath "NoLazyMode" 1 "MMCSS NoLazyMode (realtime-only)"
 # NetworkThrottlingIndex is NOT checked — deliberately left at Windows default (10)
 # djdallmann xperf: 0xFFFFFFFF increases NDIS.sys DPC latency vs. default
 Test-RegistryCheck "$mmPath\Tasks\Games" "Priority" 6 "Gaming Priority"
+Test-RegistryCheck "$mmPath\Tasks\Games" "Scheduling Category" "High" "Gaming Scheduling Category"
 Test-RegistryCheck "$mmPath\Tasks\Games" "GPU Priority" 8 "Gaming GPU Priority"
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" "Win32PrioritySeparation" 0x2A "Win32PrioritySeparation (short fixed quantum, max foreground boost)"
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "DisablePagingExecutive" 1 "DisablePagingExecutive"
@@ -97,7 +98,7 @@ Write-Host "`n  ═══ SYSTEM LATENCY TWEAKS ═══" -ForegroundColor Cyan
 Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\FTH" "Enabled" 0 "Fault Tolerant Heap disabled"
 Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Installer" "DisableCoInstallers" 1 "PnP co-installers disabled"
 Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance" "MaintenanceDisabled" 1 "Automatic Maintenance disabled"
-Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisableLastAccessUpdate" 1 "NTFS last-access update disabled"
+Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisableLastAccessUpdate" 0x80000001 "NTFS last-access update disabled"
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisable8dot3NameCreation" 1 "NTFS 8.3 name creation disabled"
 
 Write-Host "`n  ═══ MOUSE ═══" -ForegroundColor Cyan

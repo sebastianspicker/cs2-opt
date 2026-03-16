@@ -4,7 +4,11 @@
 
 function Load-Progress {
     if (Test-Path $CFG_ProgressFile) {
-        try { return (Get-Content $CFG_ProgressFile | ConvertFrom-Json) } catch {}
+        try { return (Get-Content $CFG_ProgressFile | ConvertFrom-Json) }
+        catch {
+            Write-Warn "progress.json is corrupted — progress tracking reset. (Backup: progress.json.corrupt)"
+            try { Copy-Item $CFG_ProgressFile "$CFG_ProgressFile.corrupt" -Force -ErrorAction Stop } catch {}
+        }
     }
     return $null
 }
@@ -15,6 +19,7 @@ function Save-Progress($prog) {
 }
 
 function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
+    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Step $stepNum ($stepName) not recorded."; return }
     $prog = Load-Progress
     if (-not $prog) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=@{} }
@@ -33,6 +38,7 @@ function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
 }
 
 function Skip-Step([int]$phase, [int]$stepNum, [string]$stepName) {
+    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Skip-Step $stepNum ($stepName) not recorded."; return }
     $prog = Load-Progress
     if (-not $prog) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=@{} }
