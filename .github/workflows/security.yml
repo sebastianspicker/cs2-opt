@@ -154,10 +154,13 @@ jobs:
             'github\.event\.pull_request\.head\.ref'
             'github\.event\.pull_request\.head\.label'
           )
+          # Build the dollar-brace-brace pattern dynamically — literal ${{ in
+          # a run: block would be evaluated by GitHub Actions expression parser
+          EXPR_OPEN='$'
+          EXPR_OPEN="${EXPR_OPEN}{{"
           for expr in "${UNSAFE_EXPRS[@]}"; do
-            # Match ${{ <expr> }} inside run: blocks (multi-line YAML)
-            if grep -rPn "\\\$\{\{\s*${expr}" .github/workflows/ 2>/dev/null | grep -v '#'; then
-              echo "::error::Potential expression injection: \${{ ${expr} }} found in workflow — use env: block instead"
+            if grep -rPn "\\${EXPR_OPEN}\s*${expr}" .github/workflows/ 2>/dev/null | grep -v '#'; then
+              echo "::error::Potential expression injection: ${EXPR_OPEN} ${expr} }} found in workflow — use env: block instead"
               FOUND=$((FOUND + 1))
             fi
           done

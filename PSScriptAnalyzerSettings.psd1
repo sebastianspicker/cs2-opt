@@ -15,6 +15,10 @@
         # state loading, hardware detection, optional cleanup, async teardown
         'PSAvoidUsingEmptyCatchBlock',
 
+        # Verify counters use $global: scope intentionally so they work
+        # regardless of how system-utils.ps1 is loaded (dot-source, module, etc.)
+        'PSAvoidGlobalVars',
+
         # config.env.ps1 exports variables consumed via dot-sourcing;
         # PSScriptAnalyzer can't track cross-file variable usage
         'PSUseDeclaredVarsMoreThanAssignments',
