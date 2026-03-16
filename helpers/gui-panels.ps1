@@ -88,7 +88,7 @@ function Load-Dashboard {
                 NicOk    = ($null -ne $nic)
                 OsName   = if ($os) { $os.Caption -replace "Microsoft Windows ", "Windows " } else { "?" }
                 OsBuild  = if ($os) { "Build $($os.BuildNumber)" } else { "" }
-                HagsStr  = switch ($hags) { 2 {"HAGS: Enabled"} 1 {"HAGS: Disabled"} $null {"HAGS: Not set"} default {"HAGS: $hags"} }
+                HagsStr  = switch ($hags) { 2 {"HAGS: Enabled"} 1 {"HAGS: Disabled"} 0 {"HAGS: Disabled"} $null {"HAGS: Not set"} default {"HAGS: $hags"} }
                 Cs2Found = ($null -ne $cs2)
                 Cs2Path  = if ($cs2) { "CS2 installed" } else { "CS2 not found" }
                 OptCfg   = if ($optExists) { "optimization.cfg: present" } else { "optimization.cfg: missing" }

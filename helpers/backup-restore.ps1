@@ -108,6 +108,7 @@ function Backup-ServiceState {
 function Backup-PowerPlan {
     <#  Records the currently active power plan GUID before switching.  #>
     param([string]$StepTitle)
+    if ($SCRIPT:DryRun) { Write-Host "  [DRY-RUN] Would backup current power plan" -ForegroundColor Magenta; return }
     $backup = Get-BackupData
     $originalGuid = $null
     $originalName = $null

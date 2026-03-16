@@ -145,6 +145,8 @@ function Install-NvidiaDriverClean {
 
     $extractProc = Start-Process -FilePath $DriverExe -ArgumentList "-extract:`"$tempDir`" -noeula" -Wait -PassThru -NoNewWindow
     if ($extractProc.ExitCode -ne 0 -or -not (Test-Path "$tempDir\setup.exe")) {
+        # Clean partial extraction before retry
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
         # Try alternate extraction flags
         $extractProc2 = Start-Process -FilePath $DriverExe -ArgumentList "-y -gm2 -InstallPath=`"$tempDir`"" -Wait -PassThru -NoNewWindow
         if ($extractProc2.ExitCode -ne 0) {

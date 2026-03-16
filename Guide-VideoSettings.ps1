@@ -504,7 +504,8 @@ function Show-CS2SettingsGuide {
                 if (-not (Test-Path $videoTxtDir)) {
                     New-Item -ItemType Directory -Path $videoTxtDir -Force | Out-Null
                 }
-                $vLines | Set-Content $videoTxtPath -Encoding UTF8
+                # Use BOM-less UTF-8 — PS 5.1's -Encoding UTF8 adds BOM which Valve VDF parsers may reject
+                [System.IO.File]::WriteAllLines($videoTxtPath, $vLines, [System.Text.UTF8Encoding]::new($false))
                 Write-OK "video.txt written: $videoTxtPath"
                 Write-Info "CS2 must be fully closed for the new file to take effect on next launch."
                 Write-Info "To revert: rename video.txt.bak back to video.txt (delete current video.txt first)."

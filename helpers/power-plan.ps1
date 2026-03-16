@@ -106,8 +106,9 @@ function Set-PowerPlanValue {
         Write-Host "  [DRY-RUN] Would set power plan: $Label = $Value" -ForegroundColor Magenta
         return
     }
-    powercfg /setacvalueindex $PlanGuid $SubgroupGuid $SettingGuid $Value 2>&1 | Out-Null
-    Write-Debug "Power plan: $Label = $Value"
+    $ppOut = powercfg /setacvalueindex $PlanGuid $SubgroupGuid $SettingGuid $Value 2>&1
+    if ($LASTEXITCODE -ne 0) { Write-Warn "powercfg failed for '$Label': $ppOut" }
+    else { Write-Debug "Power plan: $Label = $Value" }
 }
 
 
