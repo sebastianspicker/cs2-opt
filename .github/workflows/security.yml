@@ -127,8 +127,8 @@ jobs:
           echo "=== Checking GitHub Actions workflows ==="
           FOUND=0
 
-          # pull_request_target — allows fork PRs to run with write access
-          if grep -rn 'pull_request_target' .github/workflows/ 2>/dev/null; then
+          # Check for dangerous trigger that allows fork PRs to run with write access
+          if grep -rn 'pull_request_target' .github/workflows/ 2>/dev/null | grep -v 'security\.yml'; then
             echo "::error::pull_request_target trigger found — risk of fork PR privilege escalation"
             FOUND=$((FOUND + 1))
           fi
