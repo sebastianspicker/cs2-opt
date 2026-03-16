@@ -31,7 +31,7 @@ function Load-Dashboard {
                 (El "ProgressP3Txt").Text = "$p3Done / 13"
             })
         }
-    } catch {}
+    } catch { Write-Debug "Dashboard progress load failed: $($_.Exception.Message)" }
 
     # Benchmark history
     try {
@@ -51,7 +51,7 @@ function Load-Dashboard {
         } elseif ($hist -and $hist.Count -eq 1) {
             $Window.Dispatcher.Invoke({ (El "DashPerfBaseline").Text = "Baseline: avg $($hist[0].avgFps) fps  1%low $($hist[0].p1Fps) fps" })
         }
-    } catch {}
+    } catch { Write-Debug "Dashboard benchmark history load failed: $($_.Exception.Message)" }
 
     # Hardware (async)
     Invoke-Async -Work {
@@ -187,7 +187,7 @@ function Start-Analysis {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Optimize {
     $prog = $null
-    try { $prog = Load-Progress } catch {}
+    try { $prog = Load-Progress } catch { Write-Debug "Optimize progress load failed: $($_.Exception.Message)" }
     $completed = if ($prog) { $prog.completedSteps } else { @() }
     $skipped   = if ($prog) { $prog.skippedSteps }   else { @() }
 
@@ -408,7 +408,7 @@ function Load-Benchmark {
         }
         (El "BenchGrid").ItemsSource = $rows
         Draw-BenchChart $hist
-    } catch { }
+    } catch { Write-Debug "Benchmark history load failed: $($_.Exception.Message)" }
 }
 
 function Draw-BenchChart {
@@ -709,7 +709,7 @@ $writeVideo = {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Settings {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile | ConvertFrom-Json } } catch {}
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile | ConvertFrom-Json } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
 
     $prof = if ($state) { $state.profile } else { "RECOMMENDED" }
     switch ($prof) {
@@ -742,7 +742,7 @@ function Save-SettingsToState {
         $state | Add-Member -NotePropertyName "profile" -NotePropertyValue $prof -Force
         $state | Add-Member -NotePropertyName "mode"    -NotePropertyValue $mode -Force
         Save-JsonAtomic -Data $state -Path $CFG_StateFile
-    } catch {}
+    } catch { Write-Debug "Settings state save failed: $($_.Exception.Message)" }
 }
 
 foreach ($rb in @("RadioSafe","RadioRecommended","RadioCompetitive","RadioCustom")) {

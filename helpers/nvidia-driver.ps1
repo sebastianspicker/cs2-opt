@@ -7,6 +7,8 @@ function Get-LatestNvidiaDriver {
     .SYNOPSIS  Queries NVIDIA's driver lookup API to find the latest driver
                for the detected GPU. Returns download URL and version info.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SpecificVersion',
+        Justification = 'Reserved for future version-specific download support')]
     param(
         [string]$SpecificVersion  # If set, tries to find this version instead of latest
     )

@@ -140,7 +140,7 @@ function Get-ChipsetVendor {
         $cpu = (Get-CimInstance Win32_Processor | Select-Object -First 1).Manufacturer
         if ($cpu -match "AMD")   { return "AMD" }
         if ($cpu -match "Intel") { return "Intel" }
-    } catch {}
+    } catch { Write-Debug "CPU vendor detection failed: $($_.Exception.Message)" }
     return "Unknown"
 }
 

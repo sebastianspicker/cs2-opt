@@ -191,7 +191,7 @@ function Test-RegistryCheck {
             $val = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
             $result = $val.$Name
         }
-    } catch {}
+    } catch { Write-Debug "Test-RegistryCheck: could not read '$Name' from '$Path'" }
 
     $status = if ($null -eq $result) { "MISSING" } elseif ($result -eq $Expected) { "OK" } else { "CHANGED" }
 

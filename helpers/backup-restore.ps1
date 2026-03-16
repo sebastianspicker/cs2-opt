@@ -33,7 +33,7 @@ function Get-BackupData {
         # Preserve corrupted file for recovery before overwriting
         $ts = (Get-Date).ToString("yyyyMMdd-HHmmss")
         $corruptPath = "$CFG_BackupFile.corrupt.$ts"
-        try { Copy-Item $CFG_BackupFile $corruptPath -Force -ErrorAction Stop } catch {}
+        try { Copy-Item $CFG_BackupFile $corruptPath -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted backup file — original may already be gone." }
         Write-Warn "backup.json was corrupted — saved copy to $corruptPath before resetting."
         Initialize-Backup
         return [PSCustomObject]@{ entries = @(); created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
@@ -56,7 +56,7 @@ function Backup-RegistryValue {
             $existing = $prop.$Name
             try { $regType = (Get-Item $Path).GetValueKind($Name).ToString() } catch { $regType = "DWord" }
         }
-    } catch {}
+    } catch { Write-Debug "Backup-RegistryValue: could not read '$Name' from '$Path' — treating as non-existent." }
 
     $entry = [ordered]@{
         type          = "registry"
@@ -88,7 +88,7 @@ function Backup-ServiceState {
             $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
             $delayReg = Get-ItemProperty -Path $regPath -Name "DelayedAutostart" -ErrorAction SilentlyContinue
             $delayedStart = ($delayReg.DelayedAutostart -eq 1)
-        } catch {}
+        } catch { Write-Debug "Backup-ServiceState: could not read DelayedAutostart for '$ServiceName' — defaulting to false." }
         $entry = [ordered]@{
             type              = "service"
             name              = $ServiceName
@@ -120,7 +120,7 @@ function Backup-PowerPlan {
                 $originalName = $Matches[1]
             }
         }
-    } catch {}
+    } catch { Write-Debug "Backup-PowerPlan: powercfg query failed — active plan GUID not captured." }
 
     if ($originalGuid) {
         $entry = [ordered]@{
@@ -151,7 +151,7 @@ function Backup-BootConfig {
                 break
             }
         }
-    } catch {}
+    } catch { Write-Debug "Backup-BootConfig: bcdedit enum failed for key '$Key' — treating as non-existent." }
 
     $entry = [ordered]@{
         type          = "bootconfig"
@@ -175,7 +175,7 @@ function Backup-ScheduledTask {
     try {
         $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         $existed = ($null -ne $task)
-    } catch {}
+    } catch { Write-Debug "Backup-ScheduledTask: could not query task '$TaskName' — assuming it does not exist." }
 
     $entry = [ordered]@{
         type       = "scheduledtask"
@@ -245,6 +245,8 @@ function Restore-DrsSettings {
         - If it didn't exist: writes 0 (default) as fallback
         If the profile was created by us, deletes it entirely.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Entry',
+        Justification = 'Entry is captured by the Invoke-DrsSession scriptblock closure')]
     param($Entry)
 
     if (-not (Initialize-NvApiDrs)) {

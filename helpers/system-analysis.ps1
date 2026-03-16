@@ -66,7 +66,7 @@ function Invoke-CheckHardware {
             $st = if ($dc.DualChannel -eq $true) { "OK" } elseif ($dc.DualChannel -eq $false) { "ERR" } else { "INFO" }
             $results.Add((New-CheckItem "Hardware" "Memory" "Dual-Channel RAM" $dc.Reason "Dual-channel" $st "P1-24" "Single-channel halves memory bandwidth — 20-40% FPS loss in CS2"))
         }
-    } catch {}
+    } catch { Write-Debug "Dual-channel RAM check failed: $_" }
 
     # XMP / EXPO
     try {
@@ -76,7 +76,7 @@ function Invoke-CheckHardware {
             $st = if ($ram.XmpActive) { "OK" } else { "WARN" }
             $results.Add((New-CheckItem "Hardware" "Memory" "XMP / EXPO" $xmpStr "Active" $st "P1-2" "RAM running below rated speed — enable XMP/EXPO in BIOS"))
         }
-    } catch {}
+    } catch { Write-Debug "XMP/EXPO check failed: $_" }
 
     return $results
 }
@@ -90,7 +90,7 @@ function Invoke-CheckWindowsGaming {
         $hags = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode"
         $hagsStr = switch ($hags) { 2 { "Enabled" } 1 { "Disabled" } $null { "Not set" } default { "$hags" } }
         $r.Add((New-CheckItem "Windows" "Display" "HAGS" $hagsStr "Enabled (2)" "INFO" "P1-7" "Setup-dependent — benchmark both ON and OFF on your system"))
-    } catch {}
+    } catch { Write-Debug "HAGS registry check failed: $_" }
 
     # Fast Startup
     $fs = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" "HiberbootEnabled"
@@ -214,7 +214,7 @@ function Invoke-CheckNetwork {
             }
         }
         $r.Add((New-CheckItem "Network" "TCP" "Nagle Disable (TcpNoDelay)" $(if ($nagleOk) {"Disabled on active NIC"} else {"Enabled / Not set"}) "1 (disabled)" $(if ($nagleOk) {"OK"} else {"WARN"}) "P1-25" "Nagle bundles small TCP packets → increases latency"))
-    } catch {}
+    } catch { Write-Debug "Nagle/TcpNoDelay check failed: $_" }
 
     # IPv6 — intentionally left enabled (2026 reversal: Steam prefers IPv6 when faster)
     $ipv6 = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" "DisabledComponents"
@@ -222,7 +222,6 @@ function Invoke-CheckNetwork {
     $r.Add((New-CheckItem "Network" "Stack" "IPv6" $(if ($ipv6 -eq 0xFF) {"Disabled (0xFF)"} else {"Enabled"}) "Enabled" $st "P1-16" "2026: Steam prefers IPv6 when faster; disabling forces CGNAT (+5-15ms)"))
 
     # QoS NLA bypass
-    $qos = Get-RegVal "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Psched" "NonBestEffortLimit"
     $nla = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\QoS" "Do not use NLA"
     $st = if ($nla -eq "1") { "OK" } else { "WARN" }
     $r.Add((New-CheckItem "Network" "QoS" "QoS NLA Bypass" $(if ($nla -eq "1") {"Enabled"} else {"Not set"}) "1" $st "P1-16" "Required for DSCP EF=46 QoS to function on unidentified networks"))
@@ -236,7 +235,7 @@ function Invoke-CheckNetwork {
             $st = if ($uroVal -eq "disabled") { "OK" } else { "WARN" }
             $r.Add((New-CheckItem "Network" "Stack" "URO (UDP Receive Offload)" $uroVal "disabled" $st "P1-16" "URO batches UDP datagrams causing receive jitter on Win11"))
         }
-    } catch {}
+    } catch { Write-Debug "URO check failed: $_" }
 
     return $r
 }
@@ -290,7 +289,7 @@ function Invoke-CheckCS2 {
 
     # Find CS2 install
     $cs2Path = $null
-    try { $cs2Path = Get-CS2InstallPath } catch {}
+    try { $cs2Path = Get-CS2InstallPath } catch { Write-Debug "CS2 install path detection failed: $_" }
 
     if (-not $cs2Path) {
         $r.Add((New-CheckItem "CS2" "Install" "CS2 Install" "Not found" "Found" "ERR" "—" "CS2 not detected — check Steam library"))
@@ -351,7 +350,7 @@ function Invoke-CheckCS2 {
                 $r.Add((New-CheckItem "CS2" "video.txt" "video.txt" "Not found" "Present" "WARN" "P3-6" "Video settings file missing — launch CS2 once to generate it"))
             }
         }
-    } catch {}
+    } catch { Write-Debug "video.txt check failed: $_" }
 
     # Launch options (localconfig.vdf)
     try {
@@ -371,7 +370,7 @@ function Invoke-CheckCS2 {
                 }
             }
         }
-    } catch {}
+    } catch { Write-Debug "Launch options check failed: $_" }
 
     return $r
 }
@@ -388,7 +387,7 @@ function Invoke-SystemAnalysis {
         { Invoke-CheckServices       }
         { Invoke-CheckCS2            }
     )) {
-        try { $all.AddRange([object[]]@(& $fn)) } catch {}
+        try { $all.AddRange([object[]]@(& $fn)) } catch { Write-Debug "Analysis check failed: $_" }
     }
     return $all
 }

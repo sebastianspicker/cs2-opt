@@ -160,7 +160,7 @@ function Invoke-BenchmarkCapture {
         $Label = Read-Host "  Label for this result (e.g. 'baseline', 'after DDU', 'final') [Enter to skip]"
     }
 
-    $entry = Add-BenchmarkResult -AvgFps $result.Avg -P1Fps $result.P1 -Label $Label -Runs $result.Runs
+    $null = Add-BenchmarkResult -AvgFps $result.Avg -P1Fps $result.P1 -Label $Label -Runs $result.Runs
     Write-OK "Recorded: Avg $($result.Avg) FPS, 1% low $($result.P1) FPS ($($result.Runs) run(s))"
 
     # Calculate FPS cap

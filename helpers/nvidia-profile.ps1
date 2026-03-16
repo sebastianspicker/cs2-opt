@@ -227,6 +227,8 @@ function Apply-NvidiaCS2ProfileDrs {
         writes all settings, and saves the DRS database.
         Returns $true on success, $false on failure.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'FrlValue and FrlLabel are captured by Invoke-DrsSession scriptblock closure')]
     param(
         [int]$FrlValue = 500,
         [string]$FrlLabel = "500"

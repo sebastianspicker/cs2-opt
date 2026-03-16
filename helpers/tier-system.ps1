@@ -92,6 +92,8 @@ function Test-RiskAllowed {
 
 function Show-StepInfoCard {
     <#  Displays a detailed info card with risk, improvement, side effects.  #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Tier',
+        Justification = 'Accepted for API consistency with Invoke-TieredStep; callers always pass it')]
     param(
         [int]    $Tier,
         [string] $Title,
