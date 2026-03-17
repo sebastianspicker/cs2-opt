@@ -232,7 +232,7 @@ More interesting: the mouclass driver (the Windows kernel mouse class driver) ma
 
 At 1000 Hz polling (standard for modern competitive mice), 100 events = 100ms of buffering capacity. If the kernel is slow processing events (DPC congestion, high interrupt load), it can build up a 100ms backlog before dropping events.
 
-The suite sets this to **50 events**:
+The suite sets this to 50 events:
 
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\mouclass\Parameters
