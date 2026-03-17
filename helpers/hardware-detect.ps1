@@ -139,25 +139,27 @@ function Get-ActiveNicGuid {
     return $null
 }
 
-# ── Intel Hybrid CPU Detection ───────────────────────────────────────────────
+# ── Intel 12th-gen+ / Core Ultra CPU Detection ──────────────────────────────
 
 function Get-IntelHybridCpuName {
-    <#  Returns the CPU name string if this is an Intel hybrid CPU (12th gen+
-        or Core Ultra), or $null otherwise. Used to gate Intel-specific tweaks
-        (PowerThrottlingOff, thread_pool_option) that only apply to P/E-core CPUs.  #>
+    <#  Returns the CPU name string if this is an Intel 12th-gen-or-newer Core
+        (12xxx–19xxx series with suffix) or Intel Core Ultra CPU, or $null
+        otherwise. Used to gate Intel 12th-gen+ / Ultra-specific tweaks
+        (e.g., PowerThrottlingOff, thread_pool_option). Note: this is a coarse
+        heuristic and may include some non-hybrid (no E-core) SKUs.  #>
     try {
         $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction Stop |
             Select-Object -First 1
         $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
         if ($cpuName -and $cpuName -match "Intel" -and (
-            $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or  # 12xxx-19xxx series
+            $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or  # 12th–19th gen Core-series (suffix required)
             $cpuName -match "\bUltra\b"                 # Core Ultra (Meteor Lake / Arrow Lake)
         )) {
             return $cpuName
         }
         return $null
     } catch {
-        Write-Debug "Intel hybrid CPU detection failed: $_"
+        Write-Debug "Intel 12th-gen+ CPU detection failed: $_"
         return $null
     }
 }
