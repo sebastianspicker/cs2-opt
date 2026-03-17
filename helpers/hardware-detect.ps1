@@ -146,7 +146,7 @@ function Get-IntelHybridCpuName {
         or Core Ultra), or $null otherwise. Used to gate Intel-specific tweaks
         (PowerThrottlingOff, thread_pool_option) that only apply to P/E-core CPUs.  #>
     try {
-        $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction SilentlyContinue |
+        $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction Stop |
             Select-Object -First 1
         $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
         if ($cpuName -and $cpuName -match "Intel" -and (
