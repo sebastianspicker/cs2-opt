@@ -38,7 +38,7 @@ Get-ChildItem -Recurse -Filter "*.ps1" | ForEach-Object {
 
 ## What We Won't Merge
 
-- Tweaks from the [Debunked list](README.md#debunked--contested-settings) without new contradicting evidence
+- Tweaks from the [Debunked list](docs/debunked.md) without new contradicting evidence
 - Changes that add external tool dependencies
 - TCP-only "optimizations" (CS2 uses UDP)
 - Anything without backup/restore support

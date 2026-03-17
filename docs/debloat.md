@@ -101,7 +101,7 @@ These are removed from `HKCU:\...\Run` and `HKLM:\...\Run`. The applications the
 
 The direct FPS impact of these removals is small on a modern system with 16+ GB RAM — background processes on an idle system typically consume 1–3% CPU and a few hundred MB of RAM, neither of which meaningfully constrains CS2.
 
-The real benefit is **scheduling noise reduction**: fewer background threads competing for CPU scheduler time and fewer network I/O events generating NIC interrupts and NDIS DPC activity during CS2 sessions.
+The real benefit is scheduling noise reduction: fewer background threads competing for CPU scheduler time and fewer network I/O events generating NIC interrupts and NDIS DPC activity during CS2 sessions.
 
 djdallmann's classification (GamingPCSetup): "Debloat provides low-confidence improvements for systems with adequate RAM; the primary benefit is reducing scheduling noise floor rather than recovering meaningfully constrained resources."
 

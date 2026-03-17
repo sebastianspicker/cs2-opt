@@ -102,7 +102,7 @@ Four Xbox Live services are disabled as a group. Each has a specific function an
 
 **Why disabled:** Background service overhead. No periodic network activity, but it runs a driver monitoring loop.
 
-**What breaks:** **Xbox wireless controllers and headsets stop working.** This is the most likely to affect users. USB-connected Xbox controllers use a different driver path and are unaffected. Only Xbox Wireless protocol devices need this service.
+**What breaks:** Xbox wireless controllers and headsets stop working. This is the most likely to affect users. USB-connected Xbox controllers use a different driver path and are unaffected. Only Xbox Wireless protocol devices need this service.
 
 **When to re-enable:** If you use an Xbox wireless controller or Xbox headset. Run: `Set-Service XboxGipSvc -StartupType Manual`.
 
@@ -140,7 +140,7 @@ Four Xbox Live services are disabled as a group. Each has a specific function an
 | XblAuthManager | Manual | Disabled | Xbox Game Pass signin | You use Game Pass |
 | XblGameSave | Manual | Disabled | Xbox cloud saves | You use Xbox cloud saves |
 | XboxNetApiSvc | Manual | Disabled | Xbox Live multiplayer | You play Xbox Live multiplayer |
-| XboxGipSvc | Manual | Disabled | **Xbox wireless controller/headset** | You use Xbox wireless peripherals |
+| XboxGipSvc | Manual | Disabled | Xbox wireless controller/headset | You use Xbox wireless peripherals |
 | DiagTrack | Automatic | Disabled | Microsoft telemetry | Never (for home users) |
 | dmwappushservice | Manual | Disabled | MDM/Intune provisioning | Enterprise MDM enrolled |
 

@@ -40,17 +40,17 @@ These settings are actively present in popular guides. We have not included them
 | ISLC (Standby List Cleaner) | Reduces standby RAM stutters | Only relevant on ≤12–16 GB systems under memory pressure. No-op on 32 GB+. | Wagnardsoft; valleyofdoom |
 | Win11 Auto HDR | Better visuals | Tone-mapping overhead + overbright windows/sun. Disabled by Step 36. | Windows 11 feature docs |
 | PS/2 keyboard lower DPC | Legacy PS/2 bypasses USB | djdallmann: USB 4–8µs vs PS/2 8µs. USB is equal or faster on modern systems. | djdallmann WINKERNEL research |
-| AMD Anti-Lag VAC ban warning | Anti-Lag is banned | **Resolved.** Current drivers (Nov 2023+) are safe. See [AMD Anti-Lag History](#the-amd-anti-lag-incident-september-2023) below. | AMD driver release notes |
+| AMD Anti-Lag VAC ban warning | Anti-Lag is banned | Resolved. Current drivers (Nov 2023+) are safe. See [AMD Anti-Lag History](#the-amd-anti-lag-incident-september-2023) below. | AMD driver release notes |
 | `*InterruptModeration = Disabled` | Per-packet = lowest latency | Empirically wrong. djdallmann: Medium outperformed Disabled under real-world conditions. Background traffic causes interrupt storms. Suite uses Medium. | djdallmann Intel NIC test |
-| Disable RSC | Reduces NIC latency | **TCP-only** feature. Zero effect on CS2's UDP traffic. | Windows NDIS architecture |
-| Disable LSO (`*LsoV2*`) | Reduces NIC offload complexity | **TCP-only**. CS2 uses ~80-byte UDP datagrams — LSO never invoked. | Windows NDIS LSO docs |
+| Disable RSC | Reduces NIC latency | TCP-only feature. Zero effect on CS2's UDP traffic. | Windows NDIS architecture |
+| Disable LSO (`*LsoV2*`) | Reduces NIC offload complexity | TCP-only. CS2 uses ~80-byte UDP datagrams — LSO never invoked. | Windows NDIS LSO docs |
 | Disable `*UDPChecksumOffload*` | Removes checksum variable | Hardware checksum on ~80-byte packets takes nanoseconds. Disabling forces slower software computation. | NIC offload architecture |
 | Disable `*TCPChecksumOffload*` | Removes TCP checksum | TCP-only. CS2 is UDP. | NIC offload architecture |
 | Disable `*ARPOffload`/`*NSOffload` | Cleaner NIC state | Sleep-state-only features. Inactive during gameplay when CPU is awake. | NIC offload architecture |
 | Disable `*WakeOnMagicPacket` etc. | Cleaner NIC state | Only activate when system is off/sleeping. Zero runtime effect during CS2. | NIC power management docs |
 | Disable Jumbo Frames | Prevents fragmentation | CS2 UDP datagrams are ~80 bytes. Never Jumbo Frames regardless. | RFC 2923 |
 | `SystemResponsiveness = 0` | 100% CPU for multimedia | Can starve NDIS interrupt scheduling. Microsoft documents 0 as unsupported. Suite uses 10. | djdallmann; Microsoft MMCSS docs |
-| `netsh int tcp` settings (all) | Network optimization | **TCP-only**. autotuninglevel, ICW, minrto, delayedack, RACK, congestion provider, ECN — all apply only to TCP, not CS2's UDP. | Windows TCP/IP stack |
+| `netsh int tcp` settings (all) | Network optimization | TCP-only. autotuninglevel, ICW, minrto, delayedack, RACK, congestion provider, ECN — all apply only to TCP, not CS2's UDP. | Windows TCP/IP stack |
 | `*ReceiveBuffers = 256` | Reduces DMA descriptor overhead | At 256, ring buffer can overflow under background traffic, causing packet drops. Suite uses 512 for safety. | NIC ring buffer design |
 
 ---
@@ -81,7 +81,7 @@ AMD Anti-Lag reduces input lag by coordinating CPU frame submission timing with 
 
 ### What Happened
 
-AMD's September 2023 implementation used **`AppInit_DLLs`** — a legacy Windows mechanism that injects a DLL into every GUI process. Valve's VAC flagged the foreign DLL in `cs2.exe`'s address space as a cheat vector. Result: **CS2 players using AMD Anti-Lag received VAC bans.**
+AMD's September 2023 implementation used `AppInit_DLLs` — a legacy Windows mechanism that injects a DLL into every GUI process. Valve's VAC flagged the foreign DLL in `cs2.exe`'s address space as a cheat vector. CS2 players using AMD Anti-Lag received VAC bans.
 
 ### The Fix
 
@@ -95,7 +95,7 @@ AMD redesigned the injection for the November 2023 driver release, using a metho
 | Anti-Lag 2 | RDNA3+ only | **Safe** | Game SDK integration |
 | Anti-Lag 1 (drivers 23.9.x) | All RDNA | **Banned** — do not use | AppInit_DLLs injection |
 
-**If you are on a current AMD driver (late 2023+), Anti-Lag is safe.** The community warnings from 2023–2024 are outdated.
+If you are on a current AMD driver (late 2023+), Anti-Lag is safe. The community warnings from 2023–2024 are outdated.
 
 ---
 
@@ -103,7 +103,7 @@ AMD redesigned the injection for the November 2023 driver release, using a metho
 
 Most CS2 YouTube optimization guides cite each other in a circular chain. A 2018 Windows 10 guide gets copy-pasted into a 2025 video. The original source (often one person's anecdotal experience) gets laundered through enough iterations that it appears to be consensus.
 
-This suite applies a different standard: **a setting must have a mechanistic explanation for why it works AND some form of measurement confirming the direction of effect.** The result is fewer settings than most guides — but a higher probability of actually helping.
+This suite applies a different standard: a setting must have a mechanistic explanation for why it works AND some form of measurement confirming the direction of effect. The result is fewer settings than most guides — but a higher probability of actually helping.
 
 ---
 

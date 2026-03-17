@@ -70,7 +70,7 @@ function Load-Dashboard {
             $os   = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
             $hags = try { (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode" -ErrorAction Stop).HwSchMode } catch { $null }
             $cs2  = Get-CS2InstallPath
-            $stPath = if ($ScriptRoot) { (Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue).SteamPath } else { $null }
+            $stPath = Get-SteamPath
             $vtxt = if ($stPath) { Get-ChildItem "$stPath\userdata\*\730\local\cfg\video.txt" -ErrorAction SilentlyContinue | Select-Object -First 1 } else { $null }
             $optExists = if ($cs2) { Test-Path "$cs2\game\csgo\cfg\optimization.cfg" } else { $false }
             $UISync.Hw = @{
@@ -540,7 +540,7 @@ function Load-Video {
         (El "VideoTierPicker").SelectedIndex = 0
     }
 
-    $steamPath = (Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue).SteamPath
+    $steamPath = Get-SteamPath
     $vtxt = if ($steamPath) {
         Get-ChildItem "$steamPath\userdata\*\730\local\cfg\video.txt" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1

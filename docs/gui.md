@@ -119,7 +119,7 @@ Shows the full step catalog — all 38 Phase 1 steps and all 13 Phase 3 steps �
 │                   │  1   16    Network   NIC Latency Stack       MOD   NET   │
 │                   │  1   27    System    MMCSS + Gaming Priority SAFE  REG   │
 │                   │  1   29    Input     Mouse Accel Off         SAFE  REG   │
-│                   │  1   34    CS2       Autoexec (56 CVars)     SAFE  APP   │
+│                   │  1   34    CS2       Autoexec (74 CVars)     SAFE  APP   │
 │                   │  3   2     GPU       MSI Interrupts          MOD   DRV   │
 │                   │  3   4     GPU       NVIDIA DRS Profile      SAFE  DRV   │
 │                   │  3   10    CPU       Process Priority + X3D  SAFE  REG   │
@@ -300,7 +300,7 @@ The GUI is a management dashboard, not a replacement for the terminal phases. Th
 | Phase 3 (driver install + final steps) | Runs automatically after Phase 2 |
 | Cleanup (Quick / Full / Driver Refresh) | Driver Refresh involves Safe Mode reboot |
 
-The GUI **does** supplement the terminal with:
+The GUI does supplement the terminal with:
 - Pre-flight system analysis before you run any phases
 - Backup review and per-step rollback after running phases
 - Benchmark tracking across multiple sessions

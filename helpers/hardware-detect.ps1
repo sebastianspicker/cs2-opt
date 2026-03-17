@@ -78,12 +78,19 @@ function Calculate-FpsCap($avgFps) {
     return [math]::Max($CFG_FpsCap_Min, [int]($avgFps - [math]::Round($avgFps * $CFG_FpsCap_Percent)))
 }
 
-# ── CS2 Install Path ─────────────────────────────────────────────────────────
+# ── Steam + CS2 Install Path ─────────────────────────────────────────────────
+
+function Get-SteamPath {
+    <#  Returns the Steam installation root directory from the registry, or $null.
+        Single source of truth for all callers that need the Steam base path.  #>
+    $reg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
+    if ($reg) { return $reg.SteamPath }
+    return $null
+}
 
 function Get-CS2InstallPath {
     <#  Finds CS2 install directory via Steam registry + libraryfolders.vdf  #>
-    $steamReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
-    $steamPath = if ($steamReg) { $steamReg.SteamPath } else { $null }
+    $steamPath = Get-SteamPath
     if (-not $steamPath) { return $null }
 
     $defaultCS2 = "$steamPath\steamapps\common\Counter-Strike Global Offensive"
@@ -130,6 +137,31 @@ function Get-ActiveNicGuid {
     $nic = Get-ActiveNicAdapter
     if ($nic) { return $nic.InterfaceGuid }
     return $null
+}
+
+# ── Intel 12th-gen+ / Core Ultra CPU Detection ──────────────────────────────
+
+function Get-IntelHybridCpuName {
+    <#  Returns the CPU name string if this is an Intel 12th-gen-or-newer Core
+        (12xxx–19xxx series with suffix) or Intel Core Ultra CPU, or $null
+        otherwise. Used to gate Intel 12th-gen+ / Ultra-specific tweaks
+        (e.g., PowerThrottlingOff, thread_pool_option). Note: this is a coarse
+        heuristic and may include some non-hybrid (no E-core) SKUs.  #>
+    try {
+        $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction Stop |
+            Select-Object -First 1
+        $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
+        if ($cpuName -and $cpuName -match "Intel" -and (
+            $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or  # 12th–19th gen Core-series (suffix required)
+            $cpuName -match "\bUltra\b"                 # Core Ultra (Meteor Lake / Arrow Lake)
+        )) {
+            return $cpuName
+        }
+        return $null
+    } catch {
+        Write-Debug "Intel 12th-gen+ CPU detection failed: $_"
+        return $null
+    }
 }
 
 # ── Chipset Vendor ───────────────────────────────────────────────────────────

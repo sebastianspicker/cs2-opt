@@ -38,7 +38,7 @@
 
 Most CS2 optimization guides present every tweak as equally impactful — and almost none cite benchmarks. This suite takes a different approach:
 
-**We only claim what we can back up.**
+We only claim what we can back up.
 
 If a setting has been measured and reproduced, we say so. If it's community consensus without hard data, we say that too. If the evidence is contradicted by newer testing, we tell you. The goal is to apply high-confidence changes first, measure the result, and decide from there.
 
@@ -166,7 +166,7 @@ CS2-Optimize-Suite/
 ├── Verify-Settings.ps1        Post-update registry check
 ├── Cleanup.ps1                Three-mode soft reset
 ├── cfgs/
-│   ├── autoexec.cfg.example   Annotated 2026 meta autoexec reference (56 CVars)
+│   ├── autoexec.cfg.example   Annotated 2026 meta autoexec reference (74 CVars)
 │   ├── net_stable.cfg         Optimal — stable wired/fiber (also use to reset)
 │   ├── net_highping.cfg       60ms+ ping, stable route
 │   ├── net_unstable.cfg       Jitter + loss, ping OK
@@ -219,7 +219,7 @@ All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Back
 | 31 | Game Bar / Game DVR off | T2 | SAFE | `AppCaptureEnabled=0`, `GameDVR_Enabled=0`, `AllowGameDVR=0` |
 | 32 | Overlay disable | T2 | SAFE | Steam `GameOverlayDisabled=1` + GeForce Experience guide |
 | 33 | Audio optimization | T2 | SAFE | Exclusive mode guide + `UserDuckingPreference=3` (ducking off) |
-| 34 | Autoexec.cfg + launch options | T2 | SAFE | 56 CVars (8 categories), 4 network CFGs deployed, Intel `thread_pool_option=2` auto-detected |
+| 34 | Autoexec.cfg + launch options | T2 | SAFE | 74 CVars (10 categories), 4 network CFGs deployed, Intel `thread_pool_option=2` auto-detected |
 | 35 | Chipset driver check | T2 | SAFE | AMD/Intel chipset update links |
 | 36 | Visual effects + Defender + HDR | T3 | SAFE | `VisualFXSetting=2`, cs2.exe Defender exclusion, `AutoHDREnabled=0` |
 | 37 | Services disable | T3 | MODERATE | SysMain, WSearch, qWave (DSCP survives), 4 Xbox services (warns about wireless controllers) |
@@ -261,7 +261,7 @@ The step tables tell you *what* the suite does. This section explains the *why* 
 
 ### NVIDIA DRS: Why Registry Writes Don't Work on Modern Drivers
 
-Most "NVIDIA optimization" guides write to `HKLM:\SOFTWARE\NVIDIA Corporation\Global\d3d\`. **This is mostly ineffective.** Since ~driver 460+, NVIDIA reads per-application settings from the **DRS binary database** (`nvdrs.dat`), not the `d3d` registry path. The only confirmed-effective registry write is `PerfLevelSrc=0x2222` in the GPU hardware class key (`{4d36e968}\0000`), which locks the GPU to max P-state. Everything else must go through DRS.
+Most "NVIDIA optimization" guides write to `HKLM:\SOFTWARE\NVIDIA Corporation\Global\d3d\`. This is mostly ineffective. Since ~driver 460+, NVIDIA reads per-application settings from the **DRS binary database** (`nvdrs.dat`), not the `d3d` registry path. The only confirmed-effective registry write is `PerfLevelSrc=0x2222` in the GPU hardware class key (`{4d36e968}\0000`), which locks the GPU to max P-state. Everything else must go through DRS.
 
 The suite uses C# P/Invoke to `nvapi64.dll` — `nvapi_QueryInterface()` resolves 12 DRS function pointers for direct binary database writes. Same API that NVIDIA Profile Inspector uses, zero external tools. → [`docs/nvidia-drs-settings.md`](docs/nvidia-drs-settings.md)
 
@@ -278,17 +278,17 @@ Settings are tiered: T1 (9 settings, always), T2 (+17 vendor-aware, RECOMMENDED+
 
 ### NIC Interrupt Coalescing: Why Medium Beats Disabled
 
-Intuitively, per-packet interrupts (Disabled) should be better than coalesced delivery (Medium). **Empirically, the opposite is true.** djdallmann measured DPC latency variance on an Intel Gigabit CT and found Medium produced the lowest variance under real-world conditions.
+Intuitively, per-packet interrupts (Disabled) should be better than coalesced delivery (Medium). Empirically, the opposite is true. djdallmann measured DPC latency variance on an Intel Gigabit CT and found Medium produced the lowest variance under real-world conditions.
 
 The reason: a gaming PC always has background network traffic (Discord, Steam, Windows telemetry). With Disabled, each background packet fires a separate interrupt, creating an interrupt storm that makes DPC scheduling *less* predictable. Medium coalesces within ~50–200µs — well within CS2's 7.8ms tick interval — but prevents the storm. The suite uses **Medium for all profiles**, rejecting the intuitive-but-wrong recommendation found in most guides. → [`docs/nic-latency-stack.md`](docs/nic-latency-stack.md)
 
 ### Game Mode: Why We Enable It (2026 Reversal)
 
-Many 2020–2022 guides recommended disabling Game Mode, citing valleyofdoom/PC-Tuning findings about "thread priority interference." This has not been reproduced in CS2 benchmarks and is overridden by a more important benefit: **Game Mode suppresses Windows Update installation during active gaming**. It also activates the MMCSS `Games` scheduling path. Critically, Game Mode and Game DVR/Bar are *separate systems* despite the same Settings panel — Step 31 disables DVR (recording overhead), Step 12 enables the scheduler's game-priority path. → [`docs/windows-scheduler.md`](docs/windows-scheduler.md)
+Many 2020–2022 guides recommended disabling Game Mode, citing valleyofdoom/PC-Tuning findings about "thread priority interference." This has not been reproduced in CS2 benchmarks and is overridden by a more important benefit: Game Mode suppresses Windows Update installation during active gaming. It also activates the MMCSS `Games` scheduling path. Critically, Game Mode and Game DVR/Bar are *separate systems* despite the same Settings panel — Step 31 disables DVR (recording overhead), Step 12 enables the scheduler's game-priority path. → [`docs/windows-scheduler.md`](docs/windows-scheduler.md)
 
 ### NetworkThrottlingIndex: Why We Do NOT Set It
 
-This appears in virtually every community guide as `NetworkThrottlingIndex = 0xFFFFFFFF` (disable throttling). **We deliberately leave it at the Windows default (10).** djdallmann's xperf/ETL analysis found that disabling it **increases NDIS.sys DPC latency**. The "10 Mbps cap" narrative originated from a Windows Vista-era blog post about multimedia streaming. On modern NICs, removing the throttle increases interrupt coalescing variability. → [`docs/windows-scheduler.md`](docs/windows-scheduler.md)
+This appears in virtually every community guide as `NetworkThrottlingIndex = 0xFFFFFFFF` (disable throttling). We deliberately leave it at the Windows default (10). djdallmann's xperf/ETL analysis found that disabling it **increases NDIS.sys DPC latency**. The "10 Mbps cap" narrative originated from a Windows Vista-era blog post about multimedia streaming. On modern NICs, removing the throttle increases interrupt coalescing variability. → [`docs/windows-scheduler.md`](docs/windows-scheduler.md)
 
 ### IFEO PerfOptions: Why It Beats `-high`
 
@@ -323,9 +323,9 @@ Every external tool was replaced with native PowerShell. Only the NVIDIA driver 
 
 ## The Reflex Controversy
 
-The most actively contested CS2 setting as of 2026. **Do not treat either side as settled.**
+The most actively contested CS2 setting as of 2026. Do not treat either side as settled.
 
-**Position A — `-noreflex` + NVCP Low Latency Ultra:** Community meta since Jan 2025 (Blur Busters, ThourCS2). Multiple benchmarks showed better 1% lows. **Critical caveat:** @CS2Kitchen (July 2025) demonstrated that CapFrameX builds using PresentMon 2.2+ produce misleading 1% low data in this configuration — **the improvement may be a measurement artifact**.
+**Position A — `-noreflex` + NVCP Low Latency Ultra:** Community meta since Jan 2025 (Blur Busters, ThourCS2). Multiple benchmarks showed better 1% lows. Critical caveat: @CS2Kitchen (July 2025) demonstrated that CapFrameX builds using PresentMon 2.2+ produce misleading 1% low data in this configuration — **the improvement may be a measurement artifact**.
 
 **Position B — Reflex ON:** ThourCS2 (driver 581.08): 3–4ms lower input lag on high-end, up to 15ms on low-end. 1% low difference negligible (±0.5%). Valve and NVIDIA both recommend Reflex enabled.
 
@@ -347,7 +347,7 @@ Benchmark maps: [Dust2](https://steamcommunity.com/sharedfiles/filedetails/?id=3
 
 ## Network Condition CFGs
 
-Step 34 deploys four condition-specific CFGs to `game\csgo\cfg\`. These are **not** auto-exec'd — call them from the CS2 console when your connection changes. The four CFGs map to a 2×2 matrix of the two independent failure modes:
+Step 34 deploys four condition-specific CFGs to `game\csgo\cfg\`. These are not auto-exec'd — call them from the CS2 console when your connection changes. The four CFGs map to a 2×2 matrix of the two independent failure modes:
 
 | | **Stable route** | **Unstable route (jitter / loss)** |
 |---|---|---|

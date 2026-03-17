@@ -77,20 +77,14 @@ Write-Host "`n  ═══ TIMER / KERNEL ═══" -ForegroundColor Cyan
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" "GlobalTimerResolutionRequests" 1 "Timer Resolution"
 
 # PowerThrottlingOff — Intel 12th gen+ only (E-core mismatch frametime spikes)
-try {
-    $cpuName = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).Name
-    $isIntelHybrid = $cpuName -match "Intel" -and (
-        $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or
-        $cpuName -match "\bUltra\b"
-    )
-    if ($isIntelHybrid) {
-        Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" "PowerThrottlingOff" 1 "Intel Power Throttling disabled (E-core fix)"
-    } else {
-        Write-Host "  ✓  INFO      Power Throttling: N/A (not Intel 12th gen+, CPU: $cpuName)" -ForegroundColor Cyan
-        $global:_verifyOkCount++
-    }
-} catch {
-    Write-Host "  ?  MISSING   Could not detect CPU for Power Throttling check" -ForegroundColor DarkGray
+$_intelHybridName = Get-IntelHybridCpuName
+if ($null -eq $_intelHybridName) {
+    Write-Host "  ?  WARN      Power Throttling: could not detect CPU (skipping Intel-specific check)" -ForegroundColor Yellow
+} elseif ($_intelHybridName) {
+    Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" "PowerThrottlingOff" 1 "Intel Power Throttling disabled (E-core fix)"
+} else {
+    Write-Host "  ✓  INFO      Power Throttling: N/A (not Intel 12th gen+)" -ForegroundColor Cyan
+    $global:_verifyOkCount++
 }
 
 Write-Host "`n  ═══ SYSTEM LATENCY TWEAKS ═══" -ForegroundColor Cyan

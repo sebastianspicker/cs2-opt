@@ -154,7 +154,7 @@ The Windows QoS Packet Scheduler can mark outgoing packets with DSCP values base
 
 Here is the issue that renders most guides' DSCP instructions useless:
 
-**`New-NetQosPolicy` will report success even when DSCP marking is completely disabled.**
+`New-NetQosPolicy` will report success even when DSCP marking is completely disabled.
 
 Windows refuses to apply DSCP marks on "unidentified" or "Public" network profiles. If your network adapter is categorized as "Public" (common for newly connected networks, VPN adapters, or any adapter without a recognized gateway), every QoS policy silently does nothing. No error, no warning — `Get-NetQosPolicy` shows your policy, but packets leave without the DSCP mark.
 
@@ -219,7 +219,7 @@ Many common "network optimization" steps that appear in guides are omitted becau
 | Disable ARPOffload / NSOffload | Active only during system sleep — zero effect during gameplay |
 | Disable WakeOnMagicPacket | Active only when system is powered off |
 
-The guiding principle: **if a setting only affects TCP, it cannot affect CS2 game packet delivery.** CS2's UDP path bypasses the TCP stack entirely.
+The guiding principle: if a setting only affects TCP, it cannot affect CS2 game packet delivery. CS2's UDP path bypasses the TCP stack entirely.
 
 ---
 

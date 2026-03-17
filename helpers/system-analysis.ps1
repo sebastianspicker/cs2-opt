@@ -283,9 +283,8 @@ function Invoke-CheckServices {
 function Invoke-CheckCS2 {
     $r = [System.Collections.Generic.List[object]]::new()
 
-    # Shared SteamPath read — used for video.txt and launch options below
-    $steamReg = Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
-    $steamPath = if ($steamReg) { $steamReg.SteamPath } else { $null }
+    # Steam base path — used for video.txt and launch options below
+    $steamPath = Get-SteamPath
 
     # Find CS2 install
     $cs2Path = $null

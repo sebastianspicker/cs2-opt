@@ -27,7 +27,7 @@ Every optimization tracked by this suite, with estimated impact ranges from isol
 | Timer Resolution | T2 | SAFE | 0–2 | 0 | MEDIUM | valleyofdoom/PC-Tuning | More precise system timer |
 | SysMain Disable | T3 | MODERATE | 0–3 | 0–1 | LOW | Community consensus | Only on HDD or low RAM |
 | Visual Effects | T3 | SAFE | 0–1 | 0–1 | LOW | DWM overhead reduction | Minimal impact |
-| Windows Update Blocker | T3 | CRITICAL | 0 | 0 | N/A | Security trade-off | Disables security updates — **not recommended** |
+| Windows Update Blocker | T3 | CRITICAL | 0 | 0 | N/A | Security trade-off | Disables security updates — not recommended |
 
 > **Reading this table:** "1% Low" is frametime consistency (higher = fewer stutters). "Avg FPS" is average framerate. Negative values mean intentional reduction (FPS Cap) or possible regression (HAGS on older GPUs). Confidence reflects the quality and reproducibility of the evidence.
 
@@ -35,7 +35,7 @@ Every optimization tracked by this suite, with estimated impact ranges from isol
 
 ## Cumulative Theoretical Improvement
 
-These ranges assume all applicable improvements stack independently. **Real-world gains are typically 30–60% of these values.**
+These ranges assume all applicable improvements stack independently. Real-world gains are typically 30–60% of these values.
 
 | Scenario | Steps Applied | 1% Low Range | Avg FPS Range | Risk Level |
 |---|---|---|---|---|
@@ -69,7 +69,7 @@ Every step in the suite is tagged with a risk level that determines whether it r
 
 **Process Priority IFEO (SAFE):** Setting `CpuPriorityClass=3` via IFEO is SAFE because High priority is the standard recommended level for games, the change is trivially reversible (delete the registry key), and it cannot cause system instability — the Windows scheduler handles High priority processes correctly by design.
 
-**Game Mode — Why We ENABLE It (Step 12):** Many optimization guides from 2020–2022 recommended *disabling* Game Mode, citing a valleyofdoom/PC-Tuning finding about "thread priority interference." This recommendation has not been reproduced in CS2-specific benchmarks and has been overridden by a more important benefit: **Game Mode suppresses Windows Update installation during active gaming sessions**. In 2025/2026, with Windows Update's increasingly aggressive scheduling (including driver updates), Game Mode is the only lightweight mechanism that defers these interruptions without fully disabling Windows Update (Step 15's CRITICAL-risk approach). Additionally, Game Mode activates the MMCSS `Games` scheduling path — the same CPU priority boost applied by `SystemResponsiveness` in Step 27. Critically, Game Mode and Game DVR/Bar are *separate systems* despite living in the same Windows Settings panel: Step 31 correctly disables DVR (recording overhead), while Step 12 enables the scheduler's game-priority path.
+**Game Mode — Why We ENABLE It (Step 12):** Many optimization guides from 2020–2022 recommended *disabling* Game Mode, citing a valleyofdoom/PC-Tuning finding about "thread priority interference." This recommendation has not been reproduced in CS2-specific benchmarks and has been overridden by a more important benefit: Game Mode suppresses Windows Update installation during active gaming sessions. In 2025/2026, with Windows Update's increasingly aggressive scheduling (including driver updates), Game Mode is the only lightweight mechanism that defers these interruptions without fully disabling Windows Update (Step 15's CRITICAL-risk approach). Additionally, Game Mode activates the MMCSS `Games` scheduling path — the same CPU priority boost applied by `SystemResponsiveness` in Step 27. Critically, Game Mode and Game DVR/Bar are *separate systems* despite living in the same Windows Settings panel: Step 31 correctly disables DVR (recording overhead), while Step 12 enables the scheduler's game-priority path.
 
 **Intel Power Throttling (SAFE, auto-detected):** Intel 12th gen+ CPUs (Alder Lake and newer) introduced a hybrid architecture with Performance cores and Efficiency cores. Windows' "Power Throttling" feature can migrate threads from P-cores to E-cores during brief load troughs — a problem when CS2's render thread gets briefly deprioritized and shifted to an E-core with ~40% lower IPC. Setting `PowerThrottlingOff=1` in the `Control\Power\PowerThrottling` key disables this behavior system-wide. The suite detects Intel hybrid CPUs automatically and only applies this on affected hardware.
 
@@ -130,12 +130,12 @@ Shows exactly how each step behaves under every profile. **DRY-RUN** is a modifi
 | 26 | GameConfigStore FSE | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Supplements Step 4 fullscreen tweak |
 | 27 | System scheduling + gaming priority + latency tweaks | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Scheduler quantum, FTH disable, Maintenance disable, NTFS metadata, DisableCoInstallers, Intel PowerThrottlingOff |
 | 28 | Timer resolution | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Requires Windows 10 build 19041+ |
-| 29 | Mouse acceleration disable + mouclass queue | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | mouclass queue 100→16; requires reboot |
+| 29 | Mouse acceleration disable + mouclass queue | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | mouclass queue default→50; requires reboot |
 | 30 | CS2 GPU preference | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Critical for iGPU+dGPU laptops; no-op on desktop |
 | 31 | Xbox Game Bar / Game DVR off | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | No more Win+G recording |
 | 32 | Overlay disable | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Discord/AMD/GFE require manual steps |
 | 33 | Audio optimization | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Guide only — manual Sound settings |
-| 34 | Autoexec.cfg generator + Launch Options | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | 56 CVars; m_rawinput 1; Intel thread_pool_option=2 auto-detected |
+| 34 | Autoexec.cfg generator + Launch Options | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | 74 CVars; m_rawinput 1; Intel thread_pool_option=2 auto-detected |
 | 35 | Chipset driver check | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Download link only; no auto-install |
 | 36 | Visual effects + Defender exclusions + Auto HDR off | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | Defender: cs2.exe + shader cache exclusions; Win11 Auto HDR disabled |
 | 37 | SysMain + WSearch + qWave + Xbox services off | T3 | MODERATE | `skip` | `skip` | `prompted` | `prompted` | Measurable on HDD. qWave: UDP DPC noise redundant with Step 16. Xbox: skip if using Game Pass/wireless |

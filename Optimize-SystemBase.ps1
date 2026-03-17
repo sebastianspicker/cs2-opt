@@ -115,10 +115,9 @@ if ($startStep -le 3) {
         -SideEffects "First CS2 launch takes 30-60s longer (shader recompile)" `
         -Undo "Shaders rebuild automatically on next launch" `
         -Action {
-            $_steamReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
-            $steamReg = if ($_steamReg) { $_steamReg.SteamPath } else { $null }
+            $steamBase = Get-SteamPath
             $paths = [System.Collections.Generic.List[string]]$CFG_ShaderCache_Paths
-            if ($steamReg) { $paths.Add("$steamReg\steamapps\shadercache\730") }
+            if ($steamBase) { $paths.Add("$steamBase\steamapps\shadercache\730") }
             $found = $false
             foreach ($p in ($paths | Select-Object -Unique)) {
                 if (Test-Path $p) {
@@ -165,10 +164,9 @@ if ($startStep -le 4) {
                 "${env:ProgramFiles(x86)}\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe",
                 "$env:ProgramFiles\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
             )
-            $_steamReg2 = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
-            $steamReg = if ($_steamReg2) { $_steamReg2.SteamPath } else { $null }
-            if ($steamReg) {
-                $cs2Paths += "$steamReg\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
+            $steamBase = Get-SteamPath
+            if ($steamBase) {
+                $cs2Paths += "$steamBase\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
             }
             $cs2Exe = $cs2Paths | Where-Object { Test-Path $_ } | Select-Object -First 1
 
