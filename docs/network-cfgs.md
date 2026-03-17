@@ -47,9 +47,9 @@ An unstable connection wants a deep buffer (`cl_net_buffer_ticks 4`, +31ms). But
 
 `net_bad` uses `cl_net_buffer_ticks 3` (+23ms) as the compromise. This absorbs most jitter bursts (jitter up to ~23ms is fully hidden) while keeping the added latency cost smaller than the full 4-tick buffer. On a 80ms base ping:
 
-- 4 ticks: 80 + 31 = **111ms effective latency**
-- 3 ticks: 80 + 23 = **103ms effective latency**
-- 2 ticks: 80 + 16 = **96ms effective latency** ← `net_highping` value (stable route only)
+- 4 ticks: 80 + 31 = 111ms effective latency
+- 3 ticks: 80 + 23 = 103ms effective latency
+- 2 ticks: 80 + 16 = 96ms effective latency ← `net_highping` value (stable route only)
 
 The 3-tick choice acknowledges that at 80ms+ base ping you are already in a degraded gameplay state. The buffer protects against the worst jitter spikes without making an already-bad experience worse.
 

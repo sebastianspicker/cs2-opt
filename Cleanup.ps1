@@ -60,10 +60,9 @@ Write-Section "Quick Refresh  [T1 — measurable effect after driver updates]"
 
 # CS2 Shader Cache
 Write-TierBadge 1 "Clear CS2 Shader Cache"
-$_steamReg  = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
-$steamReg   = if ($_steamReg) { $_steamReg.SteamPath } else { $null }
+$steamBase  = Get-SteamPath
 $cachePaths = [System.Collections.Generic.List[string]]$CFG_ShaderCache_Paths
-if ($steamReg) { $cachePaths.Add("$steamReg\steamapps\shadercache\730") }
+if ($steamBase) { $cachePaths.Add("$steamBase\steamapps\shadercache\730") }
 $cs2Found = $false
 foreach ($p in ($cachePaths | Select-Object -Unique)) {
     if (Test-Path $p) { $total += Clear-Dir $p "CS2 Shader Cache"; $cs2Found = $true }
@@ -159,7 +158,7 @@ if ($doFull) {
             $steamExe = @(
                 "${env:ProgramFiles(x86)}\Steam\steam.exe",
                 "$env:ProgramFiles\Steam\steam.exe",
-                "$(if($steamReg){"$steamReg\steam.exe"})"
+                "$(if($steamBase){"$steamBase\steam.exe"})"
             ) | Where-Object { Test-Path $_ } | Select-Object -First 1
             if ($steamExe) {
                 Write-Step "Starting CS2 verification..."

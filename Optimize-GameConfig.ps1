@@ -22,18 +22,11 @@ if ($startStep -le 34) {
             foreach ($kv in $CFG_CS2_Autoexec.GetEnumerator()) { $effectiveAutoexec[$kv.Key] = $kv.Value }
 
             # Intel 12th gen+ hybrid: prefer P-cores for CS2 thread pool
-            try {
-                $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-                $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
-                $isIntelHybrid = $cpuName -and $cpuName -match "Intel" -and (
-                    $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or $cpuName -match "\bUltra\b"
-                )
-                if ($isIntelHybrid) {
-                    $effectiveAutoexec["thread_pool_option"] = "2"
-                    Write-Info "Intel hybrid CPU ($cpuName) — adding thread_pool_option 2 (prefer P-cores)"
-                }
-            } catch { Write-Debug "Intel hybrid detection failed: $_" }
+            $intelHybridName = Get-IntelHybridCpuName
+            if ($intelHybridName) {
+                $effectiveAutoexec["thread_pool_option"] = "2"
+                Write-Info "Intel hybrid CPU ($intelHybridName) — adding thread_pool_option 2 (prefer P-cores)"
+            }
 
             $cs2Path = Get-CS2InstallPath
             if (-not $cs2Path) {
@@ -239,9 +232,7 @@ if ($startStep -le 34) {
             Write-Blank
             $cloudLooksEnabled = $false
             try {
-                $_steamCloudReg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" `
-                    -Name "SteamPath" -ErrorAction SilentlyContinue
-                $steamPath = if ($_steamCloudReg) { $_steamCloudReg.SteamPath } else { $null }
+                $steamPath = Get-SteamPath
                 if ($steamPath -and (Test-Path "$steamPath\userdata")) {
                     # localconfig.vdf is a per-user Valve Data Format file storing
                     # per-app Steam settings. CS2 App ID = 730.

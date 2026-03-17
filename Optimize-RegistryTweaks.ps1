@@ -160,23 +160,15 @@ if ($startStep -le 27) {
             Set-RegistryValue $memMgmt "DisablePagingExecutive" 1 "DWord" "Keep kernel code in RAM"
 
             # Intel 12th gen+ hybrid: disable OS Power Throttling to prevent E-core thread migration
-            try {
-                $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-                $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
-                $isIntelHybrid = $cpuName -and $cpuName -match "Intel" -and (
-                    $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or  # 12xxx-19xxx series
-                    $cpuName -match "\bUltra\b"                # Core Ultra (Meteor Lake / Arrow Lake)
-                )
-                if ($isIntelHybrid) {
-                    $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
-                    # Set-RegistryValue creates the key path if missing — no need for standalone New-Item
-                    Set-RegistryValue $ptPath "PowerThrottlingOff" 1 "DWord" "Disable Intel Power Throttling (E-core mismatch)"
-                    Write-OK "Intel hybrid CPU ($cpuName) — Power Throttling disabled."
-                } else {
-                    Write-Sub "Power Throttling: not applicable ($cpuName)"
-                }
-            } catch { Write-Debug "CPU detection failed for Power Throttling check." }
+            $intelHybridName = Get-IntelHybridCpuName
+            if ($intelHybridName) {
+                $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
+                # Set-RegistryValue creates the key path if missing — no need for standalone New-Item
+                Set-RegistryValue $ptPath "PowerThrottlingOff" 1 "DWord" "Disable Intel Power Throttling (E-core mismatch)"
+                Write-OK "Intel hybrid CPU ($intelHybridName) — Power Throttling disabled."
+            } else {
+                Write-Sub "Power Throttling: not applicable (non-Intel-hybrid CPU)"
+            }
 
             # ── Fault Tolerant Heap disable ───────────────────────────────────────
             # Windows FTH silently patches CS2's heap allocator after any crash/hang event.

@@ -23,7 +23,7 @@ HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\
 |-------|---------------|
 | 1 | Idle |
 | 2 | Normal |
-| 3 | **High** |
+| 3 | High |
 | 4 | Realtime |
 | 5 | Below Normal |
 | 6 | Above Normal |

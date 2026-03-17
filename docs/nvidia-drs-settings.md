@@ -3,7 +3,7 @@
 > Covers Phase 3 Step 4, `helpers/nvidia-profile.ps1`, and `helpers/nvidia-drs.ps1`.
 > For the DRS write mechanism itself, see [`docs/nvidia-optimization.md`](nvidia-optimization.md).
 
-The suite writes **52 DWORD settings** directly to the NVIDIA DRS binary database (`nvdrs.dat`) via `nvapi64.dll`. Three settings are intentionally excluded (see [Excluded Settings](#excluded-settings)). Two registry keys (`PerfLevelSrc`, `DisableDynamicPstate`) are always applied regardless of DRS availability.
+The suite writes 52 DWORD settings directly to the NVIDIA DRS binary database (`nvdrs.dat`) via `nvapi64.dll`. Three settings are intentionally excluded (see [Excluded Settings](#excluded-settings)). Two registry keys (`PerfLevelSrc`, `DisableDynamicPstate`) are always applied regardless of DRS availability.
 
 ---
 

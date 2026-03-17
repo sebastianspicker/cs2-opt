@@ -21,7 +21,7 @@ Problems:
 
 ### Message Signaled Interrupts (MSI)
 
-MSI replaces line assertion with a **DMA write to a special memory address**. The device writes a message directly specifying which interrupt vector to invoke. The interrupt controller reads the message and routes it without polling.
+MSI replaces line assertion with a DMA write to a special memory address. The device writes a message directly specifying which interrupt vector to invoke. The interrupt controller reads the message and routes it without polling.
 
 Benefits:
 - No IRQ sharing — each MSI-capable device gets its own vector.

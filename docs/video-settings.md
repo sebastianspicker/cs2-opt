@@ -64,7 +64,7 @@ In **exclusive fullscreen**, the game bypasses DWM entirely. The GPU writes dire
 "setting.r_csgo_cmaa_enable" "1"  // LOW tier only
 ```
 
-Counter-intuitive finding from ThourCS2: **4x MSAA produces better 1% lows than no AA** on many systems.
+Counter-intuitive finding from ThourCS2: 4x MSAA produces better 1% lows than no AA on many systems.
 
 The explanation: without anti-aliasing, the rasterizer must render more complex geometry per-pixel at edges (sub-pixel accuracy issues cause more branching in edge shaders). MSAA stabilizes this by resolving coverage at 4 samples per pixel — the rasterization pipeline becomes more predictable, reducing per-frame GPU work variance. The result is more consistent frametimes.
 
@@ -89,7 +89,7 @@ AO adds realistic contact shadowing where objects meet surfaces. In CS2 this cos
 
 The one setting where "lower = better" is incorrect for competitive play:
 
-**Why shadows matter competitively:** Player shadows cast through doorways and onto floor surfaces reveal enemy positions before the player model becomes visible. A player peeking through a doorway with a light source behind them casts their shadow first. **Disabling shadows removes this information.**
+**Why shadows matter competitively:** Player shadows cast through doorways and onto floor surfaces reveal enemy positions before the player model becomes visible. A player peeking through a doorway with a light source behind them casts their shadow first. Disabling shadows removes this information.
 
 **Why not High quality:** High shadow quality enables cascaded shadow maps with higher sample counts — visually prettier, but Shadow Quality = Medium already enables player shadows without the full cascade. Medium is the sweet spot.
 
@@ -152,21 +152,23 @@ The tradeoff: reduced horizontal FOV (you see less of the scene on the sides). T
 
 ---
 
-## Autoexec.cfg — 56 CVars by Category
+## Autoexec.cfg — 74 CVars (10 Categories)
 
 The autoexec is generated and written by Step 34. Here's the rationale for each category.
 
 ### Network (11 CVars)
 
-**`rate 1000000`** — Sets the maximum network bandwidth the client can use for receiving game state updates. The default is tuned for CS:GO's lower bandwidth requirements. CS2 servers can send denser updates than CS:GO — setting rate to 1000000 removes any artificial bandwidth cap.
+**`rate 1000000`** — Maximum network bandwidth for receiving game state updates. CS2 servers send denser updates than CS:GO — this removes any artificial bandwidth cap.
 
-**`cl_net_buffer_ticks 0`** and **`cl_tickpacket_queuelength 0`** — Reduce network-side buffering. CS2 has its own interpolation system; pre-buffering ticks adds unnecessary delay.
+**`cl_net_buffer_ticks 0`**, **`cl_net_buffer_ticks_use_interp 1`**, **`cl_tickpacket_desired_queuelength 0`** — Minimize network-side buffering. `cl_net_buffer_ticks 0` disables the receive tick buffer (immediate rendering). `cl_net_buffer_ticks_use_interp 1` ties any remaining buffering to the interpolation window. `cl_tickpacket_desired_queuelength 0` removes the packet queue target. For unstable connections, the `cfgs/` network condition configs adjust these values.
 
-**`cl_interp_ratio 1`** and **`cl_updaterate 128`** — Standard settings since CS:GO. Interpolation ratio 1 with updaterate 128 gives minimal visual smoothing with maximum data freshness.
+**`cl_interp_ratio 1`**, **`cl_interp 0`**, **`cl_updaterate 128`** — Deprecated in CS2 Source 2. The sub-tick system handles interpolation differently; `cl_net_buffer_ticks` is the actual control. These are kept as harmless belt-and-suspenders (silently ignored by the engine but cause no harm if set).
 
-**`mm_dedicated_search_maxping 80`** — Maximum ping to matchmaking servers. 80ms works for most regions (EU players can lower to 40; SEA players may need 80–150). Value 40 used by some guides is too aggressive in low-server-density regions.
+**`mm_dedicated_search_maxping 80`** and **`mm_session_search_qos_timeout 20`** — Maximum matchmaking ping and QoS probe timeout. 80ms works for most regions (EU players can lower to 40; SEA players may need 80–150). Value 40 used by some guides is too aggressive in low-server-density regions.
 
-**`net_client_steamdatagram_enable_override 1`** — Routes game traffic through Valve's SDR (Steam Datagram Relay) backbone. SDR provides a more direct network path via Valve's own server infrastructure, bypassing congested ISP routes. For players with poor routing to CS2 game servers (visible as ping variance, not just absolute ping), SDR measurably improves packet delivery. For players on already-optimal routes, it's neutral.
+**`cl_timeout 30`** — Seconds before the client disconnects from an unresponsive server. Default is appropriate for stable connections; the `cfgs/net_unstable` and `cfgs/net_bad` configs raise this to 60.
+
+**`net_client_steamdatagram_enable_override 1`** — Routes game traffic through Valve's SDR (Steam Datagram Relay) backbone, bypassing congested ISP routes. Measurably improves delivery for players with poor direct routing (visible as ping variance, not just absolute ping). Neutral on already-optimal routes.
 
 ### Engine / FPS (5 CVars)
 
@@ -178,23 +180,57 @@ The autoexec is generated and written by Step 34. Here's the rationale for each 
 
 **`fps_max_ui 200`** and **`fps_max_tools 144`** — Cap the FPS in menus and tools/editor modes respectively. The main menu doesn't need 400+ FPS and it reduces GPU/power noise while navigating settings.
 
-### Gameplay (11 CVars)
+### Gameplay (17 CVars)
 
-**`cl_predict_body_shot_fx 1`** and **`cl_predict_head_shot_fx 1`** — Show hit effects client-side (predicted) rather than waiting for server confirmation. Since CS2's sub-tick architecture may delay hit confirmation slightly, client-predicted effects provide visual feedback before the server packet arrives.
+**`cl_predict_body_shot_fx 0`** and **`cl_predict_head_shot_fx 0`** — Disable client-side hit effect prediction. Per a 120-player study by ThourCS2 (2025), 95% of professionals keep these off — predicted effects (rendered before server confirmation) cause phantom dink visuals that trigger fatal target-switching errors. Value `1` (on) is the CS2 default and was previously recommended; the community reversed course based on this data.
 
-**`cl_predict_kill_ragdolls 0`** — Disables client-side ragdoll prediction. Ragdoll physics are CPU-intensive. Disabling predicted ragdolls means the ragdoll appears when the server confirms the kill rather than immediately, but eliminates mid-firefight CPU spikes from physics simulation.
+**`cl_predict_kill_ragdolls 0`** and **`cl_disable_ragdolls 1`** — Disable ragdoll simulation entirely. Ragdoll physics are CPU-intensive mid-firefight; corpse positions provide no actionable information after a kill. The first CVar disables predicted ragdolls; the second disables them on server confirmation too.
 
 **`cl_sniper_delay_unscope 0`** — Removes the delay before the AWP scope clears after firing. Faster visual feedback on bolt-action sniper mechanics. Standard competitive setting.
 
-**`r_drawtracers_firstperson 0`** — Hides bullet tracers in first-person view. Tracers can briefly obscure the target model during rapid fire. Disabling them provides a cleaner view during spray-downs.
+**`cl_sniper_show_inaccuracy 0`** and **`cl_crosshair_sniper_show_normal_inaccuracy 0`** — Disable scope bloom indicator and standing inaccuracy blur overlay. These visual cues train you to wait for the indicator rather than trusting timing; experienced players track shot timing internally.
 
-**`gameinstructor_enable 0`** — Disables the in-game instruction system (text tooltips, tutorial overlays). Pure overhead for experienced players.
+**`r_drawtracers_firstperson 0`** — Hides bullet tracers in first-person view. Tracers can briefly obscure the target model during rapid fire.
 
-**`lobby_default_privacy_bits2 0`** — Sets lobby privacy to Public (open to friends), preventing the lobby from being private by default.
+**`gameinstructor_enable 0`** and **`con_enable 1`** — Disables tutorial overlays; enables the developer console (allows mid-session CVar changes without relaunch).
 
-**`cl_autowepswitch 0`** — Disables automatic weapon switch when picking up a new weapon. Standard competitive setting — picking up a weapon during a firefight should not interrupt your current action without explicit input.
+**`cl_autowepswitch 0`** — Disables automatic weapon switch when picking up a new weapon. Picking up a weapon during a firefight should not interrupt your current action without explicit input.
 
-**`option_duck_method 0`** and **`option_speed_method 0`** — Set crouch and walk to toggle mode rather than hold mode. Personal preference for most players.
+**`cl_silencer_mode 0`** — Prevents accidental silencer attachment/detachment on the M4A1-S and USP-S. The detach animation costs ~1 second; `0` locks the silencer state.
+
+**`cl_dm_buyrandomweapons 0`** — In Deathmatch mode, lets you choose your weapon rather than receiving a random one.
+
+**`cl_join_advertise 2`** — Allows friends to see and join your server (community/practice servers).
+
+**`lobby_default_privacy_bits2 0`** — Sets lobby to Open (friends can join), preventing accidental private lobby lock.
+
+**`option_duck_method 0`** and **`option_speed_method 0`** — Crouch and walk in toggle mode rather than hold mode.
+
+### HUD / QoL (7 CVars)
+
+**`cl_compass_enabled 0`** — Hides the compass overlay. The minimap provides the same directional information; the compass is visual noise.
+
+**`cl_show_clan_in_death_notice 0`** — Removes clan tag from the kill feed. Cleaner read during multi-kill sequences.
+
+**`cl_weapon_selection_rarity_color 0`** — Removes skin rarity color glow from the weapon selection HUD. Cosmetic noise; removes a frame of visual processing on weapon switch.
+
+**`cl_use_opens_buy_menu 0`** — Prevents the Use key (`E`) from opening the buy menu. Eliminates accidental buy menu triggers during movement near the spawn zone.
+
+**`cl_buywheel_nonumberpurchasing 1`** — Prevents number keys from purchasing in the buy zone. Avoids unintended purchases when pressing key binds near a buy zone.
+
+**`cl_spec_show_bindings 0`** — Hides the spectator control hint overlay when dead. Removes a persistent distraction during death camera.
+
+**`viewmodel_recoil 0`** — Disables weapon kick animation during spray. The animation has no gameplay function; removing it reduces visual distraction during full-auto fire.
+
+### Privacy / Anti-distraction (5 CVars)
+
+**`cl_invites_only_mainmenu 1`** and **`cl_invites_only_friends 1`** — Block invite popups during active matches and limit invites to friends only. Popup overlays can appear mid-round and cause visual/input disruption.
+
+**`cl_embedded_stream_audio_volume 0`** — Mutes embedded Twitch/event stream audio in the CS2 overlay. Zero competitive use.
+
+**`tv_nochat 1`** — Mutes GOTV spectator chat, which can appear in the chat window during streamed matches.
+
+**`snd_mute_mvp_music_live_players 1`** — Mutes MVP music while any players are still alive. The MVP anthem in competitive contexts plays while the round transitions; muting it keeps audio focused on live-round information.
 
 ### HUD Telemetry (5 CVars)
 
@@ -258,7 +294,7 @@ The difference from Step 29's Windows-level acceleration disable: `m_rawinput 1`
 
 **`-console`** — Enables the developer console at launch (same as `con_enable 1` in autoexec, but also enables the console before any config loads).
 
-**`+exec autoexec`** — Executes your autoexec.cfg on game launch. This is how the 56 CVars above take effect.
+**`+exec autoexec`** — Executes your autoexec.cfg on game launch. This is how the 74 CVars above take effect.
 
 ### -noreflex (optional)
 

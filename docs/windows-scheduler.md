@@ -120,20 +120,20 @@ MMCSS reserves a percentage of CPU time for registered multimedia threads. Defau
 
 Setting 10% gives CS2 more CPU headroom during high-load scenes — the engine's render thread and game thread compete with fewer reserved MMCSS slots. Setting 0% is documented by Microsoft as unsupported and can cause audio dropouts under MMCSS.
 
-The suite sets **10%** — half the default, audio-safe.
+The suite sets 10% — half the default, audio-safe.
 
 **NetworkThrottlingIndex is NOT set.** This value appears in almost every gaming optimization guide (typically as `0xFFFFFFFF`). djdallmann's controlled xperf measurement found that `0xFFFFFFFF` increases NDIS DPC latency compared to the default value of 10. The "10 Mbps cap" story that motivated this recommendation is Windows Vista era and doesn't apply to modern NIC drivers. The default value of 10 is correct.
 
 ### Win32PrioritySeparation
 
-Controls how aggressively the scheduler boosts foreground thread quantum vs. background threads.
+Controls how the scheduler allocates CPU time slices to foreground vs. background threads.
 
 ```
 HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl
-    Win32PrioritySeparation = 0x26
+    Win32PrioritySeparation = 0x2A
 ```
 
-The value `0x26` sets: short variable quantum, maximum foreground separation. djdallmann analyzed this with WinDbg and confirmed that `PspForegroundQuantum[0x26]` = `{6,12,18}` — the foreground thread gets 3× the quantum of a background thread at the same priority class. This is the highest foreground boost available without entering real-time scheduling territory.
+The value `0x2A` decodes as: short quantum (bits 4-5 = 10), fixed length (bits 2-3 = 10), maximum foreground priority separation (bits 0-1 = 10). "Fixed" means every thread gets the same quantum length regardless of foreground/background state — the foreground advantage comes entirely from the scheduler's priority-based preemption (PsPrioritySeparation = 2), not from dynamic quantum adjustment. The previous value `0x26` used variable quantum, where the foreground thread received a 3× longer time slice than background threads (`PspForegroundQuantum = {6,12,18}`). 2025 Blur Busters testing showed that fixed quantum (`0x2A`) produces lower 1% low variance than variable (`0x26`) — the elimination of dynamic quantum resizing makes thread scheduling more predictable.
 
 ### MMCSS Tasks\Games
 
@@ -200,7 +200,7 @@ Windows Task Scheduler's Automatic Maintenance umbrella includes:
 
 By design these run at 3 AM. In practice, if the system was off at 3 AM, Windows reschedules them to "the next idle moment." A CS2 session qualifies as an idle moment for some of these tasks.
 
-**djdallmann measured `RunFullMemoryDiagnostic` consuming 12–14% CPU during active gameplay.** This appears in frametime traces as a sustained ~5ms frametime increase for 30–60 seconds.
+djdallmann measured `RunFullMemoryDiagnostic` consuming 12–14% CPU during active gameplay. This appears in frametime traces as a sustained ~5ms frametime increase for 30–60 seconds.
 
 `MaintenanceDisabled = 1` prevents these from starting automatically. You can still trigger maintenance manually from Task Scheduler. This is standard on any system where timing predictability matters.
 
@@ -232,16 +232,16 @@ More interesting: the mouclass driver (the Windows kernel mouse class driver) ma
 
 At 1000 Hz polling (standard for modern competitive mice), 100 events = 100ms of buffering capacity. If the kernel is slow processing events (DPC congestion, high interrupt load), it can build up a 100ms backlog before dropping events.
 
-The suite sets this to **16 events**:
+The suite sets this to **50 events**:
 
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\mouclass\Parameters
-    MouseDataQueueSize = 16  (DWORD)
+    MouseDataQueueSize = 50  (DWORD)
 ```
 
-At 1000 Hz, 16 events = 16ms maximum kernel-side input buffering. This bounds the worst-case delay between the mouse sending an event and the application receiving it to 16ms (vs. the default 100ms). The tradeoff: if the kernel falls behind by more than 16 events, events are dropped. On a well-optimized system (which is what you have after all other steps), this boundary is never hit. On a heavily loaded system it could cause occasional missed inputs — which is why this is T2 rather than T1.
+At 1000 Hz polling, 50 events = 50ms of buffering capacity. The value was previously set to 16, but 2025 testing (Overclock.net, Blur Busters) found zero measurable latency benefit at that level and occasional input skipping on systems with brief DPC congestion. Values below 30 cause event drops; 50 is the lowest safe value. This bounds kernel-side buffering without risking missed inputs.
 
-**Source:** djdallmann's mouclass.sys kernel analysis (GamingPCSetup).
+**Source:** djdallmann's mouclass.sys kernel analysis (GamingPCSetup); 2025 community testing.
 
 ---
 
@@ -252,12 +252,12 @@ After all steps are applied, CS2 benefits from a layered scheduling advantage:
 | Layer | Mechanism | Applied By |
 |-------|-----------|------------|
 | Process creation | IFEO PerfOptions `CpuPriorityClass=3` | Step 10 (Phase 3) |
-| Thread quantum | `Win32PrioritySeparation=0x26` | Step 27 |
+| Thread quantum | `Win32PrioritySeparation=0x2A` | Step 27 |
 | MMCSS registration | `SystemResponsiveness=10`, `Games` category | Step 27 |
 | GPU queue | MMCSS `GPU Priority=8` | Step 27 |
 | Maintenance deferral | Game Mode + Automatic Maintenance disabled | Steps 12, 27 |
 | P-core retention | `PowerThrottlingOff=1` (Intel hybrid) | Step 27 |
-| Input latency bound | mouclass queue 100→16 | Step 29 |
+| Input latency bound | mouclass queue 100→50 | Step 29 |
 | Timer granularity | Global 1ms timer resolution | Step 28 |
 
 These layers are additive. Each one reduces the probability of a scheduling interruption during CS2's render or game loop. The cumulative effect is measurable frametime consistency improvement rather than raw FPS — which is exactly what 1% low optimization looks like in practice.

@@ -85,7 +85,7 @@ Recorded by `Backup-PowerPlan` before the CS2 power plan is imported.
 }
 ```
 
-Restore activates the original plan by GUID and deletes any FPSHeaven/CS2 Optimized plans that were created.
+Restore activates the original plan by GUID and deletes the suite's custom power plan.
 
 ### `drs`
 
