@@ -78,7 +78,9 @@ Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kerne
 
 # PowerThrottlingOff — Intel 12th gen+ only (E-core mismatch frametime spikes)
 $_intelHybridName = Get-IntelHybridCpuName
-if ($_intelHybridName) {
+if ($null -eq $_intelHybridName) {
+    Write-Host "  ?  WARN      Power Throttling: could not detect CPU (skipping Intel-specific check)" -ForegroundColor Yellow
+} elseif ($_intelHybridName) {
     Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" "PowerThrottlingOff" 1 "Intel Power Throttling disabled (E-core fix)"
 } else {
     Write-Host "  ✓  INFO      Power Throttling: N/A (not Intel 12th gen+)" -ForegroundColor Cyan
