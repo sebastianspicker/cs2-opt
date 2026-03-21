@@ -67,13 +67,13 @@ function New-TestStateFile {
     <#  Creates a minimal state.json in the test temp directory.
         Returns the file path.  #>
     param(
-        [string]$Profile  = "RECOMMENDED",
-        [string]$Mode     = "CONTROL",
+        [string]$TestProfile  = "RECOMMENDED",
+        [string]$Mode         = "CONTROL",
         [string]$LogLevel = "NORMAL",
         [string[]]$AppliedSteps = @()
     )
     $state = [PSCustomObject]@{
-        profile      = $Profile
+        profile      = $TestProfile
         mode         = $Mode
         logLevel     = $LogLevel
         appliedSteps = $AppliedSteps

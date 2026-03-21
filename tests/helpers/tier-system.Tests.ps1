@@ -404,7 +404,7 @@ Describe "Save-AppliedSteps / Load-AppliedSteps" {
 
     It "round-trips applied steps through state.json" {
         # Create a state file first (Save-AppliedSteps requires it to exist)
-        New-TestStateFile -Profile "RECOMMENDED"
+        New-TestStateFile -TestProfile "RECOMMENDED"
 
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
         $SCRIPT:AppliedSteps.Add("Clear Shader Cache")
@@ -421,7 +421,7 @@ Describe "Save-AppliedSteps / Load-AppliedSteps" {
     }
 
     It "does not duplicate steps on repeated loads" {
-        New-TestStateFile -Profile "RECOMMENDED"
+        New-TestStateFile -TestProfile "RECOMMENDED"
 
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
         $SCRIPT:AppliedSteps.Add("Clear Shader Cache")

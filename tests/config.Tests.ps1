@@ -32,8 +32,8 @@ Describe "EstimateKey cross-reference" {
         foreach ($file in $phaseScripts) {
             if (-not (Test-Path $file)) { continue }
             $content = Get-Content $file -Raw
-            $matches = [regex]::Matches($content, '-EstimateKey\s+"([^"]+)"')
-            foreach ($m in $matches) {
+            $regexHits = [regex]::Matches($content, '-EstimateKey\s+"([^"]+)"')
+            foreach ($m in $regexHits) {
                 $usedKeys += $m.Groups[1].Value
             }
         }
