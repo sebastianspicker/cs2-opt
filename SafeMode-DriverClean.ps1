@@ -1,5 +1,35 @@
 #Requires -RunAsAdministrator
-<# CS2 Optimization Suite — Safe Mode · GPU Driver Clean Removal #>
+<# CS2 Optimization Suite — Safe Mode · GPU Driver Clean Removal
+
+    CRASH RECOVERY SCENARIOS — this script is safety-critical.
+
+    Steps execute in order: (1) bcdedit /deletevalue safeboot, (2) driver removal, (3) RunOnce.
+    Step 1 is done FIRST so that a crash at any later point still boots into Normal Mode.
+
+    Crash during Step 1 (bcdedit /deletevalue):
+        bcdedit is atomic — either the BCD write completes or it doesn't.
+        - If completed:  next boot = Normal Mode. Safe to re-run this script.
+        - If not completed (power loss mid-write): next boot = Safe Mode. The script
+          re-runs via RunOnce and retries Step 1. If BCD is corrupt, user sees manual
+          fix instructions: "bcdedit /deletevalue safeboot" from elevated cmd.exe.
+
+    Crash during Step 2 (driver removal):
+        Step 1 already completed, so next boot = Normal Mode.
+        - Partial driver removal: Windows auto-detects missing display driver and loads
+          Microsoft Basic Display Adapter (MSBDA). Resolution limited to 1024x768 but
+          the system is usable. User can install GPU driver normally.
+        - The RunOnce for Phase 3 was NOT yet registered (Step 3), so Phase 3 won't
+          auto-start. User runs PostReboot-Setup.ps1 manually from START.bat.
+
+    Crash during Step 3 (RunOnce registration):
+        Steps 1+2 completed. Next boot = Normal Mode, GPU driver removed.
+        - Phase 3 won't auto-start. User runs PostReboot-Setup.ps1 from START.bat -> [3].
+        - This is the lowest-risk crash point — system boots fine, just needs manual Phase 3.
+
+    Power failure during Restart-Computer:
+        All steps completed. System reboots normally. RunOnce fires Phase 3.
+        - This is equivalent to a normal power cycle — no data loss risk.
+#>
 
 $ErrorActionPreference = "SilentlyContinue"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -55,23 +85,40 @@ try {
             # (safeboot was already cleared by a previous execution) or if not in Safe Mode.
             # NOTE: bcdedit error text is LOCALIZED ("element not found" in English, but different
             # on German/French/etc Windows). Instead of parsing the error message, we verify the
-            # actual BCD state: run "bcdedit /enum {current}" and check whether "safeboot" still
-            # appears. The element name "safeboot" is an internal BCD identifier, NOT localized.
-            $bcdEnum = bcdedit /enum "{current}" 2>&1
-            # bcdedit output is an array of lines; join with newlines for reliable regex matching.
+            # actual BCD state using bcdedit /enum /v, which outputs RAW BCD element IDs
+            # (e.g., "0x26000081") instead of human-readable names. Element names like "safeboot"
+            # ARE localized (e.g., German: "Abgesicherter Start"), but the /v flag outputs the
+            # numeric ID which is always "0x26000081" regardless of locale.
+            $bcdEnum = bcdedit /enum "{current}" /v 2>&1
+            $bcdEnumExitCode = $LASTEXITCODE
             $bcdEnumText = ($bcdEnum | Out-String)
-            $safebootStillSet = $bcdEnumText -match "(?m)^\s*safeboot\s"
-            if (-not $safebootStillSet) {
-                Write-OK "Safe Mode already disabled (safeboot value not present). OK to continue."
-            } else {
-                Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
-                Write-Err "System may boot into Safe Mode again on next restart!"
+            if ($bcdEnumExitCode -ne 0) {
+                # bcdedit /enum itself failed — possible BCD corruption or permissions issue.
+                # Cannot determine Safe Mode state; treat as critical and ask user.
+                Write-Err "CRITICAL: bcdedit /enum failed (exit $bcdEnumExitCode). Cannot verify Safe Mode state."
+                Write-Err "BCD may be corrupted or permissions insufficient."
                 Write-Err ""
                 Write-Err "MANUAL FIX (run in elevated cmd.exe):"
                 Write-Err "  bcdedit /deletevalue safeboot"
                 Write-Err "  shutdown /r /t 0"
                 $smConfirm = Read-Host "  Continue anyway? [y/N]"
                 if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+            } else {
+                # BCD element 0x26000081 = BcdOSLoaderInteger_SafeBoot (safeboot type).
+                # With /v, this appears as the raw hex ID, never localized.
+                $safebootStillSet = $bcdEnumText -match "(?m)^\s*0x26000081\s"
+                if (-not $safebootStillSet) {
+                    Write-OK "Safe Mode already disabled (safeboot element not present). OK to continue."
+                } else {
+                    Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
+                    Write-Err "System will boot into Safe Mode again on next restart!"
+                    Write-Err ""
+                    Write-Err "MANUAL FIX (run in elevated cmd.exe):"
+                    Write-Err "  bcdedit /deletevalue safeboot"
+                    Write-Err "  shutdown /r /t 0"
+                    $smConfirm = Read-Host "  Continue anyway? [y/N]"
+                    if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+                }
             }
         } else {
             Write-OK "Safe Mode disabled (next boot = normal)."
@@ -135,6 +182,25 @@ try {
         $r2 = Read-Host "  Restart now? [Y/n]"
         if ($r2 -notmatch "^[nN]$") { Restart-Computer -Force }
     }
+} catch {
+    # Unhandled exception — display recovery instructions so user isn't stuck.
+    Write-Host "" -ForegroundColor Red
+    Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Red
+    Write-Host "  ║  UNEXPECTED ERROR DURING SAFE MODE SCRIPT               ║" -ForegroundColor Red
+    Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Red
+    Write-Host "  Error: $_" -ForegroundColor Red
+    Write-Host "" -ForegroundColor Yellow
+    Write-Host "  RECOVERY:" -ForegroundColor Yellow
+    Write-Host "  Step 1 (bcdedit) runs first. If it completed, next boot = Normal Mode." -ForegroundColor White
+    Write-Host "  If you're stuck in Safe Mode, run in elevated cmd.exe:" -ForegroundColor White
+    Write-Host "    bcdedit /deletevalue safeboot" -ForegroundColor Cyan
+    Write-Host "    shutdown /r /t 0" -ForegroundColor Cyan
+    Write-Host "" -ForegroundColor White
+    Write-Host "  If GPU driver was partially removed, Windows will load Basic Display" -ForegroundColor White
+    Write-Host "  Adapter on next boot. Install your GPU driver manually or re-run" -ForegroundColor White
+    Write-Host "  the suite from START.bat." -ForegroundColor White
+    Write-Host "" -ForegroundColor White
+    Read-Host "  Press Enter to exit"
 } finally {
     # Release backup lock — acquired by Initialize-Backup at the top of this script.
     # In try/finally to ensure release on crash, Ctrl+C, or normal exit.

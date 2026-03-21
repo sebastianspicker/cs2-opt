@@ -19,9 +19,12 @@ Third pass after R1 (~51 fixes) + R2 (~47 fixes) = ~98 total. Consolidated from 
 - [ ] Step 38 copy list completeness after all file additions
 
 ### B5-R3 — Safe Mode (kept separate — safety critical)
-- [ ] R2 bcdedit locale fix: bcdedit /enum parsing — robust on all Windows editions?
-- [ ] CIM→pnputil fallback: does pnputil parsing still work after CIM was added as primary?
-- [ ] Full crash scenario trace: power failure at each step → recovery path
+- [x] R2 bcdedit locale fix: bcdedit /enum parsing — robust on all Windows editions?
+  - FIXED: `bcdedit /enum "{current}"` element names ARE localized (e.g., "safeboot" → "Abgesicherter Start" on German Windows). Switched to `bcdedit /enum "{current}" /v` which outputs raw BCD element ID `0x26000081` — never localized. Also added handling for bcdedit /enum itself failing (BCD corruption).
+- [x] CIM→pnputil fallback: does pnputil parsing still work after CIM was added as primary?
+  - FIXED: CIM `DeviceClass` was using localized class name ("DISPLAY" — only works on English Windows). Switched to `ClassGuid` matching against `$CFG_GUID_Display` ({4d36e968-...}) which is locale-independent. Fallback trigger and removal command verified correct for both paths.
+- [x] Full crash scenario trace: power failure at each step → recovery path
+  - Added comprehensive crash recovery documentation as header comment in SafeMode-DriverClean.ps1. Added catch block with user-visible recovery instructions for unhandled exceptions. Step ordering (bcdedit first) ensures Normal Mode boot even if later steps crash.
 
 ### B6-R3 — Post-Reboot (kept separate — complex state)
 - [ ] R2 fixes: DNS virtual adapter filter (14 patterns), multi-adapter confirmation, PerfLevelSrc/DisableDynamicPstate Verify checks

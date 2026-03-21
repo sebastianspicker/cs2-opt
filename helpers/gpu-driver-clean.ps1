@@ -80,11 +80,15 @@ function Remove-GpuDriverClean {
 
     $driverPackages = @()
 
-    # Primary method: CIM/WMI query — locale-independent, works on all Windows editions
-    # Get-CimInstance requires PS 3.0+ (Windows 10/11 always have it)
+    # Primary method: CIM/WMI query — works on all Windows editions.
+    # Get-CimInstance requires PS 3.0+ (Windows 10/11 always have it).
+    # NOTE: Win32_PnPSignedDriver.DeviceClass is the localized class description (e.g.,
+    # "Display adapters" in English, "Grafikkarten" in German). Use ClassGuid instead —
+    # it's the device setup class GUID which is always {4d36e968-...} for display adapters.
     try {
+        $displayGuid = $CFG_GUID_Display  # {4d36e968-e325-11ce-bfc1-08002be10318}
         $cimDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop |
-            Where-Object { $_.DeviceClass -eq "DISPLAY" -and $_.DriverProviderName -match $vendorMatch }
+            Where-Object { $_.ClassGuid -eq $displayGuid -and $_.DriverProviderName -match $vendorMatch }
 
         foreach ($drv in $cimDrivers) {
             if ($drv.InfName -match "^oem\d+\.inf$") {
