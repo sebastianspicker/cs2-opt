@@ -94,6 +94,16 @@ if ($startStep -le 1) {
             Write-Info "NVIDIA driver .exe not found in expected location."
             Write-Info "If you downloaded the driver manually, provide the path now."
             $driverExe = Read-Host "  Path to NVIDIA driver .exe (or [Enter] to download)"
+            if (-not [string]::IsNullOrWhiteSpace($driverExe)) {
+                # Validate user-provided path: must exist and be an .exe
+                if (-not (Test-Path $driverExe)) {
+                    Write-Warn "File not found: $driverExe"
+                    $driverExe = $null
+                } elseif ($driverExe -notmatch '\.exe$') {
+                    Write-Warn "Not an .exe file: $driverExe"
+                    $driverExe = $null
+                }
+            }
             if ([string]::IsNullOrWhiteSpace($driverExe)) {
                 if ($SCRIPT:DryRun) {
                     Write-Host "  [DRY-RUN] Would attempt automatic NVIDIA driver download" -ForegroundColor Magenta
@@ -107,6 +117,10 @@ if ($startStep -le 1) {
                         Write-Warn "Auto-download failed. Download manually:"
                         Write-Info "https://www.nvidia.com/en-us/drivers/"
                         $driverExe = Read-Host "  Path to downloaded .exe"
+                        if ($driverExe -and $driverExe -notmatch '\.exe$') {
+                            Write-Warn "Not an .exe file: $driverExe"
+                            $driverExe = $null
+                        }
                     }
                 }
             }

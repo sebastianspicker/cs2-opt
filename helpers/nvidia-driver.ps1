@@ -204,25 +204,32 @@ function Install-NvidiaDriverClean {
     $setup = Join-Path $tempDir "setup.exe"
     $installProcess = Start-Process -FilePath $setup -ArgumentList "-s -noreboot" -Wait -PassThru -NoNewWindow
 
+    $installSuccess = $false
     if ($installProcess.ExitCode -eq 0) {
         Write-OK "NVIDIA driver installed successfully."
+        $installSuccess = $true
     } elseif ($installProcess.ExitCode -eq 1) {
         Write-OK "NVIDIA driver installed (exit code 1 — reboot required)."
         Write-Info "Exit code 1 may indicate partial install or reboot needed. Verify in Device Manager."
+        $installSuccess = $true
     } else {
         Write-Warn "Installer exited with code $($installProcess.ExitCode)."
         Write-Info "This may still be OK — check Device Manager after restart."
+        # Non-zero exit (other than 1) indicates potential failure
+        $installSuccess = $false
     }
 
-    # ── 4. Post-install tweaks ───────────────────────────────────────────────
-    Apply-NvidiaPostInstallTweaks
+    # ── 4. Post-install tweaks (only if install succeeded) ───────────────────
+    if ($installSuccess) {
+        Apply-NvidiaPostInstallTweaks
+    }
 
     # ── 5. Cleanup ───────────────────────────────────────────────────────────
     Write-Step "Cleaning up extraction folder..."
     Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     Write-OK "Cleanup complete."
 
-    return $true
+    return $installSuccess
 }
 
 function Apply-NvidiaPostInstallTweaks {
