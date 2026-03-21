@@ -248,8 +248,13 @@ Write-Host "  $("═" * 60)" -ForegroundColor DarkGray
 
 if ($counts.changedCount -gt 0 -or $counts.missingCount -gt 0) {
     Write-Blank
-    Write-Host "  Windows Update has likely reset some settings." -ForegroundColor Yellow
-    Write-Host "  Recommendation: Run Phase 1 again (START.bat -> [1])." -ForegroundColor White
+    if ($counts.changedCount -gt 0) {
+        Write-Host "  Windows Update may have reset $($counts.changedCount) setting(s)." -ForegroundColor Yellow
+    }
+    if ($counts.missingCount -gt 0) {
+        Write-Host "  $($counts.missingCount) setting(s) were never applied (skipped steps or first run)." -ForegroundColor DarkGray
+    }
+    Write-Host "  To fix: Run Phase 1 again (START.bat -> [1])." -ForegroundColor White
     Write-Host "  The suite detects completed steps and offers resume." -ForegroundColor DarkGray
 } else {
     Write-Blank

@@ -83,9 +83,15 @@ function Show-ResumePrompt($phase, $totalSteps) {
     Write-Host "  ┌─────────────────────────────────────────────────────────" -ForegroundColor DarkYellow
     Write-Host "  │  RESUME — Previous session found" -ForegroundColor Yellow
     Write-Host "  │  Last step: $($prog.lastCompletedStep)  |  Continue from: $nextStep" -ForegroundColor White
-    $doneList = ($prog.completedSteps -join ', ')
-    $skipList = if ($prog.skippedSteps -and $prog.skippedSteps.Count -gt 0) { " | Skipped: $($prog.skippedSteps -join ', ')" } else { "" }
-    Write-Host "  │  Completed: $doneList$skipList" -ForegroundColor DarkGray
+    # Strip "P{phase}:" prefix from composite keys for user-friendly display
+    $doneNums = @($prog.completedSteps | ForEach-Object { if ($_ -match ':(\d+)$') { $Matches[1] } else { $_ } })
+    $doneList = ($doneNums -join ', ')
+    $skipNums = @()
+    if ($prog.skippedSteps -and $prog.skippedSteps.Count -gt 0) {
+        $skipNums = @($prog.skippedSteps | ForEach-Object { if ($_ -match ':(\d+)$') { $Matches[1] } else { $_ } })
+    }
+    $skipList = if ($skipNums.Count -gt 0) { " | Skipped: $($skipNums -join ', ')" } else { "" }
+    Write-Host "  │  Done: steps $doneList$skipList" -ForegroundColor DarkGray
     Write-Host "  │" -ForegroundColor DarkYellow
     Write-Host "  │  [1]  Resume from step $nextStep" -ForegroundColor Green
     Write-Host "  │  [2]  Choose a specific step" -ForegroundColor White

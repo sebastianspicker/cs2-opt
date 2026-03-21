@@ -670,16 +670,20 @@ if ($startStep -le 13) {
 }
 
 Write-Blank
-Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║  ALL 3 PHASES COMPLETE — GOOD LUCK!                 ║" -ForegroundColor Green
-Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
-Write-Blank
+if ($SCRIPT:DryRun) {
+    Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Magenta
+    Write-Host "  ║  DRY-RUN PHASE 3 PREVIEW COMPLETE                   ║" -ForegroundColor Magenta
+    Write-Host "  ║  No changes were applied. To run for real:          ║" -ForegroundColor Magenta
+    Write-Host "  ║  START.bat -> [1] -> choose a live profile          ║" -ForegroundColor Magenta
+    Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+} else {
+    Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
+    Write-Host "  ║  ALL 3 PHASES COMPLETE — GOOD LUCK!                 ║" -ForegroundColor Green
+    Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
+    Write-Blank
 
-$r = Read-Host "  Final restart recommended (MSI changes). Now? [y/N]"
-if ($r -match "^[jJyY]$") {
-    if ($SCRIPT:DryRun) {
-        Write-Host "  [DRY-RUN] Would restart computer." -ForegroundColor Magenta
-    } else {
+    $r = Read-Host "  Final restart recommended (MSI changes). Now? [y/N]"
+    if ($r -match "^[jJyY]$") {
         Restart-Computer -Force
     }
 }

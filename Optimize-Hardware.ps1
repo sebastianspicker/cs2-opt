@@ -117,7 +117,13 @@ if ($startStep -le 14) {
                     }
                 }
             }
-            Write-OK "$(if($removed -eq 0){'No entries found.'}else{"$removed entries disabled."})"
+            if ($removed -eq 0) {
+                Write-OK "No entries found."
+            } elseif ($SCRIPT:DryRun) {
+                Write-Host "  [DRY-RUN] Would disable $removed autostart entries." -ForegroundColor Magenta
+            } else {
+                Write-OK "$removed entries disabled."
+            }
             Complete-Step $PHASE 14 "Autostart"
         } `
         -SkipAction { Skip-Step $PHASE 14 "Autostart" }

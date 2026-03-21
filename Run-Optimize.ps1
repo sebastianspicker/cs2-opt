@@ -72,17 +72,22 @@ try {
     # Persist applied step keys so Phase 3 improvement estimates are cumulative
     Save-AppliedSteps
     Write-Blank
-    Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
-    Write-Host "  ║  PHASE 1 COMPLETE                                   ║" -ForegroundColor Green
-    Write-Host "  ║  -> Restart -> Safe Mode -> GPU driver clean removal ║" -ForegroundColor Green
-    Write-Host "  ║  -> Normal boot -> Phase 3 starts automatically     ║" -ForegroundColor Green
-    Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
-    Write-Info "Log: $CFG_LogFile"
+    if ($SCRIPT:DryRun) {
+        Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Magenta
+        Write-Host "  ║  DRY-RUN PHASE 1 PREVIEW COMPLETE                   ║" -ForegroundColor Magenta
+        Write-Host "  ║  No changes were applied. To run for real:          ║" -ForegroundColor Magenta
+        Write-Host "  ║  START.bat -> [1] -> choose a live profile          ║" -ForegroundColor Magenta
+        Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+        Write-Info "Log: $CFG_LogFile"
+    } else {
+        Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "  ║  PHASE 1 COMPLETE                                   ║" -ForegroundColor Green
+        Write-Host "  ║  -> Restart -> Safe Mode -> GPU driver clean removal ║" -ForegroundColor Green
+        Write-Host "  ║  -> Normal boot -> Phase 3 starts automatically     ║" -ForegroundColor Green
+        Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Info "Log: $CFG_LogFile"
 
-    if (Confirm-Risk "Restart now?" "Save all files!") {
-        if ($SCRIPT:DryRun) {
-            Write-Host "  [DRY-RUN] Would restart computer for Phase 2 Safe Mode." -ForegroundColor Magenta
-        } else {
+        if (Confirm-Risk "Restart now?" "Save all files!") {
             Start-Sleep 5; Restart-Computer -Force
         }
     }
