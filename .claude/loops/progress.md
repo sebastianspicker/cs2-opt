@@ -24,12 +24,12 @@ Adversarial pass after R1+R2+R3 = ~108 fixes, 107 commits. Ultra-lean: 4 loops. 
 ## Loop 3: User Experience Trace
 
 ### UX-R4 — End-to-End User Journey
-- [ ] First-time user: START.bat → [1] → profile selection → 38 steps → restart. What do they see?
-- [ ] DRY-RUN user: same flow but preview only. Are messages clear? Does it feel like a preview?
-- [ ] Resume user: stopped at Step 20, re-runs. Does resume work? Is the prompt clear?
-- [ ] Restore user: START.bat → [7]. Can they pick steps? Is backup.json readable?
-- [ ] Verify user: START.bat → [6]. Do all 52 checks produce clear output?
-- [ ] Error user: CS2 not installed, no NVIDIA GPU, WiFi only. Are error messages helpful?
+- [x] First-time user: START.bat → [1] → profile selection → 38 steps → restart. What do they see? **Fixed: Added step progress bar (e.g., "8/38 21%") to Write-Section. RECOMMENDED resume prompt now interactive instead of silent auto-resume.**
+- [x] DRY-RUN user: same flow but preview only. Are messages clear? Does it feel like a preview? **Fixed: 15+ misleading Write-OK calls after Set-RegistryValue now DRY-RUN guarded. Phase 1/3 completion banners show "DRY-RUN PREVIEW COMPLETE" (magenta) instead of "PHASE COMPLETE" (green). Restart prompts suppressed.**
+- [x] Resume user: stopped at Step 20, re-runs. Does resume work? Is the prompt clear? **Fixed: Composite keys "P1:1" now display as plain step numbers. Label changed from "Completed:" to "Done: steps". Corrupted progress.json handled gracefully (preserved as .corrupt, starts fresh).**
+- [x] Restore user: START.bat → [7]. Can they pick steps? Is backup.json readable? **Verified: Restore-Interactive shows grouped backup summary, numbered step list, individual or [A]ll selection. Lock check warns if another process is running. Empty backup handled with "No backups to restore."**
+- [x] Verify user: START.bat → [6]. Do all 52 checks produce clear output? **Fixed: Summary now distinguishes CHANGED (Windows Update reset) from MISSING (never applied/skipped steps) instead of blanket "Windows Update" message.**
+- [x] Error user: CS2 not installed, no NVIDIA GPU, WiFi only. Are error messages helpful? **Verified: CS2 not found -> manual instructions with paths. No NVIDIA -> AMD/Intel skip with links. WiFi only -> explicit warning box explaining why NIC tweaks skipped. Disk full -> Save-JsonAtomic throws, Flush-BackupBuffer retains entries, user sees warnings.**
 
 ## Loop 4: Final Gate
 
