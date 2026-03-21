@@ -33,14 +33,14 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 ## Phase B: Phase Scripts
 
 ### B1 — System Base (Steps 2-9)
-- [ ] Step boundary correctness
-- [ ] Step 3 shader cache
-- [ ] Step 4 FSO
-- [ ] Step 5 NVIDIA driver check
-- [ ] Step 6 power plan
-- [ ] Step 8 pagefile
-- [ ] Step 9 ReBAR
-- [ ] Error propagation
+- [x] Step boundary correctness — FIXED: Steps 2,3,4,6 (T1) missing -SkipAction; CUSTOM profile user declining T1 step left progress unrecorded causing re-prompt on resume. Added Skip-Step to all four. Steps 5,7,8,9 already had complete coverage on all paths (Action, SkipAction, else branches).
+- [x] Step 3 shader cache — FIXED: added locked-file detection (Get-Process steam,cs2) with warning; post-delete remaining-file count to detect partial clears instead of false "Cleared" message. App ID 730 and Steam path detection verified correct. Non-existent dirs handled by Test-Path guard.
+- [x] Step 4 FSO — FIXED: replaced hardcoded cs2.exe path list with Get-CS2InstallPath (parses libraryfolders.vdf for custom Steam library folders on D:, E:, etc.). Previously missed CS2 installs outside default Steam paths. Graceful fallback to manual instructions if CS2 not installed.
+- [x] Step 5 NVIDIA driver check — FIXED: Get-Content $CFG_StateFile without -ErrorAction Stop silently returned $null under SilentlyContinue, risking state.json corruption via Save-JsonAtomic writing $null. Added -ErrorAction Stop to both Get-Content and ConvertFrom-Json. Driver range check (Major >= 576), AMD gating, null-return handling all verified correct.
+- [x] Step 6 power plan — FIXED: catch fallback assumed SCHEME_MIN (High Performance) always available; OEM Win11 may lack it. Now checks $LASTEXITCODE and falls back to SCHEME_BALANCED. Also added DRY-RUN guard in catch path (powercfg /setactive was executing in DRY-RUN). New-CS2PowerPlan HP->Balanced fallback verified. Apply-PowerPlan params verified.
+- [x] Step 8 pagefile — FIXED: script disabled AutomaticManagedPagefile (all drives) then only configured C:\pagefile.sys, leaving non-C: pagefiles stuck at current size without user awareness. Now detects existing pagefiles on other drives and warns. WMI .Put() usage verified correct (CIM lacks .Put()). Size calc (2x RAM) verified. Error message improved.
+- [x] Step 9 ReBAR — VERIFIED: AMD (gpuInput=3) SAM guide, NVIDIA (1,2) ReBAR guide, Intel (else) skip — all correct. CHECK-only steps with no automated changes. Vendor mismatch (user selects wrong GPU) is a user error with no safety impact (BIOS guide only). All paths have Complete-Step/Skip-Step.
+- [x] Error propagation — VERIFIED: all cmdlet failures handled (SilentlyContinue for non-critical ops, try/catch for critical ones). Get-RamInfo/Get-NvidiaDriverVersion/Get-SteamPath/Get-CS2InstallPath return $null on failure with guards. Only inline Get-Content (Step 5 state file) needed -ErrorAction Stop fix (done in item 4). WMI .Put() in try/catch. Set-RegistryValue has internal error handling.
 
 ### B2 — Hardware (Steps 10-22)
 - [ ] Step completeness audit
