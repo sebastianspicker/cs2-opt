@@ -159,6 +159,7 @@ Write-Host "`n  ═══ VISUAL EFFECTS / WIN11 ═══" -ForegroundColor Cya
 
 Test-RegistryCheck "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" "VisualFXSetting" 2 "Visual Effects (Best Performance)"
 # UserPreferencesMask: inline binary comparison via Compare-Object -SyncWindow 0.
+# -SyncWindow 0 = positional (element-by-element) comparison, not set-like.
 # Test-RegistryCheck uses -eq which is reference equality for byte[] (always false).
 # This is the only binary check in Verify-Settings; extract to a helper if more are added.
 try {
