@@ -71,11 +71,11 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 
 ## Phase C: Specialized Modules
 
-### C1 — NVIDIA Stack (Round 2)
-- [ ] FXAA value 0 — confirm against NVAPI enum
-- [ ] SHIM_RENDERING_OPTIONS hex fix — verify bit layout
-- [ ] $downloadUrl init — any other uninitialized vars in StrictMode?
-- [ ] Doc fix propagation — nvidia-drs-settings.md consistent with code?
+### C1 — NVIDIA Stack (Round 2) — COMPLETE
+- [x] FXAA value 0 — CONFIRMED: `FXAA_ENABLE_OFF = 0` per NVAPI enum. Code has `Id=276089202; Value=0`. Doc matches at line 46. Second gate `Id=271895433; Value=0` also correct.
+- [x] SHIM_RENDERING_OPTIONS hex fix — VERIFIED: `469762050` = `0x1C000002`. Bits 1, 26, 27, 28 set. Bit 1 = SHIM_RENDERING_DISABLE_THREADING. Bit 14 (DISABLE_CUDA) NOT set. Doc and code consistent.
+- [x] $downloadUrl init — VERIFIED: No other uninitialized vars found in nvidia-driver.ps1, nvidia-profile.ps1, or nvidia-drs.ps1. All `$SCRIPT:` vars either guarded by null checks (`-eq $true`/`-eq $false`) or set before use. C# code enforces definite assignment at compile time. `$SCRIPT:NvApiAvailable` starts `$null` but `-eq $true` / `-eq $false` both return `$false` for `$null` — correct tri-state caching.
+- [x] Doc fix propagation — FIXED 3 issues: (1) OpenGL GPU Affinity hex annotation wrong in both code comment and doc: `550564838` = `0x20D0F3E6`, was incorrectly `0x20D3A2E6`. (2) Header comment and docstring said "~24" registry fallback settings, actual count is 25. (3) All 52 DRS setting IDs and values verified matching between `nvidia-profile.ps1` and `nvidia-drs-settings.md`. Registry fallback breakdown (22 d3d + 1 NVTweak + 2 GPU class = 25) matches `nvidia-optimization.md`. Bloat count (15) matches. Decoded flags count (16 = 6+8+2) matches.
 
 ### C2 — Network & Hardware (Round 2) — COMPLETE
 - [x] MSI -ErrorAction Stop — VERIFIED: registry paths always created via New-Item -Force before Set-ItemProperty; try/catch provides device-specific error messages; no operations should remain SilentlyContinue
