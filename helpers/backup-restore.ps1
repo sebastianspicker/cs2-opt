@@ -11,6 +11,7 @@
 #    Manual: Backup-ServiceState, Restore-StepChanges, Restore-AllChanges
 
 $CFG_BackupFile = "$CFG_WorkDir\backup.json"
+$CFG_BackupLockFile = "$CFG_WorkDir\backup.lock"
 # Sentinel used when DRS profile was found via app registration rather than by name.
 # Must match between Backup-DrsSettings (write) and Restore-DrsSettings (read).
 $SCRIPT:DRS_FOUND_VIA_APP = "(found via cs2.exe)"
@@ -28,6 +29,45 @@ function Initialize-Backup {
     if (-not (Test-Path $CFG_BackupFile)) {
         Save-JsonAtomic -Data @{ entries = @(); created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") } -Path $CFG_BackupFile
     }
+    # Acquire lock — warns if another instance is running but does not block
+    # (the lock is advisory; concurrent writes are protected by Save-JsonAtomic)
+    if (Test-BackupLock) {
+        Write-Warn "Another CS2 Optimization process appears to be running (backup.lock exists)."
+        Write-Warn "If the other process crashed, the lock will auto-clear."
+    }
+    Set-BackupLock
+}
+
+function Test-BackupLock {
+    <#  Checks if another process is actively modifying backup.json.
+        Returns $true if the lock is held (and the holding process is still alive).
+        Stale locks (from crashed processes) are automatically cleaned up.  #>
+    if (-not (Test-Path $CFG_BackupLockFile)) { return $false }
+    try {
+        $lockData = Get-Content $CFG_BackupLockFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        # Check if the locking process is still alive
+        $proc = Get-Process -Id $lockData.pid -ErrorAction SilentlyContinue
+        if ($proc) { return $true }
+        # Process is dead — stale lock; remove it
+        Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+        Write-Debug "Removed stale backup lock (PID $($lockData.pid) no longer running)."
+    } catch {
+        # Corrupted lock file — remove it
+        Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+    }
+    return $false
+}
+
+function Set-BackupLock {
+    <#  Creates a lockfile indicating this process is modifying backup.json.
+        Called at the start of optimization and restore operations.  #>
+    $lockData = @{ pid = $PID; started = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+    $lockData | ConvertTo-Json | Set-Content $CFG_BackupLockFile -Encoding UTF8 -Force
+}
+
+function Remove-BackupLock {
+    <#  Removes the lockfile. Called at the end of operations.  #>
+    Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
 }
 
 function Flush-BackupBuffer {
@@ -558,6 +598,11 @@ function Restore-AllChanges {
 
 function Restore-Interactive {
     <#  Let the user pick which steps to restore.  #>
+    if (Test-BackupLock) {
+        Write-Warn "Another CS2 Optimization process is currently running (backup.json is locked)."
+        Write-Warn "Wait for it to finish, or close it manually before restoring."
+        return
+    }
     $backup = Get-BackupData
     if (-not $backup.entries -or $backup.entries.Count -eq 0) {
         Write-Info "No backups to restore."
