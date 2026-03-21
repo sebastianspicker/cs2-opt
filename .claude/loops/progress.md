@@ -13,10 +13,23 @@ Third pass after R1 (~51 fixes) + R2 (~47 fixes) = ~98 total. Consolidated from 
 ## Phase B: Phase Scripts
 
 ### B-Scripts-R3 — Phase 1 Steps (consolidated B1-B4)
-- [ ] R2 fixes: power plan double-fallback, autoexec regex expansion, UserPreferencesMask Compare-Object, NtfsDisableLastAccessUpdate int32 sign
-- [ ] Autoexec command list completeness (any Source 2 commands beyond unbind/toggle/incrementvar/echo?)
-- [ ] Binary comparison pattern — should it be a reusable function?
-- [ ] Step 38 copy list completeness after all file additions
+- [x] R2 fixes: power plan double-fallback, autoexec regex expansion, UserPreferencesMask Compare-Object, NtfsDisableLastAccessUpdate int32 sign
+  - Power plan double-fallback: error message is actionable ("Manually set power plan: Control Panel -> Power Options"). PASS.
+  - Autoexec regex: expanded from 11 to 16 commands — added setinfo, bindtoggle, unbindall, +/- prefix. Reordered longer keywords before shorter for correct \b matching.
+  - UserPreferencesMask Compare-Object: correctly uses -SyncWindow 0, handles null/missing/match/mismatch cases. PASS.
+  - NtfsDisableLastAccessUpdate: (-2147483647) correctly matches int32 read-back of DWORD 0x80000001. PASS.
+- [x] Autoexec command list completeness (any Source 2 commands beyond unbind/toggle/incrementvar/echo?)
+  - Added: setinfo (user info strings), bindtoggle (bind+toggle combo), unbindall (reset bindings), +/- prefix (hold/release actions like +jump)
+  - con_logfile is a CVar (key=value format), correctly parsed by CVar pattern — no skip needed
+  - Unrecognized commands without values fall through both checks harmlessly (not added to existingKeys)
+- [x] Binary comparison pattern — should it be a reusable function?
+  - Decision: keep inline. Only 1 binary check in Verify-Settings (UserPreferencesMask). SmoothMouse curves are not verified (B3 decision). Added comment noting to extract to helper if more binary checks are added.
+- [x] Step 38 copy list completeness after all file additions
+  - 5 core files copied: SafeMode-DriverClean.ps1, PostReboot-Setup.ps1, Guide-VideoSettings.ps1, helpers.ps1, config.env.ps1
+  - helpers/ directory copied recursively (18 modules — includes GUI-only modules which are harmless extras)
+  - Phase 2 dot-sources: config.env.ps1 + helpers.ps1. Phase 3 dot-sources: config.env.ps1 + helpers.ps1 + Guide-VideoSettings.ps1. All covered.
+  - cs2_affinity.ps1 is generated at runtime by process-priority.ps1, not a file to copy. No test files in helpers/.
+  - RunOnce chain: Step 38 sets Phase 2, Phase 2 Step 3 sets Phase 3. Both reference $CFG_WorkDir paths. PASS.
 
 ### B5-R3 — Safe Mode (kept separate — safety critical)
 - [x] R2 bcdedit locale fix: bcdedit /enum parsing — robust on all Windows editions?
