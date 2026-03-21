@@ -81,7 +81,7 @@ Hibernate and Sleep remain fully functional. Fast Startup only affects "Shut Dow
 - **Before:** Shut Down → hybrid hibernation snapshot → fast resume
 - **After:** Shut Down → full hardware teardown → full cold boot
 
-Boot time increases by ~20–30 seconds. MSI interrupts persist correctly.
+Boot time increases by ~5–15 seconds. MSI interrupts persist correctly.
 
 ---
 
