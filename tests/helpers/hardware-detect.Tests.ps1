@@ -138,11 +138,13 @@ Describe "Get-SteamPath" {
         Get-SteamPath | Should -BeNullOrEmpty
     }
 
-    It "returns null when registry read throws" {
-        Mock Get-ItemProperty { throw "Access denied" } -ParameterFilter { $Path -like "*Valve\Steam*" }
+    It "returns null when SteamPath property is missing from registry object" {
+        # Real Get-ItemProperty with -ErrorAction SilentlyContinue returns an object
+        # without the requested property when the value doesn't exist
+        Mock Get-ItemProperty {
+            [PSCustomObject]@{ OtherProp = "irrelevant" }
+        } -ParameterFilter { $Path -like "*Valve\Steam*" }
 
-        # Get-ItemProperty with -ErrorAction SilentlyContinue won't throw, but the
-        # function should handle it gracefully regardless
         Get-SteamPath | Should -BeNullOrEmpty
     }
 }

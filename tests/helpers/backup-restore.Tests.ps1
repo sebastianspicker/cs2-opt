@@ -26,8 +26,8 @@ Describe "Initialize-Backup" {
 
         Test-Path $CFG_BackupFile | Should -Be $true
         $data = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
-        $data.entries | Should -Not -BeNullOrEmpty
-        # entries should be an array (may be empty)
+        # entries property must exist (may be an empty array)
+        $data.PSObject.Properties.Name | Should -Contain "entries"
         @($data.entries).Count | Should -BeGreaterOrEqual 0
         $data.created | Should -Not -BeNullOrEmpty
     }
@@ -387,6 +387,47 @@ Describe "Restore-StepChanges" {
         $result | Should -Be $false
         Should -Invoke Set-ItemProperty -Exactly 0
     }
+
+    It "skips binary restore when values contain negatives (JSON Int64 round-trip)" {
+        # ConvertFrom-Json may produce negative Int64 for large unsigned values
+        $entries = @(
+            [ordered]@{
+                type = "registry"; path = "HKLM:\SOFTWARE\Test"; name = "NegBin";
+                originalValue = @(10, -1, 128); originalType = "Binary"; existed = $true;
+                step = "Neg Binary Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Test-Path { $true } -ParameterFilter { $Path -match "HKLM:" }
+        Mock Set-ItemProperty {}
+
+        $result = Restore-StepChanges -StepTitle "Neg Binary Step"
+
+        $result | Should -Be $false
+        Should -Invoke Set-ItemProperty -Exactly 0
+    }
+
+    It "restores valid binary values within [0,255]" {
+        $entries = @(
+            [ordered]@{
+                type = "registry"; path = "HKLM:\SOFTWARE\Test"; name = "GoodBin";
+                originalValue = @(0, 128, 255); originalType = "Binary"; existed = $true;
+                step = "Good Binary Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Test-Path { $true } -ParameterFilter { $Path -match "HKLM:" }
+        Mock Set-ItemProperty {}
+
+        $result = Restore-StepChanges -StepTitle "Good Binary Step"
+
+        $result | Should -Be $true
+        Should -Invoke Set-ItemProperty -Exactly 1 -ParameterFilter {
+            $Type -eq "Binary" -and $Value -is [byte[]]
+        }
+    }
 }
 
 # ── Backup-ServiceState ─────────────────────────────────────────────────────
@@ -483,5 +524,102 @@ Describe "Backup lock system" {
 
         Test-BackupLock | Should -Be $false
         Test-Path $CFG_BackupLockFile | Should -Be $false
+    }
+}
+
+# ── Scheduled task wasEnabled restore ─────────────────────────────────────
+Describe "Restore-StepChanges scheduled task wasEnabled" {
+
+    BeforeEach {
+        Reset-TestState
+        Mock Write-Host {}
+        Mock Write-Step {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Debug {}
+        Mock Write-Info {}
+    }
+
+    It "re-enables task that was enabled before optimization (wasEnabled=true)" {
+        $entries = @(
+            [ordered]@{
+                type = "scheduledtask"; taskName = "TestTask"; existed = $true;
+                wasEnabled = $true; scriptPath = ""; step = "Task Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{ TaskName = "TestTask"; State = "Disabled" }
+        }
+        Mock Enable-ScheduledTask {}
+
+        $result = Restore-StepChanges -StepTitle "Task Step"
+
+        $result | Should -Be $true
+        Should -Invoke Enable-ScheduledTask -Exactly 1
+    }
+
+    It "re-disables task that was disabled before optimization (wasEnabled=false)" {
+        $entries = @(
+            [ordered]@{
+                type = "scheduledtask"; taskName = "TestTask"; existed = $true;
+                wasEnabled = $false; scriptPath = ""; step = "Task Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{ TaskName = "TestTask"; State = "Ready" }
+        }
+        Mock Disable-ScheduledTask {}
+
+        $result = Restore-StepChanges -StepTitle "Task Step"
+
+        $result | Should -Be $true
+        Should -Invoke Disable-ScheduledTask -Exactly 1
+    }
+
+    It "defaults wasEnabled to true for pre-Round-1 backups (wasEnabled=null)" {
+        # Older backup.json entries lack the wasEnabled field — defaults to $true
+        $entries = @(
+            [ordered]@{
+                type = "scheduledtask"; taskName = "LegacyTask"; existed = $true;
+                scriptPath = ""; step = "Legacy Step"; timestamp = "2026-01-01"
+                # wasEnabled intentionally omitted — simulates pre-Round-1 backup
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{ TaskName = "LegacyTask"; State = "Disabled" }
+        }
+        Mock Enable-ScheduledTask {}
+
+        $result = Restore-StepChanges -StepTitle "Legacy Step"
+
+        $result | Should -Be $true
+        # Should default to wasEnabled=$true and re-enable
+        Should -Invoke Enable-ScheduledTask -Exactly 1
+    }
+
+    It "removes task that did not exist before optimization" {
+        $entries = @(
+            [ordered]@{
+                type = "scheduledtask"; taskName = "NewTask"; existed = $false;
+                wasEnabled = $false; scriptPath = ""; step = "New Task Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{ TaskName = "NewTask"; State = "Ready" }
+        }
+        Mock Unregister-ScheduledTask {}
+
+        $result = Restore-StepChanges -StepTitle "New Task Step"
+
+        $result | Should -Be $true
+        Should -Invoke Unregister-ScheduledTask -Exactly 1
     }
 }
