@@ -59,6 +59,9 @@ function Write-Info($t)     { Write-Log "INFO"    $t }
 function Write-Debug($t)    { Write-Log "DEBUG"   $t }
 function Write-Blank()      { Write-Host "" }
 function Write-Sub($t)      { Write-Host "  · $t" -ForegroundColor White }
+# Summary message after an action — suppressed in DRY-RUN because
+# Set-RegistryValue/Set-BootConfig already print "[DRY-RUN] Would set:".
+function Write-ActionOK($t) { if (-not $SCRIPT:DryRun) { Write-OK $t } }
 
 function Write-TierBadge($tier, $label) {
     $color = switch ($tier) { 1 {"Green"} 2 {"Yellow"} 3 {"DarkGray"} default {"White"} }

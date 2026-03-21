@@ -197,7 +197,7 @@ if ($startStep -le 4) {
                 Write-Debug "cs2.exe: $cs2Exe"
                 $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
                 Set-RegistryValue $regPath $cs2Exe "~ DISABLEDXMAXIMIZEDWINDOWEDMODE" "String" "Disable fullscreen optimizations for cs2.exe"
-                if (-not $SCRIPT:DryRun) { Write-OK "Fullscreen Optimizations disabled: $cs2Exe" }
+                Write-ActionOK "Fullscreen Optimizations disabled: $cs2Exe"
                 Write-Debug "AppCompatFlags set: $cs2Exe"
             } else {
                 Write-Warn "cs2.exe not found — manual:"

@@ -112,12 +112,12 @@ function Invoke-GamingDebloat {
     $consumerPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
     Set-RegistryValue $consumerPath "DisableWindowsConsumerFeatures" 1 "DWord" "Disable consumer features (app suggestions)"
     Set-RegistryValue $consumerPath "DisableSoftLanding" 1 "DWord" "Disable soft landing (app suggestions)"
-    if (-not $SCRIPT:DryRun) { Write-OK "Consumer features disabled (no app suggestions)." }
+    Write-ActionOK "Consumer features disabled (no app suggestions)."
 
     # ── Disable Advertising ID ───────────────────────────────────────────────
     $adPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo"
     Set-RegistryValue $adPath "Enabled" 0 "DWord" "Disable advertising ID"
-    if (-not $SCRIPT:DryRun) { Write-OK "Advertising ID disabled." }
+    Write-ActionOK "Advertising ID disabled."
 
     # NOTE: Autostart cleanup is handled separately by Step 14 (Optimize-Hardware.ps1).
     # Keeping it out of debloat ensures the user's choice to skip Step 14 is honored.
