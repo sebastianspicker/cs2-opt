@@ -112,12 +112,12 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 ## Phase D: Surface Layer
 
 ### D1 — Entry Points & Utilities
-- [ ] START.bat robustness
-- [ ] Cleanup.ps1
-- [ ] Verify-Settings parity (CRITICAL)
-- [ ] FpsCap-Calculator
-- [ ] Setup-Profile
-- [ ] Run-Optimize
+- [x] START.bat robustness — VERIFIED: UAC elevation uses -Command (not -File), ExecutionPolicy does not apply. Paths with spaces handled by quoting ("%~dp0..." and single quotes in -Command). Input validation: non-numeric/empty falls through to menu. [5] Reset uses raw del instead of Clear-Progress — acceptable (Load-Progress handles missing file). [7]/[8] inline PS: dot-sourcing paths use single quotes inside double-quoted -Command, handles spaces.
+- [x] Cleanup.ps1 — FIXED: Copy-Item calls in Driver Refresh path missing -ErrorAction Stop (silent copy failure → RunOnce pointing to missing scripts). Added helpers/ directory existence check with throw. Winsock Reset: already properly DRY-RUN gated inside Invoke-TieredStep Action block. Steam missing: handled with warning + manual instructions. State persistence: state.json preserved (config retained), only progress.json reset via Clear-Progress.
+- [x] Verify-Settings parity (CRITICAL) — FIXED: added missing Test-ServiceCheck for qWave + 4 Xbox services (XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc) — Step 37 disables all 7 services but Verify only checked SysMain + WSearch. Full parity: 39 registry checks + 7 service checks + 2 bcdedit checks = 48 total, all matched. 3 Set operations intentionally omitted from Verify: AppCompatFlags (dynamic CS2 path), UserGpuPreferences (dynamic), UserPreferencesMask (binary, VisualFXSetting covers intent). 0x2A/42 comparison correct (DWord -eq handles both). Intel hybrid gate: $null vs truthy vs $false correctly distinguished. NIC GUID: same Get-ActiveNicGuid at verify time — NIC changes correctly show as MISSING.
+- [x] FpsCap-Calculator — FIXED: Get-Content/ConvertFrom-Json missing -ErrorAction Stop for state.json (under SilentlyContinue, read failures silently returned $null). Clipboard null: handled by if($clip) guard. Non-VProf: Parse-BenchmarkOutput returns $null → fallback manual input. Zero/negative avg: validated via TryParse + gt 0. History: Save-JsonAtomic (atomic temp+rename). FPS formula verified: Max(60, avg - Round(avg * 0.09)).
+- [x] Setup-Profile — FIXED: -ErrorAction Stop on state.json loading. Profile→Mode: SAFE→AUTO, RECOMMENDED→AUTO (auto-resume), COMPETITIVE→CONTROL (prompted resume), CUSTOM→INFORMED. Matches tier system design. DRY-RUN modifier: overrides Mode to "DRY-RUN" regardless of profile (line 92). Resume: fresh profile choice persisted to state.json (lines 174-176). SAFE profile: restore point prompt skipped (line 121). LogLevel: only offered for CUSTOM, defaults to NORMAL.
+- [x] Run-Optimize — FIXED: Restart-Computer at Phase 1 completion not gated by DRY-RUN. In preview mode, Set-BootConfig intercepted Safe Mode config, but restart itself still executed. $TOTAL_STEPS=38 verified correct (1-38 across 5 scripts). Save-AppliedSteps persists to state.json, Load-AppliedSteps in Phase 3 reads it. Completion banner accurate.
 
 ### D2 — GUI Layer
 - [ ] WPF lifecycle
