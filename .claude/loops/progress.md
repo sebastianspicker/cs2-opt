@@ -14,12 +14,12 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [x] $ErrorActionPreference masking catalog — FIXED: 5 entry-points set SilentlyContinue; all critical JSON readers now use -ErrorAction Stop on Get-Content (Load-State, Initialize-ScriptDefaults, Load-Progress, Get-BackupData, Save/Load-AppliedSteps, Get-BenchmarkHistory); critical write functions (Set-RegistryValue, Save-JsonAtomic, Set-ItemProperty in restore) already used -ErrorAction Stop
 
 ### A2 — Backup/Restore & State
-- [ ] Backup accumulation performance
-- [ ] Restore type correctness
-- [ ] DRS backup/restore integrity
-- [ ] Step-state resume correctness
-- [ ] Concurrent access safety
-- [ ] Scheduled task backup
+- [x] Backup accumulation performance — FIXED: all 6 Backup-* functions now buffer entries in $SCRIPT:_backupPending (List<object>), flushed once per step via Flush-BackupBuffer in Invoke-TieredStep. Reduces ~60+ read/parse/write cycles to ~38 (one per step). Get-BackupData flushes before reading for consistency.
+- [x] Restore type correctness — FIXED: binary byte[] validation (reject values outside [0,255] instead of silent truncation); MultiString explicit [string[]] cast; registry path existence guards (create missing parent on restore, skip remove if path gone); DRS restore casts through [double]->[uint32] for JSON round-trip safety; improved nvapi64.dll-missing error message
+- [x] DRS backup/restore integrity — FIXED: uint32 setting IDs/values stored as [double] in Backup-DrsSettings (ConvertTo-Json loses uint32 type; double has 53-bit mantissa, lossless for 32-bit values). Sentinel profile "(found via cs2.exe)" path traced: correctly skips FindProfileByName and falls through to FindApplicationProfile. profileCreated+sentinel can never co-occur (verified in Apply-NvidiaCS2ProfileDrs).
+- [x] Step-state resume correctness — FIXED: removed legacy bare step-number fallback from Test-StepDone; bare "5" matched across phases (P1:5 vs P3:5 collision). Now only composite keys checked. lastCompletedStep=0 with entries: returns step 1 (safe, idempotent re-run). Clear-Progress stale data: not a bug — Complete-Step always calls Load-Progress (reads cleared file).
+- [x] Concurrent access safety — FIXED: added advisory lockfile (backup.lock) with PID-based stale detection. Initialize-Backup acquires lock; Restore-Interactive checks lock before proceeding. Save-JsonAtomic still protects against corruption. Batch buffer introduces small crash window (entries in memory between write and flush) — acceptable tradeoff vs 60+ I/O cycles; all changes also covered by System Restore Point.
+- [x] Scheduled task backup — FIXED: Backup-ScheduledTask now records wasEnabled state (was the task enabled before we disabled it). Restore-Interactive uses wasEnabled to restore exact state instead of blindly re-enabling. Handles missing tasks (removed by Windows Update) with warning. Trigger settings not preserved (design limitation: debloat only disables, process-priority creates new task with existed=false so restore unregisters it).
 
 ### A3 — DRY-RUN Correctness
 - [x] DRY-RUN leak audit (all write operations) — FIXED: shader cache Remove-Item in Optimize-SystemBase.ps1 Step 3, bcdedit /deletevalue safeboot in SafeMode-DriverClean.ps1, Clear-Dir/ipconfig/wevtutil/prefetch/RAM-trim/Steam-validate in Cleanup.ps1. All now gated with descriptive [DRY-RUN] messages. Confirmed: debloat, MSI, power-plan, NIC tweaks, QoS policies, services, NVIDIA install/profile all properly gated.
