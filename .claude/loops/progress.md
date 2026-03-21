@@ -18,11 +18,11 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [ ] Legacy step-key removal — any callers still using bare numbers?
 - [ ] wasEnabled scheduled task field — all consumers updated?
 
-### A3 — DRY-RUN Correctness (Round 2)
-- [ ] Verify Round 1 DRY-RUN guards (shader cache, bcdedit, Restart-Computer, Invoke-Download)
-- [ ] New code from other loops — any new DRY-RUN leaks introduced?
-- [ ] DRY-RUN output message consistency after all changes
-- [ ] State persistence correctness after all fixes
+### A3 — DRY-RUN Correctness (Round 2) — COMPLETE
+- [x] Verify Round 1 DRY-RUN guards (shader cache, bcdedit, Restart-Computer, Invoke-Download) — all 5 guards correct and producing messages
+- [x] New code from other loops — no new DRY-RUN leaks: B1 Get-CS2InstallPath read-only, B4 UserPreferencesMask via Set-RegistryValue (intercepted), B5 CIM enumeration read-only + Remove-GpuDriverClean early-returns, B6 DNS gated by $SCRIPT:DryRun check, D1 Verify-Settings read-only, D2 system-analysis read-only
+- [x] DRY-RUN output message consistency — FIXED: 2 messages in Optimize-Hardware.ps1 (URO, QoS DSCP) used Write-Info instead of Write-Host Magenta; corrected
+- [x] State persistence correctness — state.json written (Setup-Profile runs before DRY-RUN applies); progress.json NOT updated in DRY-RUN (intentional: Complete-Step/Skip-Step return early); backup.json NOT written (Backup-RegistryValue/ServiceState/BootConfig gated by `-not $SCRIPT:DryRun` in Set-RegistryValue/Set-BootConfig); Flush-BackupBuffer defensive call in tier-system DRY-RUN path handles edge cases
 
 ---
 
