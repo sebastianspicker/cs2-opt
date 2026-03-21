@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/Documents/PowerShell/Modules/PSScriptAnalyzer
-          key: psscriptanalyzer-${{ runner.os }}
+          key: psscriptanalyzer-1-${{ runner.os }}
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -85,13 +85,13 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/Documents/PowerShell/Modules/Pester
-          key: pester-${{ runner.os }}
+          key: pester5-1-${{ runner.os }}
 
       - name: Install Pester 5.x
         shell: pwsh
         run: |
           if (-not (Get-Module -ListAvailable Pester -ErrorAction SilentlyContinue | Where-Object Version -ge '5.0')) {
-            Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0
+            Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0 -MaximumVersion 5.99.99
           }
 
       - name: Run Pester tests
@@ -99,6 +99,7 @@ jobs:
         run: |
           $cfg = New-PesterConfiguration
           $cfg.Run.Path = "./tests"
+          $cfg.Run.Exit = $true
           $cfg.Output.Verbosity = "Detailed"
           $cfg.TestResult.Enabled = $true
           $cfg.TestResult.OutputFormat = "NUnitXml"
@@ -152,11 +153,25 @@ jobs:
 
           echo "Found ${#USED_KEYS[@]} EstimateKey references in phase scripts"
 
-          # Extract all keys from $CFG_ImprovementEstimates in config.env.ps1
+          # Extract keys only from $CFG_ImprovementEstimates block in config.env.ps1
+          # Scoped extraction: capture lines between the opening @{ and closing }
           CONFIG_KEYS=()
-          while IFS= read -r key; do
-            CONFIG_KEYS+=("$key")
-          done < <(grep -oP '^\s+"([^"]+)"\s*=' config.env.ps1 | sed 's/^\s*"//;s/"\s*=$//' | grep -v '^#')
+          IN_BLOCK=0
+          while IFS= read -r line; do
+            if echo "$line" | grep -q 'CFG_ImprovementEstimates'; then
+              IN_BLOCK=1; continue
+            fi
+            if [ "$IN_BLOCK" -eq 1 ]; then
+              # Stop at the closing brace of the hashtable
+              if echo "$line" | grep -qP '^\s*\}'; then
+                break
+              fi
+              KEY=$(echo "$line" | grep -oP '^\s+"\K[^"]+(?="\s*=)' || true)
+              if [ -n "$KEY" ]; then
+                CONFIG_KEYS+=("$KEY")
+              fi
+            fi
+          done < config.env.ps1
 
           echo "Found ${#CONFIG_KEYS[@]} keys in CFG_ImprovementEstimates"
 

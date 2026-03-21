@@ -108,12 +108,13 @@ jobs:
 
           # Restart-Computer -Force without DRY-RUN gate or user prompt
           # All uses must be inside a DryRun guard or after Confirm-Risk/Read-Host.
+          # 50-line lookback: Cleanup.ps1 has DryRun exit ~45 lines before the restart.
           RESTART_HITS=$(grep -rEn 'Restart-Computer\s+-Force' --include='*.ps1' . 2>/dev/null | grep -v '.git/' | grep -v 'tests/' || true)
           if [ -n "$RESTART_HITS" ]; then
             while IFS= read -r line; do
               FILE=$(echo "$line" | cut -d: -f1)
               LINENO_HIT=$(echo "$line" | cut -d: -f2)
-              START=$((LINENO_HIT > 15 ? LINENO_HIT - 15 : 1))
+              START=$((LINENO_HIT > 50 ? LINENO_HIT - 50 : 1))
               CONTEXT=$(sed -n "${START},${LINENO_HIT}p" "$FILE")
               if ! echo "$CONTEXT" | grep -qEi 'DryRun|Confirm-Risk|Read-Host'; then
                 echo "::error::Restart-Computer -Force at $FILE:$LINENO_HIT without DRY-RUN gate or user prompt"

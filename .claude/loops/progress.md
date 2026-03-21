@@ -116,12 +116,12 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [x] Any new code changes not yet reflected in docs? — Checked B5-R2 (bcdedit locale), B6-R2 (DNS VPN filter, Verify-Settings PerfLevelSrc/DisableDynamicPstate), C2-R2 (debloat.md already fixed). All are implementation details already covered by existing doc descriptions. No doc drift.
 - [x] CHANGELOG audit entry — FIXED: test suite count was "7 test files, 150+" but actual is 6 files, 203 tests; corrected to "6 test files, 200+". Bug categories comprehensive (12 fixes listed). CI mentions accurate. Date correct. Tone consistent.
 
-### E3 — CI/CD (Round 2)
-- [ ] Pester job YAML validity
-- [ ] EstimateKey cross-ref script correctness
-- [ ] New PSScriptAnalyzer rules — any false positives?
-- [ ] Security checks — false positive rate?
-- [ ] Cache keys correct for module paths?
+### E3 — CI/CD (Round 2) — COMPLETE
+- [x] Pester job YAML validity — FIXED 2 issues: (1) Missing `$cfg.Run.Exit = $true` meant Invoke-Pester would exit 0 even on test failures (CI step always passes). Added. (2) `Install-Module Pester -MinimumVersion 5.0` had no upper bound — could install Pester 6.x with breaking changes. Added `-MaximumVersion 5.99.99`. NUnit output path matches upload-artifact. Invoke-Pester -Configuration is correct Pester 5.x API. 5min timeout sufficient for ~170 tests. Job runs independently (no needs:).
+- [x] EstimateKey cross-ref script correctness — FIXED: config key extraction regex `grep -oP '^\s+"([^"]+)"\s*='` scanned entire config.env.ps1 (114 keys from all hashtables) instead of just `$CFG_ImprovementEstimates` (20 keys). Replaced with scoped block parser that reads between `CFG_ImprovementEstimates` and closing `}`. Phase script regex `(?<=-EstimateKey\s")[^"]+"` is correct — all 16 EstimateKey values are on single lines (backtick continues AFTER the quoted value, not before). All 5 phase scripts listed correctly.
+- [x] New PSScriptAnalyzer rules — no false positives. No `ConvertTo-SecureString` or `Invoke-Expression` uses in codebase. `PSUseCompatibleSyntax` with 5.1+7.4: no PS7-only syntax found (no `??=`, `??` null-coalescing, ternary `?:`, `clean {}` blocks, `-Parallel` ForEach-Object). `[List[object]]::new()` in system-analysis.ps1 is PS5+ (fine). `Rules` section format is correct for configuring rule parameters.
+- [x] Security checks — false positive rate — FIXED: `Restart-Computer -Force` 15-line lookback was insufficient for Cleanup.ps1 line 267 (DryRun guard at line 221, Confirm-Risk at line 235 — both >15 lines above). Increased to 50-line lookback. Other 3 occurrences (Run-Optimize:90, SafeMode-DriverClean:138, PostReboot-Setup:653) all have guards within 15 lines. `Remove-Item` checks: all hits in gpu-driver-clean.ps1 and nvidia-driver.ps1 have `Test-Path` guards within 10-line lookback. nvidia-driver.ps1:229 (cleanup after install) lacks `Test-Path` but check emits `::warning` only (non-blocking). Test files correctly excluded via `grep -v 'tests/'`.
+- [x] Cache keys correct for module paths — Cache paths `~/Documents/PowerShell/Modules/` are correct for `pwsh` (PS 7.x) on Windows. `shell: pwsh` ensures PS 7.x consistently. Added version suffix to cache keys (`psscriptanalyzer-1-`, `pester5-1-`) for manual cache busting if runner image changes. Install-Module is correctly gated by `Get-Module -ListAvailable` check — skips if cached module is present.
 
 ---
 
