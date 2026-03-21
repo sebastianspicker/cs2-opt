@@ -79,7 +79,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Restart-Computer gated by DRY-RUN at Phase 1 completion
 
 **New:**
-- Pester 5.x test suite: 7 test files, 150+ test cases covering core helpers
+- Pester 5.x test suite: 6 test files, 200+ test cases covering core helpers
 - CI: Pester test job, EstimateKey cross-reference check, enhanced PSScriptAnalyzer rules
 - CI: security workflow with Restart-Computer/Remove-Item gate checks
 - Verify-Settings: added missing qWave + 4 Xbox service checks (was only SysMain + WSearch)

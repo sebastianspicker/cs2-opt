@@ -111,10 +111,10 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [x] Edge case coverage gaps — ADDED 7 tests: (1) Binary restore with negative values (JSON Int64 round-trip). (2) Binary restore with valid [0,255] values (confirms byte[] cast). (3) Flush-BackupBuffer retry on save failure (entries retained). (4-7) Scheduled task wasEnabled restore: wasEnabled=true re-enables, wasEnabled=false re-disables, null wasEnabled defaults to true (pre-Round-1 compat), existed=false removes task. Previously existing: Flush-BackupBuffer (write + no-op), lockfile (create/remove/stale/PID-reuse), composite key format, legacy bare-number rejection.
 - [x] Test isolation (no cross-test state leakage) — Reset-TestState called in all 20 Describe BeforeEach blocks. Resets: DryRun, Profile, Mode, LogLevel, CurrentStepTitle, AppliedSteps (new list), _backupPending (new list), removes all 4 temp JSON files. $SCRIPT:RiskOrder immutable (set once at load). Verify counters reset by Initialize-VerifyCounters in relevant tests. $CFG_FpsCap_* restored in Calculate-FpsCap BeforeEach. No $SCRIPT:* leakage between It blocks. AfterAll cleanup removes entire TestTempRoot directory.
 
-### E2 — Documentation (Round 2)
-- [ ] Verify Round 1 doc fixes are accurate
-- [ ] Any new code changes not yet reflected in docs?
-- [ ] CHANGELOG audit entry — complete and accurate?
+### E2 — Documentation (Round 2) — COMPLETE
+- [x] Verify Round 1 doc fixes are accurate — ALL 6 docs verified: evidence.md (Phase 2 order, Steps 20-22 passthrough, Step 23 profile, T2 count), nic-latency-stack.md (TransmitBuffers=512), windows-scheduler.md (Fast Startup ~5-15s), nvidia-optimization.md (fallback=25, bloat=15), power-plan.md (T2=15-16, core parking T1/T2 split), backup-restore.md (wasEnabled field present)
+- [x] Any new code changes not yet reflected in docs? — Checked B5-R2 (bcdedit locale), B6-R2 (DNS VPN filter, Verify-Settings PerfLevelSrc/DisableDynamicPstate), C2-R2 (debloat.md already fixed). All are implementation details already covered by existing doc descriptions. No doc drift.
+- [x] CHANGELOG audit entry — FIXED: test suite count was "7 test files, 150+" but actual is 6 files, 203 tests; corrected to "6 test files, 200+". Bug categories comprehensive (12 fixes listed). CI mentions accurate. Date correct. Tone consistent.
 
 ### E3 — CI/CD (Round 2)
 - [ ] Pester job YAML validity
