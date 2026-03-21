@@ -27,9 +27,23 @@ Third pass after R1 (~51 fixes) + R2 (~47 fixes) = ~98 total. Consolidated from 
   - Added comprehensive crash recovery documentation as header comment in SafeMode-DriverClean.ps1. Added catch block with user-visible recovery instructions for unhandled exceptions. Step ordering (bcdedit first) ensures Normal Mode boot even if later steps crash.
 
 ### B6-R3 — Post-Reboot (kept separate — complex state)
-- [ ] R2 fixes: DNS virtual adapter filter (14 patterns), multi-adapter confirmation, PerfLevelSrc/DisableDynamicPstate Verify checks
-- [ ] DNS adapter filter — any legitimate adapters falsely excluded?
-- [ ] State.json field completeness after 99 commits of changes
+- [x] DNS virtual adapter filter accuracy (14→16 patterns)
+  - FIXED: Removed bare "VPN" pattern — too broad, could false-match "Killer VPN-capable" NICs
+  - Added: Mullvad, NordLynx, ProtonVPN, SoftEther, GlobalProtect, Pulse Secure (6 VPN products)
+  - vEthernet filter is correct for DNS — WSL2 inherits host DNS; Hyper-V vSwitch DNS is managed separately
+  - Added per-adapter selection (A/S/N menu) when multiple adapters detected instead of all-or-nothing
+  - Added single-adapter confirmation prompt (previously applied without asking)
+- [x] State.json field completeness verified
+  - 11 fields read from $state in PostReboot-Setup.ps1: fpsCap, avgFps, gpuInput, nvidiaDriverPath, rollbackDriver, baselineAvg, baselineP1, appliedSteps, mode, logLevel, profile
+  - All either written by Setup-Profile.ps1 (initial), Optimize-Hardware.ps1 (baseline/driver), Optimize-SystemBase.ps1 (rollback), or tier-system.ps1 (appliedSteps)
+  - Missing fields return $null via PSCustomObject property access — all usage guards with truthiness checks or -gt 0
+  - FIXED: Fallback fpsCap/avgFps changed from $null to 0 to match Setup-Profile.ps1 type (always int)
+  - appliedSteps: always array when present, $null when missing → Load-AppliedSteps guards with `if ($st.appliedSteps)` (empty array is falsy in PS)
+- [x] PerfLevelSrc/DisableDynamicPstate Verify checks validated
+  - GPU class key resolution in Verify-Settings.ps1 matches nvidia-profile.ps1 exactly: same $CFG_GUID_Display base, same ^\d{4}$ filter, same ProviderName/DriverDesc NVIDIA detection
+  - AMD/Intel skip: $_nvKeyPath stays $null → else branch prints INFO + increments OK counter
+  - 0x2222 comparison: PS evaluates hex at parse time → int32 8738; registry DWORD also int32 → -eq works correctly
+  - DisableDynamicPstate=1: straightforward DWord comparison, path and value correct
 
 ## Phase C+D: Modules + Surface (consolidated)
 
