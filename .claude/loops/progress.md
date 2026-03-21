@@ -34,10 +34,30 @@ Third pass after R1 (~51 fixes) + R2 (~47 fixes) = ~98 total. Consolidated from 
 ## Phase C+D: Modules + Surface (consolidated)
 
 ### CD-R3 — Helpers, Entry Points, GUI
-- [ ] R2 fixes: GPU Affinity hex, MSI ErrorAction, benchmark cap, null guard, step-catalog P1:9, START-GUI elevation
-- [ ] Verify-Settings definitive count (after B6-R2 added 2 checks)
-- [ ] GUI step-catalog — ALL entries match phase scripts (full re-scan)
-- [ ] system-analysis read-only guarantee (re-confirm after D2-R2 additions)
+- [x] R2 fixes: GPU Affinity hex, MSI ErrorAction, benchmark cap, null guard, step-catalog P1:9, START-GUI elevation
+  - GPU Affinity: 0x20D0F3E6 = 550564838 decimal — verified correct
+  - MSI ErrorAction Stop: all 4 calls in msi-interrupts.ps1 preceded by Test-Path + New-Item -Force — verified
+  - Benchmark cap: FIFO trim `[$excess..($count-1)]` keeps newest 200 — verified correct
+  - PS 5.1 null guard: `$null -eq $data` in Get-BenchmarkHistory line 58 — verified correct
+  - Step-catalog P1:9: Tier=2 Risk=SAFE Depth=CHECK matches both Invoke-TieredStep calls — verified
+  - START-GUI: `-WindowStyle Hidden` on outer powershell call (line 7) — correct position
+- [x] Verify-Settings definitive count (after B6-R2 added 2 checks)
+  - 40 Test-RegistryCheck calls
+  - 3 custom checks (HAGS info, UserPreferencesMask binary, IPv6 info)
+  - 2 bcdedit checks (Dynamic Tick, Platform Tick)
+  - 7 Test-ServiceCheck (SysMain, WSearch, qWave, 4x Xbox)
+  - TOTAL: 52 guaranteed checks + conditional: NVIDIA (+2), Intel hybrid (+1), NIC found (+2→replace missing count)
+  - Matches "52+ per F1-R2" target
+- [x] GUI step-catalog — ALL entries match phase scripts (full re-scan)
+  - 51 catalog entries verified against actual Invoke-TieredStep calls
+  - P1:5 (NVIDIA Driver Version): catalog says SAFE/CHECK/CheckOnly=true, actual conditional Invoke-TieredStep says AGGRESSIVE/DRIVER — by design: step is fundamentally a version check; rollback action is conditional; catalog represents GUI user-facing behavior
+  - P1:18/20/21/22 and P3:1/5/6/11/12/13: no Invoke-TieredStep (direct Complete-Step) — catalog N/A entries, no mismatch
+  - All other entries: Tier/Risk/Depth/CheckOnly match exactly
+  - No fixes needed
+- [x] system-analysis read-only guarantee (re-confirm after D2-R2 additions)
+  - Grepped for Set-, New-Item, Remove-, bcdedit /set, powercfg /, netsh set: ZERO matches
+  - Only netsh call is `netsh int udp show global` (read-only query)
+  - Confirmed: system-analysis.ps1 is purely read-only
 
 ## Phase E: Quality (consolidated)
 
