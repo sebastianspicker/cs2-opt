@@ -104,12 +104,12 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 
 ## Phase E: Quality
 
-### E1 — Pester Tests (Round 2)
-- [ ] Run all tests — identify failures
-- [ ] Test correctness audit (do tests test the RIGHT thing?)
-- [ ] Mock completeness (any tests hitting real filesystem/registry?)
-- [ ] Edge case coverage gaps
-- [ ] Test isolation (no cross-test state leakage)
+### E1 — Pester Tests (Round 2) — COMPLETE
+- [x] Run all tests — identify failures — FIXED 3 issues: (1) Initialize-Backup test asserted `entries | Should -Not -BeNullOrEmpty` which fails for empty `@()` (Pester treats empty array as empty); replaced with property existence check. (2) Get-SteamPath test mocked `Get-ItemProperty` with `throw` but function uses `-ErrorAction SilentlyContinue` and has no try/catch — mock throw is unrealistic; replaced with missing-property scenario. (3) config.Tests.ps1 path regex `"^[A-Z]:\\\\"` required two backslashes but `C:\CS2_OPTIMIZE` has one; corrected to `"^[A-Z]:\\"`.
+- [x] Test correctness audit (do tests test the RIGHT thing?) — Verified: Calculate-FpsCap formula matches (300->273, 200->182, 1000->910). 4x4 risk matrix correct (SAFE/SAFE, RECOMMENDED/MODERATE, COMPETITIVE/AGGRESSIVE, CUSTOM/CRITICAL). DRY-RUN verifies Set-ItemProperty and New-Item NOT called (Should -Invoke -Exactly 0). Flush-BackupBuffer tested for write, no-op, and retry on failure. EstimateKey values match config (Clear Shader Cache P1 0-5, Fullscreen 1-5, sum 1-10). FPS Cap AvgMin=-9 correctly negative. All assertions trace correctly to source code behavior.
+- [x] Mock completeness (any tests hitting real filesystem/registry?) — All Get-CimInstance (Win32_Processor, Win32_PhysicalMemory, Win32_VideoController, Win32_Service), Get-ItemProperty (registry), Get-Item (GetValueKind), Get-Service, Get-Process, Get-ScheduledTask, Enable/Disable/Unregister-ScheduledTask calls are mocked. All file I/O uses $SCRIPT:TestTempRoot temp directory (created in _TestInit.ps1). No unmocked system calls found.
+- [x] Edge case coverage gaps — ADDED 7 tests: (1) Binary restore with negative values (JSON Int64 round-trip). (2) Binary restore with valid [0,255] values (confirms byte[] cast). (3) Flush-BackupBuffer retry on save failure (entries retained). (4-7) Scheduled task wasEnabled restore: wasEnabled=true re-enables, wasEnabled=false re-disables, null wasEnabled defaults to true (pre-Round-1 compat), existed=false removes task. Previously existing: Flush-BackupBuffer (write + no-op), lockfile (create/remove/stale/PID-reuse), composite key format, legacy bare-number rejection.
+- [x] Test isolation (no cross-test state leakage) — Reset-TestState called in all 20 Describe BeforeEach blocks. Resets: DryRun, Profile, Mode, LogLevel, CurrentStepTitle, AppliedSteps (new list), _backupPending (new list), removes all 4 temp JSON files. $SCRIPT:RiskOrder immutable (set once at load). Verify counters reset by Initialize-VerifyCounters in relevant tests. $CFG_FpsCap_* restored in Calculate-FpsCap BeforeEach. No $SCRIPT:* leakage between It blocks. AfterAll cleanup removes entire TestTempRoot directory.
 
 ### E2 — Documentation (Round 2)
 - [ ] Verify Round 1 doc fixes are accurate
