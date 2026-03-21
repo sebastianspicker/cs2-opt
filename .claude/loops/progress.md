@@ -52,14 +52,14 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [ ] Steps 18-22 prep steps
 
 ### B3 — Registry Tweaks (Steps 23-33)
-- [ ] Registry path correctness
-- [ ] Step 25 Nagle
-- [ ] Step 27 MMCSS/scheduler
-- [ ] Step 29 mouse
-- [ ] Step 31 Game DVR
-- [ ] Step 33 audio
-- [ ] EstimateKey consistency
-- [ ] Complete-Step/Skip-Step coverage
+- [x] Registry path correctness — audited: all 30 Set-RegistryValue calls use correct hive (HKLM vs HKCU), correct types (DWord/String/Binary), and paths match Verify-Settings.ps1 exactly. No SID-dependent paths misusing HKLM. NtfsDisableLastAccessUpdate correctly uses 0x80000001 (user-managed + disabled).
+- [x] Step 25 Nagle — CORRECT: Get-ActiveNicGuid null handled gracefully (else branch shows manual instructions, Complete-Step still called). Registry paths under Tcpip\Parameters\Interfaces\{GUID} correctly formed. Verify-Settings.ps1 uses same pattern with same null guard.
+- [x] Step 27 MMCSS/scheduler — CORRECT: Win32PrioritySeparation=0x2A written as DWord (not String). Intel hybrid detection via Get-IntelHybridCpuName returns truthy name or $null. All paths verified: FTH (HKLM:\SOFTWARE\Microsoft\FTH\Enabled), DisableCoInstallers (HKLM:\...\Device Installer), MaintenanceDisabled (HKLM:\...\Schedule\Maintenance), DisablePagingExecutive (HKLM:\...\Memory Management), MMCSS\Tasks\Games Priority=6/SchedulingCategory="High"/GPUPriority=8 — all match Verify-Settings.ps1.
+- [x] Step 29 mouse — FIXED: SmoothMouseXCurve/YCurve were 20 bytes (4 bytes per entry) instead of required 40 bytes (8 bytes per INT64 entry). Windows expects 5x8-byte little-endian INT64 arrays. Fixed to correct 40-byte flat 1:1 curves. mouclass path correct (HKLM:\...\mouclass\Parameters, not kbdclass). MouseSpeed/Threshold1/Threshold2 as String type correct. EnhancePointerPrecision disabled via MouseSpeed=0 + flat curves.
+- [x] Step 31 Game DVR — CORRECT: all 4 keys match Verify-Settings.ps1 exactly: AppCaptureEnabled=0 (HKCU:\...\GameDVR), UseNexusForGameBarEnabled=0 (HKCU:\...\GameBar), AllowGameDVR=0 (HKLM:\...\Policies\...\GameDVR), GameDVR_Enabled=0 (HKCU:\System\GameConfigStore). Game Mode keys (AllowAutoGameMode, AutoGameModeEnabled) correctly set in Optimize-Hardware.ps1 Step 12, not here.
+- [x] Step 33 audio — CORRECT: UserDuckingPreference=3 at HKCU:\Software\Microsoft\Multimedia\Audio as DWord. Value 3 = "Do Nothing" (never duck). Correct HKCU path (per-user setting). Matches Verify-Settings.ps1 line 127.
+- [x] EstimateKey consistency — all 6 EstimateKeys verified present in $CFG_ImprovementEstimates: HiberbootEnabled=0 (Step 23), Win32PrioritySeparation (Step 27), Timer Resolution (Step 28), Mouse Acceleration Off (Step 29), Game DVR / Game Bar Off (Step 31), Disable Overlays (Step 32). Omitted steps (24 check-only, 25 Nagle, 26 FSE supplement, 30 GPU pref, 33 audio) are intentional — either check-only, supplements, or non-FPS comfort settings.
+- [x] Complete-Step/Skip-Step coverage — all 11 steps (23-33) have both Complete-Step $PHASE N "label" in Action and Skip-Step $PHASE N "label" in SkipAction. $PHASE=1 set in Run-Optimize.ps1 before sourcing. No missing Complete-Step on any code path (null NIC, old Windows build, missing CS2 all still call Complete-Step). Labels consistent.
 
 ### B4 — Game Config (Steps 34-38)
 - [ ] Step 34 autoexec merge
