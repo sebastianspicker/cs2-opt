@@ -78,15 +78,15 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [x] Error recovery — VERIFIED + FIXED: (1) Crash mid-removal: Safe Mode already disabled (Step 1 before Step 2), system reboots to normal mode — safe. (2) Re-run: bcdedit "already cleared" now handled gracefully instead of false CRITICAL (fixed in item 2). Driver removal is idempotent (removing already-removed drivers returns warning, not failure). (3) No resume logic in SafeMode-DriverClean.ps1 (no Show-ResumePrompt) — deliberate: Phase 2 has only 3 steps, all are idempotent on re-run. (4) progress.json: Complete-Step/Skip-Step write after each step; crash between steps loses at most 1 step record (acceptable, step is re-run). (5) Power failure during driver removal: worst case = partial DriverStore cleanup; pnputil removal is atomic per-package; registry cleanup is per-key. System boots to normal mode (Step 1 already ran) with partial driver state — Phase 3 fresh driver install recovers.
 
 ### B6 — Phase 3 Post-Reboot
-- [ ] State loading resilience
-- [ ] DRY-RUN inheritance + switch
-- [ ] Step 1 driver install
-- [ ] Step 2 MSI interrupts
-- [ ] Step 4 NVIDIA DRS
-- [ ] Step 9 DNS
-- [ ] Step 10 process priority
-- [ ] Step 13 final benchmark
-- [ ] Complete-Step/Skip-Step coverage
+- [x] State loading resilience — FIXED: added missing baselineAvg, baselineP1, appliedSteps to fallback state object; gated final Restart-Computer by DRY-RUN; partial corruption safe (all field accesses guard $null)
+- [x] DRY-RUN inheritance + switch — FIXED: mode derivation from profile when switching out of DRY-RUN (was hardcoded CONTROL, now matches Setup-Profile.ps1 mapping: SAFE/RECOMMENDED->AUTO, COMPETITIVE->CONTROL, CUSTOM->INFORMED). Persistence, Load-AppliedSteps ordering, and switch-offer gating all verified correct.
+- [x] Step 1 driver install — FIXED: Install-NvidiaDriverClean returns $false on non-zero/non-1 exit codes (was unconditional $true); user-provided paths validated for .exe extension and existence; vendor mismatch handled by extraction failure; DRY-RUN gate verified
+- [x] Step 2 MSI interrupts — VERIFIED: Enable-DeviceMSI runs via Invoke-TieredStep T2 (not gated by Phase 1 flag — correct, tier system controls execution). Device enumeration at runtime handles plug/unplug between boots correctly. Backup-RegistryValue called before MSI writes (MSISupported + MessageNumberLimit). Set-ItemProperty -ErrorAction Stop already fixed in C2 audit.
+- [x] Step 4 NVIDIA DRS — FIXED: registry fallback missing DisableDynamicPstate=1 (only PerfLevelSrc was in the table; DRS success path wrote both but fallback early-returned before GPU class key section). nvapi64.dll unavailability handled correctly (Initialize-NvApiDrs returns $false). GPU class key dynamically resolved. 52 DRS settings verified in C1 audit.
+- [x] Step 9 DNS — FIXED: set DNS on ALL active adapters instead of just the fastest one (WiFi adapter was left on ISP DNS in dual-connection setups). WiFi intentionally included — DNS is protocol-layer unlike NIC hardware tweaks. DNS values verified correct (1.1.1.1/1.0.0.1, 8.8.8.8/8.8.4.4).
+- [x] Step 10 process priority — VERIFIED: IFEO via Set-RegistryValue (DRY-RUN intercepted). Install-CS2AffinityTask early-returns in DRY-RUN before both Set-Content (script file creation) and Register-ScheduledTask. Running cs2 priority/affinity changes gated by explicit DRY-RUN checks. Dual-CCD-only gating verified in C2 audit.
+- [x] Step 13 final benchmark — VERIFIED: missing baseline ($baselineP1=0) correctly skips comparison block (line 430 guard). Invalid VProf: Parse-BenchmarkOutput returns $null, caller shows warning + returns $null, bmResult check handles it. FPS cap = max(60, avg-9%) verified. Load-AppliedSteps cumulative from Phase 1+3. Complete-Step called even if benchmark skipped (correct).
+- [x] Complete-Step/Skip-Step coverage — VERIFIED: all 13 steps have Complete-Step and/or Skip-Step on all code paths. $PHASE=3 in all calls (line 43). Step 7 reserved auto-completes with Test-StepDone guard. Steps 1 intentional unrecorded paths: install failure (retry on resume) and user declines skip (needs driver). Steps 2,3,4,8,9,10 have both Action Complete-Step and SkipAction Skip-Step. Steps 5,6,7,11,12,13 are info/unconditional steps with Complete-Step only.
 
 ---
 
