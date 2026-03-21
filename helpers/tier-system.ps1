@@ -228,6 +228,9 @@ function Invoke-TieredStep {
         Write-Debug "DRY-RUN: '$Title' — preview only, no changes applied"
         # Run the action but Set-RegistryValue/Set-BootConfig intercept writes
         try { & $Action } catch { Write-Warn "Step '$Title' failed (DRY-RUN): $_" }
+        # Defensive flush — DRY-RUN normally buffers nothing, but if a step action
+        # manually calls Backup-* without a DryRun guard, entries would be orphaned.
+        try { Flush-BackupBuffer } catch { Write-Debug "Flush-BackupBuffer failed after DRY-RUN '$Title': $_" }
         $SCRIPT:CurrentStepTitle = $null
         return $true
     }

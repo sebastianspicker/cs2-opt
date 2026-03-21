@@ -1,173 +1,135 @@
-# Audit Progress Tracker
+# Audit Progress Tracker — Round 2
 
-Central audit trail for the Ralph Loop system. Each loop records completed items and findings here.
+Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc files. This round focuses on: regressions from Round 1 fixes, deeper edge cases, new code quality, test correctness, and integration between fixes.
 
 ## Phase A: Infrastructure
 
-### A1 — Core Infrastructure
-- [x] Set-RegistryValue / Set-BootConfig correctness — audited: param order correct, $null CurrentStepTitle guarded, nested key creation uses -Force, race condition is in safe direction (backup records old value before write attempt)
-- [x] Save-JsonAtomic edge cases — FIXED: added parent directory creation; stale .tmp handled by overwrite; Move-Item failure handled by catch+cleanup; -Depth 10 sufficient (max nesting ~4 levels)
-- [x] Invoke-TieredStep logic — FIXED: DRY-RUN Action now wrapped in try/catch (was leaking $CurrentStepTitle on exception); SAFE T2 auto-run logic correct; wouldSkip logic correct; EstimateKey tracking correct on throw
-- [x] Load-State / Initialize-ScriptDefaults — FIXED: added -ErrorAction Stop to Get-Content; all 5 entry-points consistent (Run-Optimize inline, PostReboot/SafeMode use Load-State+try/catch, Cleanup/Verify/FpsCap use Initialize-ScriptDefaults); profile override on resume correct (Setup-Profile.ps1 fresh choice wins + persists to state.json)
-- [x] Hardware detection robustness — FIXED: DDR5 XMP detection (ConfiguredClockSpeed = Speed/2 on DDR5, uses SMBIOSMemoryType to detect); FIXED: DriverVersion parse guards for short strings; FIXED: VDF UTF-8 encoding + escaped backslash handling; WiFi-only: correctly handled with advisory in Step 16
-- [x] Config cross-check (EstimateKey parity) — FIXED: wired up HiberbootEnabled=0 (Step 23) and Win32PrioritySeparation (Step 27); documented 4 intentional orphan keys (FPS Cap, Clean Driver Install, Defender Exclusions merged into Visual Effects, DisablePagingExecutive/PowerThrottlingOff sub-actions of Step 27); $CFG_NIC_Tweaks uses DisplayName (vendor-dependent, handled by SilentlyContinue on Set-NetAdapterAdvancedProperty); $CFG_Autostart_Remove best-effort list
-- [x] $ErrorActionPreference masking catalog — FIXED: 5 entry-points set SilentlyContinue; all critical JSON readers now use -ErrorAction Stop on Get-Content (Load-State, Initialize-ScriptDefaults, Load-Progress, Get-BackupData, Save/Load-AppliedSteps, Get-BenchmarkHistory); critical write functions (Set-RegistryValue, Save-JsonAtomic, Set-ItemProperty in restore) already used -ErrorAction Stop
+### A1 — Core Infrastructure (Round 2) — COMPLETE
+- [x] Validate Round 1 fixes (Save-JsonAtomic dir creation, DDR5 XMP, VDF parsing) — all correct
+- [x] Flush-BackupBuffer integration in Invoke-TieredStep — FIXED: added defensive flush to DRY-RUN path
+- [x] New -ErrorAction Stop additions — do they change control flow? — all callers have appropriate try/catch
+- [x] EstimateKey wiring (Steps 23/27) — values correct? — both keys exist, values reasonable
+- [x] Config cross-check round 2 (any new orphans from B-loop changes?) — 5 orphaned config entries are intentional (GUI catalog / merged step sub-components)
 
-### A2 — Backup/Restore & State
-- [x] Backup accumulation performance — FIXED: all 6 Backup-* functions now buffer entries in $SCRIPT:_backupPending (List<object>), flushed once per step via Flush-BackupBuffer in Invoke-TieredStep. Reduces ~60+ read/parse/write cycles to ~38 (one per step). Get-BackupData flushes before reading for consistency.
-- [x] Restore type correctness — FIXED: binary byte[] validation (reject values outside [0,255] instead of silent truncation); MultiString explicit [string[]] cast; registry path existence guards (create missing parent on restore, skip remove if path gone); DRS restore casts through [double]->[uint32] for JSON round-trip safety; improved nvapi64.dll-missing error message
-- [x] DRS backup/restore integrity — FIXED: uint32 setting IDs/values stored as [double] in Backup-DrsSettings (ConvertTo-Json loses uint32 type; double has 53-bit mantissa, lossless for 32-bit values). Sentinel profile "(found via cs2.exe)" path traced: correctly skips FindProfileByName and falls through to FindApplicationProfile. profileCreated+sentinel can never co-occur (verified in Apply-NvidiaCS2ProfileDrs).
-- [x] Step-state resume correctness — FIXED: removed legacy bare step-number fallback from Test-StepDone; bare "5" matched across phases (P1:5 vs P3:5 collision). Now only composite keys checked. lastCompletedStep=0 with entries: returns step 1 (safe, idempotent re-run). Clear-Progress stale data: not a bug — Complete-Step always calls Load-Progress (reads cleared file).
-- [x] Concurrent access safety — FIXED: added advisory lockfile (backup.lock) with PID-based stale detection. Initialize-Backup acquires lock; Restore-Interactive checks lock before proceeding. Save-JsonAtomic still protects against corruption. Batch buffer introduces small crash window (entries in memory between write and flush) — acceptable tradeoff vs 60+ I/O cycles; all changes also covered by System Restore Point.
-- [x] Scheduled task backup — FIXED: Backup-ScheduledTask now records wasEnabled state (was the task enabled before we disabled it). Restore-Interactive uses wasEnabled to restore exact state instead of blindly re-enabling. Handles missing tasks (removed by Windows Update) with warning. Trigger settings not preserved (design limitation: debloat only disables, process-priority creates new task with existed=false so restore unregisters it).
+### A2 — Backup/Restore & State (Round 2)
+- [ ] Backup buffering correctness (Flush-BackupBuffer timing, edge cases)
+- [ ] Lockfile system (stale PID detection, cross-process race)
+- [ ] Binary restore [0,255] validation + MultiString cast
+- [ ] Legacy step-key removal — any callers still using bare numbers?
+- [ ] wasEnabled scheduled task field — all consumers updated?
 
-### A3 — DRY-RUN Correctness
-- [x] DRY-RUN leak audit (all write operations) — FIXED: shader cache Remove-Item in Optimize-SystemBase.ps1 Step 3, bcdedit /deletevalue safeboot in SafeMode-DriverClean.ps1, Clear-Dir/ipconfig/wevtutil/prefetch/RAM-trim/Steam-validate in Cleanup.ps1, Invoke-Download ~600MB NVIDIA driver in Optimize-Hardware.ps1 Step 19 and PostReboot-Setup.ps1 Step 1. All now gated with descriptive [DRY-RUN] messages. Confirmed: debloat, MSI, power-plan, NIC tweaks, QoS policies, services, NVIDIA install/profile all properly gated.
-- [x] State persistence in DRY-RUN — INTENTIONAL: state.json written in DRY-RUN for mode propagation across phases (Setup-Profile.ps1). progress.json properly guarded (Complete-Step/Skip-Step return early). backup.json entries properly guarded (Set-RegistryValue/Set-BootConfig only backup when not DRY-RUN). Directory creation intentional for infrastructure.
-- [x] Cross-phase inheritance — CORRECT: Phase 1 saves mode="DRY-RUN" to state.json. Phase 2 loads via Load-State, now properly guards bcdedit /deletevalue safeboot + Restart-Computer. Phase 3 loads state, shows DRY-RUN banner, offers switch; persists mode change. Phase 1 Step 38 Set-BootConfig "safeboot" intercepted so DRY-RUN never actually reaches Safe Mode.
-- [x] Per-helper DRY-RUN audit — ALL PASS: msi-interrupts.ps1 (Set-ItemProperty/New-Item inside DryRun guards), gpu-driver-clean.ps1 (early return line 24-32), process-priority.ps1 (IFEO via Set-RegistryValue, task via early return line 165-168), power-plan.ps1 (Set-PowerPlanValue wrapper + New-CS2PowerPlan early return), debloat.ps1 (all 5 operation types gated), nvidia-driver.ps1 (early return line 127-133 + post-install services gated), nvidia-profile.ps1 (DRS writes gated line 304-306)
-- [x] Output completeness — ALL DRY-RUN interceptions include descriptive [DRY-RUN] prefix messages in Magenta/DarkMagenta. Invoke-TieredStep shows title+depth+improvement. Set-RegistryValue shows name+value+type+path. Set-BootConfig shows key+val. No silent skips found. Complete-Step/Skip-Step use Write-Debug (intentional for internal tracking).
+### A3 — DRY-RUN Correctness (Round 2)
+- [ ] Verify Round 1 DRY-RUN guards (shader cache, bcdedit, Restart-Computer, Invoke-Download)
+- [ ] New code from other loops — any new DRY-RUN leaks introduced?
+- [ ] DRY-RUN output message consistency after all changes
+- [ ] State persistence correctness after all fixes
 
 ---
 
 ## Phase B: Phase Scripts
 
-### B1 — System Base (Steps 2-9)
-- [x] Step boundary correctness — FIXED: Steps 2,3,4,6 (T1) missing -SkipAction; CUSTOM profile user declining T1 step left progress unrecorded causing re-prompt on resume. Added Skip-Step to all four. Steps 5,7,8,9 already had complete coverage on all paths (Action, SkipAction, else branches).
-- [x] Step 3 shader cache — FIXED: added locked-file detection (Get-Process steam,cs2) with warning; post-delete remaining-file count to detect partial clears instead of false "Cleared" message. App ID 730 and Steam path detection verified correct. Non-existent dirs handled by Test-Path guard.
-- [x] Step 4 FSO — FIXED: replaced hardcoded cs2.exe path list with Get-CS2InstallPath (parses libraryfolders.vdf for custom Steam library folders on D:, E:, etc.). Previously missed CS2 installs outside default Steam paths. Graceful fallback to manual instructions if CS2 not installed.
-- [x] Step 5 NVIDIA driver check — FIXED: Get-Content $CFG_StateFile without -ErrorAction Stop silently returned $null under SilentlyContinue, risking state.json corruption via Save-JsonAtomic writing $null. Added -ErrorAction Stop to both Get-Content and ConvertFrom-Json. Driver range check (Major >= 576), AMD gating, null-return handling all verified correct.
-- [x] Step 6 power plan — FIXED: catch fallback assumed SCHEME_MIN (High Performance) always available; OEM Win11 may lack it. Now checks $LASTEXITCODE and falls back to SCHEME_BALANCED. Also added DRY-RUN guard in catch path (powercfg /setactive was executing in DRY-RUN). New-CS2PowerPlan HP->Balanced fallback verified. Apply-PowerPlan params verified.
-- [x] Step 8 pagefile — FIXED: script disabled AutomaticManagedPagefile (all drives) then only configured C:\pagefile.sys, leaving non-C: pagefiles stuck at current size without user awareness. Now detects existing pagefiles on other drives and warns. WMI .Put() usage verified correct (CIM lacks .Put()). Size calc (2x RAM) verified. Error message improved.
-- [x] Step 9 ReBAR — VERIFIED: AMD (gpuInput=3) SAM guide, NVIDIA (1,2) ReBAR guide, Intel (else) skip — all correct. CHECK-only steps with no automated changes. Vendor mismatch (user selects wrong GPU) is a user error with no safety impact (BIOS guide only). All paths have Complete-Step/Skip-Step.
-- [x] Error propagation — VERIFIED: all cmdlet failures handled (SilentlyContinue for non-critical ops, try/catch for critical ones). Get-RamInfo/Get-NvidiaDriverVersion/Get-SteamPath/Get-CS2InstallPath return $null on failure with guards. Only inline Get-Content (Step 5 state file) needed -ErrorAction Stop fix (done in item 4). WMI .Put() in try/catch. Set-RegistryValue has internal error handling.
+### B1 — System Base (Round 2)
+- [ ] New Skip-Step additions (Steps 2,3,4,6) — correct params?
+- [ ] Shader cache lock detection — false positives?
+- [ ] FSO Get-CS2InstallPath integration — handles all Steam library formats?
+- [ ] Power plan HP→Balanced fallback — correct GUID?
+- [ ] Pagefile non-C: warning — actionable message?
 
-### B2 — Hardware (Steps 10-22)
-- [x] Step completeness audit — All 13 steps (10-22) present, no gaps. Every step has $startStep guard. Steps 10-17 and 19-20 use Invoke-TieredStep with Complete-Step in Action and Skip-Step in SkipAction. Steps 18, 21, 22 are passthrough prep steps (no modifications, unconditional Complete-Step) — correct for info-only steps. Step 20 correctly gates on $gpuInput for NVIDIA with Skip-Step for non-NVIDIA path.
-- [x] Step 10 dynamic tick — CORRECT: bcdedit calls go through Set-BootConfig (DRY-RUN intercepted). Values correct: disabledynamictick=yes, useplatformtick=yes. Note: useplatformtick != useplatformclock (the debunked HPET switch). Non-elevated: Run-Optimize.ps1 has #Requires -RunAsAdministrator; Set-BootConfig checks $LASTEXITCODE and warns on failure.
-- [x] Step 13 debloat — FIXED: Removed duplicate autostart cleanup from Invoke-GamingDebloat that overlapped with Step 14. AppX removal is NOT reversible from backup.json (documented in SideEffects + Undo fields). Services (DiagTrack, dmwappushservice) backed up via Backup-ServiceState before disable. Tasks backed up via Backup-ScheduledTask. Skip path correct (SkipAction calls Skip-Step). DRY-RUN gates all 5 operation types.
-- [x] Step 15 WU blocker — CORRECT: Risk level CRITICAL, gated by Invoke-TieredStep Tier 3 (prompted in all modes). Three services backed up (wuauserv, UsoSvc, WaaSMedicSvc) before disabling. WaaSMedicSvc TrustedInstaller protection handled with fallback warning. DRY-RUN gate covers all service operations. Reversible via Set-Service -StartupType Manual + Start-Service.
-- [x] Step 16 NIC stack — CORRECT: $CFG_NIC_Tweaks uses DisplayName (vendor-dependent, handled by SilentlyContinue — accepted design tradeoff per A1 audit). Vendor PHY keywords (*GreenEthernet, *PowerSavingMode) use -RegistryKeyword with SilentlyContinue for unsupported NICs. URO disable gated by $osBuild -ge 22000 (Win11 check). QoS ports 27015-27036 correct for CS2. IPv6 LEFT ENABLED per 2026 reversal. Bufferbloat advisory present. Wi-Fi advisory for wired-only NIC tweaks. RSS via Set-NicRssConfig. All write operations DRY-RUN gated.
-- [x] Step 17 benchmark — FIXED: Get-Content $CFG_StateFile missing -ErrorAction Stop (line 401). No download required (CapFrameX manual download only). Parse-BenchmarkOutput regex safely rejects garbage (non-matching returns $null, checked by caller). Benchmark_history.json writes via Save-JsonAtomic (atomic temp+rename). Edge cases: empty input returns $null (skipped), no VProf match returns $null with warning.
-- [x] Steps 18-22 prep steps — FIXED: Step 19 Write-Debug upgraded to Write-Warn for driver path persistence failure (was silently hiding errors). Step 19 Get-Content also got -ErrorAction Stop. State.json fields: Step 17 writes baselineAvg/baselineP1 (read by Phase 3 line 583-584). Step 19 writes nvidiaDriverPath/nvidiaDriverVersion (nvidiaDriverPath read by Phase 3 line 85, nvidiaDriverVersion is metadata only). Steps 18/20/21/22 write no state.json fields (pure prep/info). Invoke-Download error handling correct (returns $false, state not updated, Phase 3 prompts for manual path).
+### B2 — Hardware (Round 2)
+- [ ] Debloat autostart removal — was the dedup correct?
+- [ ] Driver path Write-Debug→Write-Warn — log level appropriate?
+- [ ] -ErrorAction Stop additions — any behavioral changes?
+- [ ] State.json field names still match Phase 3 after B6 changes?
 
-### B3 — Registry Tweaks (Steps 23-33)
-- [x] Registry path correctness — audited: all 30 Set-RegistryValue calls use correct hive (HKLM vs HKCU), correct types (DWord/String/Binary), and paths match Verify-Settings.ps1 exactly. No SID-dependent paths misusing HKLM. NtfsDisableLastAccessUpdate correctly uses 0x80000001 (user-managed + disabled).
-- [x] Step 25 Nagle — CORRECT: Get-ActiveNicGuid null handled gracefully (else branch shows manual instructions, Complete-Step still called). Registry paths under Tcpip\Parameters\Interfaces\{GUID} correctly formed. Verify-Settings.ps1 uses same pattern with same null guard.
-- [x] Step 27 MMCSS/scheduler — CORRECT: Win32PrioritySeparation=0x2A written as DWord (not String). Intel hybrid detection via Get-IntelHybridCpuName returns truthy name or $null. All paths verified: FTH (HKLM:\SOFTWARE\Microsoft\FTH\Enabled), DisableCoInstallers (HKLM:\...\Device Installer), MaintenanceDisabled (HKLM:\...\Schedule\Maintenance), DisablePagingExecutive (HKLM:\...\Memory Management), MMCSS\Tasks\Games Priority=6/SchedulingCategory="High"/GPUPriority=8 — all match Verify-Settings.ps1.
-- [x] Step 29 mouse — FIXED: SmoothMouseXCurve/YCurve were 20 bytes (4 bytes per entry) instead of required 40 bytes (8 bytes per INT64 entry). Windows expects 5x8-byte little-endian INT64 arrays. Fixed to correct 40-byte flat 1:1 curves. mouclass path correct (HKLM:\...\mouclass\Parameters, not kbdclass). MouseSpeed/Threshold1/Threshold2 as String type correct. EnhancePointerPrecision disabled via MouseSpeed=0 + flat curves.
-- [x] Step 31 Game DVR — CORRECT: all 4 keys match Verify-Settings.ps1 exactly: AppCaptureEnabled=0 (HKCU:\...\GameDVR), UseNexusForGameBarEnabled=0 (HKCU:\...\GameBar), AllowGameDVR=0 (HKLM:\...\Policies\...\GameDVR), GameDVR_Enabled=0 (HKCU:\System\GameConfigStore). Game Mode keys (AllowAutoGameMode, AutoGameModeEnabled) correctly set in Optimize-Hardware.ps1 Step 12, not here.
-- [x] Step 33 audio — CORRECT: UserDuckingPreference=3 at HKCU:\Software\Microsoft\Multimedia\Audio as DWord. Value 3 = "Do Nothing" (never duck). Correct HKCU path (per-user setting). Matches Verify-Settings.ps1 line 127.
-- [x] EstimateKey consistency — all 6 EstimateKeys verified present in $CFG_ImprovementEstimates: HiberbootEnabled=0 (Step 23), Win32PrioritySeparation (Step 27), Timer Resolution (Step 28), Mouse Acceleration Off (Step 29), Game DVR / Game Bar Off (Step 31), Disable Overlays (Step 32). Omitted steps (24 check-only, 25 Nagle, 26 FSE supplement, 30 GPU pref, 33 audio) are intentional — either check-only, supplements, or non-FPS comfort settings.
-- [x] Complete-Step/Skip-Step coverage — all 11 steps (23-33) have both Complete-Step $PHASE N "label" in Action and Skip-Step $PHASE N "label" in SkipAction. $PHASE=1 set in Run-Optimize.ps1 before sourcing. No missing Complete-Step on any code path (null NIC, old Windows build, missing CS2 all still call Complete-Step). Labels consistent.
+### B3 — Registry Tweaks (Round 2)
+- [ ] SmoothMouse 40-byte curves — values produce correct 1:1 mapping?
+- [ ] All 30 Set-RegistryValue calls still match Verify-Settings after D1 changes?
+- [ ] New EstimateKey wiring from A1 — estimate values reasonable?
 
-### B4 — Game Config (Steps 34-38)
-- [x] Step 34 autoexec merge — FIXED: skip comments/blank/command lines from CVar detection (inflated count); strip inline comments from values (false conflicts). DRY-RUN properly gated. Duplicate exec check works. Intel hybrid detection via Get-IntelHybridCpuName correct. Regex adequate for simple key-value CVars.
-- [x] Step 37 services — FIXED: SysMain/WSearch now check service existence before disable (matching qWave/Xbox pattern); changed -ErrorAction SilentlyContinue to Stop on Set-Service so try/catch catches failures. Backup called before disable. qWave after Step 16 DSCP (correct). All 4 Xbox services present via $CFG_XboxServices.
-- [x] Step 38 Safe Mode prep — FIXED: -ErrorAction Stop on all Copy-Item calls; helpers/ directory missing now throws (was silent). Script copy list complete: SafeMode-DriverClean.ps1, PostReboot-Setup.ps1, Guide-VideoSettings.ps1, helpers.ps1, config.env.ps1 + helpers/ recursed. RunOnce uses $CFG_WorkDir path (correct). bcdedit via Set-BootConfig (DRY-RUN intercepted).
-- [x] File operation error handling — FIXED: Copy-Item -ErrorAction Stop in Step 38; Ensure-Dir called before cfg writes (Step 34 line 42). Step 34 Set-Content gated by DRY-RUN. Step 38 helpers/ missing is now a hard error.
-- [x] Step 35 chipset — CORRECT: informational only (no modifications). Detects AMD/Intel via Win32_Processor Manufacturer. URLs from config vars ($CFG_URL_AMD_Chipset, $CFG_URL_Intel_Chipset). Unknown vendor handled gracefully.
-- [x] Step 36 visual effects — FIXED: added UserPreferencesMask binary write (0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00) for immediate effect + ClearType preservation (byte 2 = 0x03 keeps font smoothing ON). Added FontSmoothing="2" string value for GDI-level ClearType. Added FontSmoothing check to Verify-Settings.ps1. VisualFXSetting=2 is correct value for "Best Performance".
+### B4 — Game Config (Round 2)
+- [ ] Autoexec parser comment/command skip — regex correct?
+- [ ] Service existence check pattern — consistent with Step 37?
+- [ ] Copy-Item -ErrorAction Stop — error message actionable?
+- [ ] UserPreferencesMask + ClearType — byte values correct?
+- [ ] Verify-Settings check for visual effects added in B4 — matches D1 parity?
 
-### B5 — Phase 2 Safe Mode
-- [x] Safe Mode boot validation — VERIFIED: $env:SAFEBOOT_OPTION is set by winload.exe (MINIMAL/NETWORK), reliable on all Win10/11 editions. FIXED: enhanced not-in-Safe-Mode warning to explain locked file risk, partial removal consequences (black screen/BSOD). Added $ErrorActionPreference = "SilentlyContinue" (was missing — only entry point without it). Improved state.json error recovery message with explicit manual bcdedit+shutdown commands.
-- [x] bcdedit /deletevalue safeboot (CRITICAL) — FIXED: re-run scenario where safeboot value already cleared caused false CRITICAL error (bcdedit returns non-zero for missing values). Now detects "not found/element not found" output and treats as success. True failures still show CRITICAL with explicit manual fix instructions (bcdedit command + shutdown). DRY-RUN gate verified correct (Loop A3).
-- [x] GPU driver clean removal — FIXED: (1) Added CIM/WMI primary enumeration (Get-CimInstance Win32_PnPSignedDriver) — locale-independent, works on non-English Windows where pnputil field labels are translated. pnputil parsing kept as fallback for English systems. (2) Simplified vendorMatch regex (removed misleading nv_dispi/nvd patterns that never matched provider names). (3) Added $failedDrivers counter with actionable warning about Safe Mode if partial removal. (4) DriverStore locked folders now use Write-Warn instead of Write-Debug. (5) Cache cleanup $items null guard. oem*.inf scope verified safe (CIM uses DeviceClass="DISPLAY" filter, pnputil uses Class Name "Display" + vendor match).
-- [x] RunOnce registration — FIXED: (1) Set-RunOnce now validates target script exists before writing registry (prevents silent Phase 3 no-start). (2) Added -ErrorAction Stop to Set-ItemProperty (was swallowed by global SilentlyContinue). (3) Failure now shows actionable error with manual launch path. Registry key HKLM:\...\RunOnce verified correct. Duplicate entries: Set-ItemProperty overwrites (correct). Step 38 copy-then-RunOnce ordering verified (Step 38 throws on missing files before reaching bcdedit/RunOnce).
-- [x] Skip path integrity — VERIFIED: Step 1 (bcdedit /deletevalue safeboot) runs unconditionally BEFORE Step 2 skip decision — Safe Mode is always disabled regardless of skip path. Skip driver removal: Skip-Step P2:2 called. Skip path asks about Phase 3 separately with Complete-Step/Skip-Step for P2:3. Both paths correctly update progress.json. No path leaves system stuck in Safe Mode.
-- [x] Error recovery — VERIFIED + FIXED: (1) Crash mid-removal: Safe Mode already disabled (Step 1 before Step 2), system reboots to normal mode — safe. (2) Re-run: bcdedit "already cleared" now handled gracefully instead of false CRITICAL (fixed in item 2). Driver removal is idempotent (removing already-removed drivers returns warning, not failure). (3) No resume logic in SafeMode-DriverClean.ps1 (no Show-ResumePrompt) — deliberate: Phase 2 has only 3 steps, all are idempotent on re-run. (4) progress.json: Complete-Step/Skip-Step write after each step; crash between steps loses at most 1 step record (acceptable, step is re-run). (5) Power failure during driver removal: worst case = partial DriverStore cleanup; pnputil removal is atomic per-package; registry cleanup is per-key. System boots to normal mode (Step 1 already ran) with partial driver state — Phase 3 fresh driver install recovers.
+### B5 — Safe Mode (Round 2)
+- [ ] CIM driver enumeration — fallback to pnputil correct?
+- [ ] bcdedit "already removed" detection — regex robust?
+- [ ] RunOnce existence validation — error message actionable?
+- [ ] $ErrorActionPreference addition — any side effects?
 
-### B6 — Phase 3 Post-Reboot
-- [x] State loading resilience — FIXED: added missing baselineAvg, baselineP1, appliedSteps to fallback state object; gated final Restart-Computer by DRY-RUN; partial corruption safe (all field accesses guard $null)
-- [x] DRY-RUN inheritance + switch — FIXED: mode derivation from profile when switching out of DRY-RUN (was hardcoded CONTROL, now matches Setup-Profile.ps1 mapping: SAFE/RECOMMENDED->AUTO, COMPETITIVE->CONTROL, CUSTOM->INFORMED). Persistence, Load-AppliedSteps ordering, and switch-offer gating all verified correct.
-- [x] Step 1 driver install — FIXED: Install-NvidiaDriverClean returns $false on non-zero/non-1 exit codes (was unconditional $true); user-provided paths validated for .exe extension and existence; vendor mismatch handled by extraction failure; DRY-RUN gate verified
-- [x] Step 2 MSI interrupts — VERIFIED: Enable-DeviceMSI runs via Invoke-TieredStep T2 (not gated by Phase 1 flag — correct, tier system controls execution). Device enumeration at runtime handles plug/unplug between boots correctly. Backup-RegistryValue called before MSI writes (MSISupported + MessageNumberLimit). Set-ItemProperty -ErrorAction Stop already fixed in C2 audit.
-- [x] Step 4 NVIDIA DRS — FIXED: registry fallback missing DisableDynamicPstate=1 (only PerfLevelSrc was in the table; DRS success path wrote both but fallback early-returned before GPU class key section). nvapi64.dll unavailability handled correctly (Initialize-NvApiDrs returns $false). GPU class key dynamically resolved. 52 DRS settings verified in C1 audit.
-- [x] Step 9 DNS — FIXED: set DNS on ALL active adapters instead of just the fastest one (WiFi adapter was left on ISP DNS in dual-connection setups). WiFi intentionally included — DNS is protocol-layer unlike NIC hardware tweaks. DNS values verified correct (1.1.1.1/1.0.0.1, 8.8.8.8/8.8.4.4).
-- [x] Step 10 process priority — VERIFIED: IFEO via Set-RegistryValue (DRY-RUN intercepted). Install-CS2AffinityTask early-returns in DRY-RUN before both Set-Content (script file creation) and Register-ScheduledTask. Running cs2 priority/affinity changes gated by explicit DRY-RUN checks. Dual-CCD-only gating verified in C2 audit.
-- [x] Step 13 final benchmark — VERIFIED: missing baseline ($baselineP1=0) correctly skips comparison block (line 430 guard). Invalid VProf: Parse-BenchmarkOutput returns $null, caller shows warning + returns $null, bmResult check handles it. FPS cap = max(60, avg-9%) verified. Load-AppliedSteps cumulative from Phase 1+3. Complete-Step called even if benchmark skipped (correct).
-- [x] Complete-Step/Skip-Step coverage — VERIFIED: all 13 steps have Complete-Step and/or Skip-Step on all code paths. $PHASE=3 in all calls (line 43). Step 7 reserved auto-completes with Test-StepDone guard. Steps 1 intentional unrecorded paths: install failure (retry on resume) and user declines skip (needs driver). Steps 2,3,4,8,9,10 have both Action Complete-Step and SkipAction Skip-Step. Steps 5,6,7,11,12,13 are info/unconditional steps with Complete-Step only.
+### B6 — Post-Reboot (Round 2)
+- [ ] Fallback state new fields (baselineAvg, baselineP1, appliedSteps) — types correct?
+- [ ] DRY-RUN→live mode derivation — matches Setup-Profile exactly?
+- [ ] Install-NvidiaDriverClean exit code check — all codes handled?
+- [ ] DisableDynamicPstate registry fallback fix — path correct?
+- [ ] DNS all-adapter change — virtual adapter filtering?
 
 ---
 
 ## Phase C: Specialized Modules
 
-### C1 — NVIDIA Stack
-- [x] C# interop safety (GCHandle, structs) — ALL PASS: every GCHandle.Alloc(Pinned) has matching .Free() in finally block (FindProfileByName, CreateProfile, FindApplicationProfile[2 handles], AddApplication, SetDwordSetting, GetDwordSetting). Struct sizes verified: SETTING_V1=12320, PROFILE_V1=4116, APP_V1=4104 — match NVAPI SDK headers including 4100-byte value unions (4 dword + 4096 unicode). Version constants verified: 0x00013020, 0x00011014, 0x00011008. GetDelegate<T> checks IntPtr.Zero consistently for all 12 function IDs. _resolved flag not thread-safe but PS is single-threaded. All NVAPI status codes checked via CheckStatus or explicit checks.
-- [x] Driver version scraping — FIXED: $downloadUrl initialized to $null (was unset; Set-StrictMode would throw). Series map covers RTX 50/40/30/20, GTX 16/10 with correct psid values. pfid values are per-product (not per-series) but NVIDIA Game Ready drivers are unified — any pfid in the series returns the same driver binary. Fallback to manual download is robust. Invoke-Download has file-size validation (>1MB), 2-attempt retry, and cleanup.
-- [x] Settings table correctness (52 IDs) — FIXED: SHIM_RENDERING_OPTIONS hex annotation corrected from 0x1C004002 to 0x1C000002 (decimal 469762050; DISABLE_CUDA bit 14 is NOT set). FXAA docs value corrected from 1(Disallowed) to 0(Off) — NVAPI enum: 0=Off, 1=On; code was correct, docs were wrong. 52 IDs confirmed with no duplicates. All values verified to fit in uint32 (largest: 2525368439=0x96861077). 3 excluded settings documented correctly (frame interp, GPU affinity, string type). Registry fallback PerfLevelSrc=0x2222 and DisableDynamicPstate=1 target correct GPU class key path.
-- [x] Apply flow (profile lookup, backup order) — CORRECT: FindApplicationProfile("cs2.exe") first, then FindProfileByName with 2 name variants, then CreateProfile as last resort. AddApplication only when cs2.exe not already bound (correct — avoids -179 on re-run). Backup runs BEFORE writes (line 278-291 before 293-317). DRS SaveSettings is atomic — either all 52 settings persist or none (save failure discards in-memory session via DestroySession in finally). Re-running is idempotent (SetDwordSetting overwrites). Profile creation in DRY-RUN is ephemeral (NoSave=true, DestroySession discards).
-- [x] DRY-RUN support — COMPLETE: DRS writes skipped with descriptive [DRY-RUN] messages (line 304-308). SaveSettings skipped via -NoSave:$SCRIPT:DryRun. Backup skipped in DRY-RUN (line 281). Registry fallback uses Set-RegistryValue which intercepts DRY-RUN. CreateSession/LoadSettings still run in DRY-RUN (read-only, needed for profile lookup enumeration). Profile creation in DRY-RUN is non-persistent (SaveSettings not called).
-- [x] Backup integration — CORRECT: Backup-DrsSettings records per-setting previousValue as [double] for JSON round-trip safety (53-bit mantissa covers 32-bit uint). profileCreated flag stored correctly. Restore deletes profile if we created it, restores individual settings otherwise. DRS_FOUND_VIA_APP sentinel "(found via cs2.exe)" correctly skips FindProfileByName on restore and falls through to FindApplicationProfile. Missing nvapi64.dll: Restore-DrsSettings checks Initialize-NvApiDrs and warns with actionable message.
+### C1 — NVIDIA Stack (Round 2)
+- [ ] FXAA value 0 — confirm against NVAPI enum
+- [ ] SHIM_RENDERING_OPTIONS hex fix — verify bit layout
+- [ ] $downloadUrl init — any other uninitialized vars in StrictMode?
+- [ ] Doc fix propagation — nvidia-drs-settings.md consistent with code?
 
-### C2 — Network & Hardware
-- [x] MSI interrupts — FIXED: added -ErrorAction Stop to all Set-ItemProperty calls in Enable-DeviceMSI (MSISupported, MessageNumberLimit) and Set-NicInterruptAffinity (DevicePolicy, AssignmentSetOverride). Under global SilentlyContinue, failures were silently swallowed and try/catch never triggered. PCI filter correct (^PCI\\ prefix). MessageNumberLimit=16 correct (hardware caps if unsupported). Multi-NIC: Enable-DeviceMSI enables all PCI NICs (correct), affinity targets only active NIC (correct). DRY-RUN: all writes inside guards, no leaks.
-- [x] Power plan — VERIFIED CORRECT: HP plan missing handled (falls back to Balanced). Vendor detection correct (AMD=0, Intel=100 for PROCTHROTTLEMIN; Unknown defaults to Intel). All powercfg calls DRY-RUN gated via Set-PowerPlanValue wrapper. GUID constants verified against Microsoft docs. DISKPOWERMGMT T1->T2 (1->0) intentional tier progression. Existing plan detected and removed before creation (idempotent). duplicatescheme failure throws with descriptive message.
-- [x] Process priority (X3D) — VERIFIED CORRECT: Affinity mask calculation verified for 7900X3D (0x3F03F), 7950X3D (0xFF00FF), 9900X3D, 9950X3D. SMT detection uses totalLP>totalCores. PT2M trigger correctly formed in XML schema. Generated cs2_affinity.ps1 valid PowerShell (proper backtick escaping, [long] cast). cs2 not running = graceful no-op (Get-Process SilentlyContinue + if guard). DRY-RUN: Register-ScheduledTask gated by early return, IFEO via Set-RegistryValue self-gates.
-- [x] Debloat — FIXED: pre-fetch provisioned packages once before loop (was calling Get-AppxProvisionedPackage -Online per package = N redundant queries). AppX -AllUsers requires admin (handled by START.bat elevation). Provisioned removal correct for preventing feature update reinstall. Services backed up via Backup-ServiceState before modification. Tasks backed up via Backup-ScheduledTask before disabling. All operations DRY-RUN gated. LTSC: missing packages return $null from Get-AppxPackage, handled gracefully.
-- [x] Benchmark history — FIXED: (1) Get-BenchmarkHistory null guard for PS 5.1 empty array deserialization (ConvertFrom-Json returns $null for "[]", @($null) created spurious entry). (2) Added history cap ($CFG_BenchmarkMaxEntries=200) with FIFO trim to prevent unbounded JSON growth. VProf parse handles multi-match averaging correctly. Write uses Save-JsonAtomic (temp+rename). Regression detection correct (p1Diff < 0 = red). Corruption recovery: try/catch returns @() on any error.
+### C2 — Network & Hardware (Round 2)
+- [ ] MSI -ErrorAction Stop — any operations that should remain SilentlyContinue?
+- [ ] Benchmark history cap (200) — FIFO trim logic correct?
+- [ ] PS 5.1 null guard — does it handle all ConvertFrom-Json edge cases?
+- [ ] Debloat pre-fetch — still correct after B2 dedup changes?
 
 ---
 
 ## Phase D: Surface Layer
 
-### D1 — Entry Points & Utilities
-- [x] START.bat robustness — VERIFIED: UAC elevation uses -Command (not -File), ExecutionPolicy does not apply. Paths with spaces handled by quoting ("%~dp0..." and single quotes in -Command). Input validation: non-numeric/empty falls through to menu. [5] Reset uses raw del instead of Clear-Progress — acceptable (Load-Progress handles missing file). [7]/[8] inline PS: dot-sourcing paths use single quotes inside double-quoted -Command, handles spaces.
-- [x] Cleanup.ps1 — FIXED: Copy-Item calls in Driver Refresh path missing -ErrorAction Stop (silent copy failure → RunOnce pointing to missing scripts). Added helpers/ directory existence check with throw. Winsock Reset: already properly DRY-RUN gated inside Invoke-TieredStep Action block. Steam missing: handled with warning + manual instructions. State persistence: state.json preserved (config retained), only progress.json reset via Clear-Progress.
-- [x] Verify-Settings parity (CRITICAL) — FIXED: added missing Test-ServiceCheck for qWave + 4 Xbox services (XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc) — Step 37 disables all 7 services but Verify only checked SysMain + WSearch. Full parity: 39 registry checks + 7 service checks + 2 bcdedit checks = 48 total, all matched. 3 Set operations intentionally omitted from Verify: AppCompatFlags (dynamic CS2 path), UserGpuPreferences (dynamic), UserPreferencesMask (binary, VisualFXSetting covers intent). 0x2A/42 comparison correct (DWord -eq handles both). Intel hybrid gate: $null vs truthy vs $false correctly distinguished. NIC GUID: same Get-ActiveNicGuid at verify time — NIC changes correctly show as MISSING.
-- [x] FpsCap-Calculator — FIXED: Get-Content/ConvertFrom-Json missing -ErrorAction Stop for state.json (under SilentlyContinue, read failures silently returned $null). Clipboard null: handled by if($clip) guard. Non-VProf: Parse-BenchmarkOutput returns $null → fallback manual input. Zero/negative avg: validated via TryParse + gt 0. History: Save-JsonAtomic (atomic temp+rename). FPS formula verified: Max(60, avg - Round(avg * 0.09)).
-- [x] Setup-Profile — FIXED: -ErrorAction Stop on state.json loading. Profile→Mode: SAFE→AUTO, RECOMMENDED→AUTO (auto-resume), COMPETITIVE→CONTROL (prompted resume), CUSTOM→INFORMED. Matches tier system design. DRY-RUN modifier: overrides Mode to "DRY-RUN" regardless of profile (line 92). Resume: fresh profile choice persisted to state.json (lines 174-176). SAFE profile: restore point prompt skipped (line 121). LogLevel: only offered for CUSTOM, defaults to NORMAL.
-- [x] Run-Optimize — FIXED: Restart-Computer at Phase 1 completion not gated by DRY-RUN. In preview mode, Set-BootConfig intercepted Safe Mode config, but restart itself still executed. $TOTAL_STEPS=38 verified correct (1-38 across 5 scripts). Save-AppliedSteps persists to state.json, Load-AppliedSteps in Phase 3 reads it. Completion banner accurate.
+### D1 — Entry Points & Utilities (Round 2)
+- [ ] 5 new Verify-Settings service checks — correct service names and states?
+- [ ] Cleanup.ps1 -ErrorAction Stop — error messages actionable?
+- [ ] Run-Optimize DRY-RUN restart guard — consistent with B5 pattern?
+- [ ] FpsCap/Setup-Profile -ErrorAction Stop — any behavioral changes?
 
-### D2 — GUI Layer
-- [x] WPF lifecycle — FIXED: added $Script:Closing flag + $Script:AsyncTimers list; Window.Closed stops all timers before disposing RunspacePool; timer tick checks Closing flag to prevent post-dispose UI access. Dispatcher.Invoke used correctly for all GUI updates. Event handlers not explicitly unsubscribed (WPF handles this on window dispose). EndInvoke results discarded by design (data flows through $UISync).
-- [x] Panel data accuracy — FIXED: (1) Load-Optimize bare step-number fallback removed ($s.Step -in $completed caused P1:5/P3:5 collision — matches A2 CLI fix). (2) -ErrorAction Stop added to Get-Content/ConvertFrom-Json on state.json reads in Load-Settings, Save-SettingsToState, Update-SidebarStatus (was swallowed by global SilentlyContinue). All 7 panels verified present and wired. Backup panel handles large backup.json (DataGrid virtualizes). Video panel correctly parses video.txt key-value pairs.
-- [x] Step-catalog metadata parity — FIXED 7 mismatches: P1:13 Tier 1->2, P1:14 Tier 1->2, P1:15 Tier 2->3, P3:2 Depth DRIVER->REGISTRY, P3:3 Depth DRIVER->REGISTRY, P3:8 Risk MODERATE->SAFE + Depth REGISTRY->CHECK + CheckOnly false->true, P3:10 Risk MODERATE->SAFE. All 51 steps present (38 P1 + 13 P3, P3:7 correctly omitted as reserved). Category groupings accurate. EstKey values verified.
-- [x] system-analysis read-only guarantee — VERIFIED: no write operations (Set-ItemProperty, Set-Content, New-Item, Remove-Item, powercfg, Register-*). Only netsh call is `netsh int udp show global` (read-only query). Only bcdedit call is `bcdedit /enum` (read-only query). All CIM/WMI queries wrapped in try/catch. Registry reads use Get-RegVal helper with try/catch/null-return. No timeout mechanism but all queries are fast (CIM is < 1s each).
-- [x] GUI-CLI parity — FIXED: added 9 missing checks to system-analysis.ps1 matching Verify-Settings.ps1: NTFS 8.3 names, DisableCoInstallers, MMCSS Games task, bcdedit dynamic/platform tick, Visual Effects, ClearType, Steam Overlay. Remaining intentional gaps: Verify-Settings uses Test-RegistryCheck with exact value matching + counter display; GUI uses structured objects for DataGrid. Both check same registry paths. GUI can work without CLI (shows "not optimized" for unconfigured items). If CLI was run first, GUI detects state correctly via progress.json + direct registry reads.
-- [x] START-GUI.bat — FIXED: added -WindowStyle Hidden to UAC elevation path (was missing, causing visible console window alongside WPF GUI when elevated). UAC elevation pattern matches START.bat. ExecutionPolicy Bypass present. Path quoting uses CMD "" escape inside single-quoted PS string — handles spaces correctly (%~dp0 expands before PS parsing).
+### D2 — GUI Layer (Round 2)
+- [ ] 7 step-catalog fixes — verify against actual Invoke-TieredStep params
+- [ ] gui-panels bare step-number removal — uses composite keys correctly?
+- [ ] WPF closing flag + timer cleanup — no race conditions?
+- [ ] 9 new system-analysis checks — paths match current code?
+- [ ] START-GUI.bat -WindowStyle Hidden — works on all Windows versions?
 
 ---
 
 ## Phase E: Quality
 
-### E1 — Pester Tests
-- [x] _TestInit.ps1 — common setup: loads config+helpers into temp dir, $SCRIPT: defaults, New-TestStateFile/ProgressFile/BackupFile helpers, Reset-TestState
-- [x] hardware-detect.Tests.ps1 — Get-IntelHybridCpuName (6 CPU cases + edge), Get-SteamPath (3 cases), Calculate-FpsCap (5 cases), Parse-BenchmarkOutput (6 cases), Test-XmpActive (DDR4/DDR5, 5 cases), Test-DualChannel (5 cases), Get-NvidiaDriverVersion (3 cases)
-- [x] tier-system.Tests.ps1 — Test-RiskAllowed (4x4 matrix + edge), Get-ProfileMaxRisk (6 cases), Invoke-TieredStep (T1/T2/T3 behavior, DRY-RUN, EstimateKey tracking, CUSTOM prompts, SkipAction), Get-ImprovementEstimate (4 cases), Save/Load-AppliedSteps round-trip (3 cases)
-- [x] system-utils.Tests.ps1 — Save-JsonAtomic (5 cases), Set-RegistryValue DRY-RUN (3 cases), Set-BootConfig DRY-RUN (3 cases), VerifyCounters (3 cases), Test-RegistryCheck quiet+counter modes (7 cases), Load/Save-State + Initialize-ScriptDefaults (7 cases)
-- [x] backup-restore.Tests.ps1 — Initialize-Backup (3 cases), Backup-RegistryValue buffering (2 cases), Flush-BackupBuffer (2 cases), Get-BackupData (4 cases incl. corrupted JSON), accumulation (2 cases), Restore-StepChanges (5 cases incl. failure retention), Backup-ServiceState (2 cases), lock system (5 cases)
-- [x] step-state.Tests.ps1 — Complete-Step/Test-StepDone round-trip (7 cases), phase key collision avoidance (2 cases), Skip-Step (6 cases), Clear-Progress (4 cases), Load-Progress corrupted JSON (4 cases), integration mixed complete+skip (1 case)
-- [x] config.Tests.ps1 — EstimateKey cross-reference (4 cases), CS2 autoexec (7 cases incl. duplicate check), NIC tweaks (5 cases), path format (4 cases), NVIDIA profile estimates (3 cases), DNS (3 cases), FPS cap bounds (2 cases)
+### E1 — Pester Tests (Round 2)
+- [ ] Run all tests — identify failures
+- [ ] Test correctness audit (do tests test the RIGHT thing?)
+- [ ] Mock completeness (any tests hitting real filesystem/registry?)
+- [ ] Edge case coverage gaps
+- [ ] Test isolation (no cross-test state leakage)
 
-### E2 — Documentation Accuracy
-- [x] evidence.md — FIXED: Phase 2 step order swapped (2.2/2.3), Steps 20-22 changed to passthrough (—), Step 23 RECOMMENDED/COMPETITIVE auto->prompted, profile totals recalculated, T2 power plan count 16-17->15-16
-- [x] nic-latency-stack.md — FIXED: TransmitBuffers "NOT do" table clarified (suite sets 512, not the aggressive 256). All 6 layers verified against Step 16 code.
-- [x] windows-scheduler.md — FIXED: Fast Startup boot time estimate 20-30s->5-15s (matches code -Caveat param). All MMCSS/scheduler values verified.
-- [x] nvidia-optimization.md + nvidia-drs-settings.md — FIXED: registry fallback count 24->25 (22 d3d + 1 NVTweak + 2 GPU class key), bloat component count 14->15. All 52 DRS IDs/values verified. nvidia-drs-settings.md fully accurate (no changes).
-- [x] power-plan.md — FIXED: T2 count 16-17->15-16, T1 table removed incorrect "Core parking min" (T2 in code), split standby/hibernate into 2 entries, IDLEDISABLE verify comment T2->T3. All GUIDs and 4 bug fixes verified.
-- [x] services.md — VERIFIED: all 7 Step 37 services + 2 Step 13 services match code exactly. $CFG_XboxServices 4 entries confirmed. No changes needed.
-- [x] backup-restore.md — FIXED: added missing wasEnabled field to scheduledtask JSON example (present in code since A2 audit). All 6 backup types and Restore-Interactive workflow verified.
-- [x] README.md — FIXED: added missing gui-panels.ps1 to file tree (18th helper), Phase 2 step order swapped, Step 5 risk SAFE->AGGRESSIVE, power plan T2 +17->+15-16, bloat count 14->15 in 2 places
+### E2 — Documentation (Round 2)
+- [ ] Verify Round 1 doc fixes are accurate
+- [ ] Any new code changes not yet reflected in docs?
+- [ ] CHANGELOG audit entry — complete and accurate?
 
-### E3 — CI/CD Enhancement
-- [x] Pester test job — added `pester` job to lint.yml: windows-latest, Pester 5.x install, NUnit XML output, upload-artifact v4.6.2 (SHA-pinned), 5-min timeout, module caching via actions/cache v4.3.0
-- [x] EstimateKey cross-reference check — added `estimate-keys` job to lint.yml: ubuntu-latest, parses 5 phase scripts for -EstimateKey values, verifies each exists in $CFG_ImprovementEstimates. Fails build on mismatch.
-- [x] PSScriptAnalyzer rules review — all 11 exclusions validated (updated PSAvoidUsingEmptyCatchBlock comment with exact 7 instances, added PS 5.1 note to PSAvoidGlobalVars). Added 5 explicit security rules: ConvertToSecureStringWithPlainText, InvokeExpression, PlainTextForPassword, UsernameAndPasswordParams, UseCompatibleSyntax (5.1+7.4). Added review date header.
-- [x] Security workflow enhancements — added Restart-Computer -Force gate check (verifies DryRun/Confirm-Risk/Read-Host within 15 preceding lines, fails build if ungated). Added Remove-Item -Recurse -Force variable path check (warns when bare variable passed without Test-Path guard, excludes tests/).
-- [x] Stale SHA pin fix — updated descriptive comment from "v4.2.2 (2024-10-28)" to "v6.0.2 (2026-01-09)" matching actual SHA de0fac2e... Inline comments were already correct.
-- [x] Concurrency and caching — concurrency patterns verified correct (head_ref for PRs, run_id for pushes). Added actions/cache v4.3.0 (SHA-pinned) for PSScriptAnalyzer and Pester modules. Reduced PSScriptAnalyzer timeout from 10 to 5 minutes. All jobs now 5-min timeout.
+### E3 — CI/CD (Round 2)
+- [ ] Pester job YAML validity
+- [ ] EstimateKey cross-ref script correctness
+- [ ] New PSScriptAnalyzer rules — any false positives?
+- [ ] Security checks — false positive rate?
+- [ ] Cache keys correct for module paths?
 
 ---
 
 ## Phase F: Final Review
 
-### F1 — Integration & Ship Check
-- [x] Cross-loop conflict resolution — NO CONFLICTS. Reviewed all 46 changed files across 50+ commits. Files modified by multiple loops (Optimize-SystemBase 5x, PostReboot-Setup 4x, Verify-Settings 2x, CS2-Optimize-GUI 2x) have consistent layered changes. No contradictory fixes found. Backup batching (A2) + step-state composite keys (A2) + DRY-RUN gates (A3) all coexist correctly.
-- [x] End-to-end flow trace — VERIFIED: START.bat -> Setup-Profile (state.json created with 9 fields) -> Phase 1 (38 steps, adds baselineAvg/P1/nvidiaDriverPath to state) -> Save-AppliedSteps -> Restart -> SafeMode-DriverClean (Load-State, 3 idempotent steps, bcdedit safeboot cleared BEFORE driver removal) -> Restart -> PostReboot-Setup (Load-State, Load-AppliedSteps for cumulative estimates, 13 steps). progress.json phase transitions correct: P1 phase=1 -> P2 phase=2 -> P3 Show-ResumePrompt(3,13) sees phase!=3, returns 1. Skip/resume within phase correct. Fallback state objects include all required fields.
-- [x] $ErrorActionPreference resolution — DOCUMENTED: All 6 entry points + SafeMode use SilentlyContinue. This is necessary because many operations (registry reads, CIM queries, NIC adapter queries) are expected to fail on systems that don't have certain features. All critical paths now use -ErrorAction Stop (verified: Get-Content on state/progress/backup JSON, Copy-Item in Step 38, Set-ItemProperty in MSI interrupts, ConvertFrom-Json). Changing to Continue globally would cause thousands of spurious error messages on missing optional registry keys.
-- [x] Regression check — FIXED: 2 parse errors in tests/config.Tests.ps1 (bare `$key:` inside double-quoted strings parsed as scope-qualified variable). All 46 .ps1 files pass PowerShell parser with zero errors. No TODO/HACK/FIXME markers in diff. No accidentally introduced issues in git diff main..HEAD.
-- [x] Consistency final pass — VERIFIED: (1) Write-OK/Warn/Err/Info all route through Write-Log with consistent prefix formatting. (2) Confirm-Risk uses [y/N] (default No); action prompts use [Y/n] (default Yes) or [y/N] semantically correct throughout. (3) Complete-Step/Skip-Step parameter order consistent: $PHASE stepNum "label" in all 90+ call sites. (4) All Invoke-TieredStep calls have -Tier, -Title, -Risk, -Depth, -Action (verified via AST analysis). (5) DRY-RUN messages use [DRY-RUN] prefix in Magenta consistently (89 occurrences across 21 files).
-- [x] "Would I ship this?" test — YES. All changes are genuine improvements: bug fixes (mouse curves, DNS multi-adapter, DRY-RUN restart leak, progress collision), error handling (-ErrorAction Stop on critical paths), reliability (backup batching, lock file, timer cleanup), test coverage (7 test files), CI/CD (Pester, EstimateKey check, security gates). No over-engineering found. CIM fallback in gpu-driver-clean is necessary (non-English Windows). Debloat pre-fetch is a clear perf win. No loop changes should be reverted.
-- [x] Verify-Settings bidirectional parity (final) — FULL PARITY. 39 registry checks + 7 service checks + 2 bcdedit checks = 48 total in Verify-Settings.ps1. Every Set-RegistryValue in phase scripts has a corresponding Test-RegistryCheck. Every Test-RegistryCheck has a corresponding Set-RegistryValue. 3 intentional omissions documented: AppCompatFlags (dynamic CS2 path), UserGpuPreferences (dynamic), UserPreferencesMask (binary, VisualFXSetting covers intent). Service checks: SysMain, WSearch, qWave, XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc — all 7 present.
-- [x] Documentation coherence — VERIFIED: README matches code (18 helpers, 38+3+13 steps, tier/risk assignments, file tree). Added audit section to CHANGELOG.md with bug fixes, reliability improvements, and new additions. Inline comments from loops are helpful (explain *why*, not *what*). No noise comments found.
+### F1 — Integration & Ship Check (Round 2)
+- [ ] Full PSScriptAnalyzer pass
+- [ ] Full Pester test pass
+- [ ] Verify-Settings bidirectional parity (definitive)
+- [ ] DRY-RUN zero-leak confirmation
+- [ ] git diff review — no accidental regressions
+- [ ] Overall code quality assessment
