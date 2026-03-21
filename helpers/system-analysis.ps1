@@ -124,6 +124,21 @@ function Invoke-CheckWindowsGaming {
         $r.Add((New-CheckItem "Windows" "Display" "Auto HDR" $(if ($hdr -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-36" "Tone-mapping overhead + overbright window areas in CS2"))
     }
 
+    # Visual Effects
+    $vfx = Get-RegVal "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" "VisualFXSetting"
+    $st = if ($vfx -eq 2) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Display" "Visual Effects" $(if ($vfx -eq 2) {"Best Performance"} else {"Default/Custom"}) "Best Performance (2)" $st "P1-36" "Disables window animations and transparency"))
+
+    # ClearType (preserved despite Best Performance)
+    $ct = Get-RegVal "HKCU:\Control Panel\Desktop" "FontSmoothing"
+    $st = if ($ct -eq "2") { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Display" "ClearType" $(if ($ct -eq "2") {"Enabled"} else {"Disabled/Not set"}) "Enabled (2)" $st "P1-36" "Font smoothing — preserved alongside Best Performance"))
+
+    # Steam Overlay
+    $steamOv = Get-RegVal "HKCU:\Software\Valve\Steam" "GameOverlayDisabled"
+    $st = if ($steamOv -eq 1) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Overlay" "Steam Overlay" $(if ($steamOv -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (1)" $st "P1-32" "Overlay hooks into GPU rendering pipeline"))
+
     return $r
 }
 
@@ -171,6 +186,35 @@ function Invoke-CheckSystemLatency {
     # 0x80000001 = user-managed + disabled (Win10 1803+); 1 = disabled (legacy)
     $st = if ($ntfsLa -eq 0x80000001 -or $ntfsLa -eq 1) { "OK" } else { "WARN" }
     $r.Add((New-CheckItem "Windows" "Filesystem" "NTFS Last Access" $(if ($ntfsLa -eq 0x80000001 -or $ntfsLa -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (0x80000001)" $st "P1-27" "Removes metadata write on every file read"))
+
+    # NTFS 8.3 Name Creation
+    $ntfs83 = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisable8dot3NameCreation"
+    $st = if ($ntfs83 -eq 1) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Filesystem" "NTFS 8.3 Names" $(if ($ntfs83 -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (1)" $st "P1-27" "Eliminates legacy short name generation overhead"))
+
+    # DisableCoInstallers
+    $coIns = Get-RegVal "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Installer" "DisableCoInstallers"
+    $st = if ($coIns -eq 1) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "System" "PnP Co-Installers" $(if ($coIns -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (1)" $st "P1-27" "Prevents vendor bloatware injection during device install"))
+
+    # MMCSS Games task
+    $gamesPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games"
+    $gPri = Get-RegVal $gamesPath "Priority"
+    $gSch = Get-RegVal $gamesPath "Scheduling Category"
+    $gGpu = Get-RegVal $gamesPath "GPU Priority"
+    $gamesOk = ($gPri -eq 6) -and ($gSch -eq "High") -and ($gGpu -eq 8)
+    $st = if ($gamesOk) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "MMCSS" "Games Task Priority" "Pri=$gPri Sched=$gSch GPU=$gGpu" "6 / High / 8" $st "P1-27" "MMCSS Games scheduling class for foreground game threads"))
+
+    # Boot config (bcdedit) — read-only query
+    try {
+        $bcdOutput = bcdedit /enum "{current}" 2>&1 | Out-String
+        $dynTick = if ($bcdOutput -match "disabledynamictick\s+Yes") { "OK" } else { "WARN" }
+        $r.Add((New-CheckItem "Windows" "Boot" "Dynamic Tick" $(if ($dynTick -eq "OK") {"Disabled"} else {"Active"}) "Disabled" $dynTick "P1-10" "Adaptive timer causes irregular CPU wakeups — frametime jitter"))
+
+        $platTick = if ($bcdOutput -match "useplatformtick\s+Yes") { "OK" } else { "WARN" }
+        $r.Add((New-CheckItem "Windows" "Boot" "Platform Tick" $(if ($platTick -eq "OK") {"Active"} else {"Inactive"}) "Active" $platTick "P1-10" "Hardware timer instead of software timer"))
+    } catch { Write-Debug "bcdedit check failed: $_" }
 
     return $r
 }
