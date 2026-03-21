@@ -120,12 +120,12 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [x] Run-Optimize — FIXED: Restart-Computer at Phase 1 completion not gated by DRY-RUN. In preview mode, Set-BootConfig intercepted Safe Mode config, but restart itself still executed. $TOTAL_STEPS=38 verified correct (1-38 across 5 scripts). Save-AppliedSteps persists to state.json, Load-AppliedSteps in Phase 3 reads it. Completion banner accurate.
 
 ### D2 — GUI Layer
-- [ ] WPF lifecycle
-- [ ] Panel data accuracy
-- [ ] Step-catalog metadata parity
-- [ ] system-analysis read-only guarantee
-- [ ] GUI-CLI parity
-- [ ] START-GUI.bat
+- [x] WPF lifecycle — FIXED: added $Script:Closing flag + $Script:AsyncTimers list; Window.Closed stops all timers before disposing RunspacePool; timer tick checks Closing flag to prevent post-dispose UI access. Dispatcher.Invoke used correctly for all GUI updates. Event handlers not explicitly unsubscribed (WPF handles this on window dispose). EndInvoke results discarded by design (data flows through $UISync).
+- [x] Panel data accuracy — FIXED: (1) Load-Optimize bare step-number fallback removed ($s.Step -in $completed caused P1:5/P3:5 collision — matches A2 CLI fix). (2) -ErrorAction Stop added to Get-Content/ConvertFrom-Json on state.json reads in Load-Settings, Save-SettingsToState, Update-SidebarStatus (was swallowed by global SilentlyContinue). All 7 panels verified present and wired. Backup panel handles large backup.json (DataGrid virtualizes). Video panel correctly parses video.txt key-value pairs.
+- [x] Step-catalog metadata parity — FIXED 7 mismatches: P1:13 Tier 1->2, P1:14 Tier 1->2, P1:15 Tier 2->3, P3:2 Depth DRIVER->REGISTRY, P3:3 Depth DRIVER->REGISTRY, P3:8 Risk MODERATE->SAFE + Depth REGISTRY->CHECK + CheckOnly false->true, P3:10 Risk MODERATE->SAFE. All 51 steps present (38 P1 + 13 P3, P3:7 correctly omitted as reserved). Category groupings accurate. EstKey values verified.
+- [x] system-analysis read-only guarantee — VERIFIED: no write operations (Set-ItemProperty, Set-Content, New-Item, Remove-Item, powercfg, Register-*). Only netsh call is `netsh int udp show global` (read-only query). Only bcdedit call is `bcdedit /enum` (read-only query). All CIM/WMI queries wrapped in try/catch. Registry reads use Get-RegVal helper with try/catch/null-return. No timeout mechanism but all queries are fast (CIM is < 1s each).
+- [x] GUI-CLI parity — FIXED: added 9 missing checks to system-analysis.ps1 matching Verify-Settings.ps1: NTFS 8.3 names, DisableCoInstallers, MMCSS Games task, bcdedit dynamic/platform tick, Visual Effects, ClearType, Steam Overlay. Remaining intentional gaps: Verify-Settings uses Test-RegistryCheck with exact value matching + counter display; GUI uses structured objects for DataGrid. Both check same registry paths. GUI can work without CLI (shows "not optimized" for unconfigured items). If CLI was run first, GUI detects state correctly via progress.json + direct registry reads.
+- [x] START-GUI.bat — FIXED: added -WindowStyle Hidden to UAC elevation path (was missing, causing visible console window alongside WPF GUI when elevated). UAC elevation pattern matches START.bat. ExecutionPolicy Bypass present. Path quoting uses CMD "" escape inside single-quoted PS string — handles spaces correctly (%~dp0 expands before PS parsing).
 
 ---
 
