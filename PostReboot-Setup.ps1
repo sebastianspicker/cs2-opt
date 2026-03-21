@@ -53,8 +53,15 @@ if ($SCRIPT:DryRun) {
     $drChoice = Read-Host "  Continue in DRY-RUN mode? [Y/n]"
     if ($drChoice -match "^[nN]$") {
         $SCRIPT:DryRun = $false
-        $SCRIPT:Mode = "CONTROL"
-        Write-Host "  Switched to CONTROL mode — changes WILL be applied." -ForegroundColor Yellow
+        # Derive mode from current profile (must match Setup-Profile.ps1 logic)
+        $SCRIPT:Mode = switch ($SCRIPT:Profile) {
+            "SAFE"        { "AUTO" }
+            "RECOMMENDED" { "AUTO" }
+            "COMPETITIVE" { "CONTROL" }
+            "CUSTOM"      { "INFORMED" }
+            default       { "CONTROL" }
+        }
+        Write-Host "  Switched to $($SCRIPT:Mode) mode ($($SCRIPT:Profile) profile) — changes WILL be applied." -ForegroundColor Yellow
         # Persist the mode switch so re-launches don't revert to DRY-RUN
         try { $state | Add-Member -NotePropertyName "mode" -NotePropertyValue $SCRIPT:Mode -Force; Save-JsonAtomic -Data $state -Path $CFG_StateFile } catch {}
     }
