@@ -52,3 +52,36 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - `FPSHEAVEN2026.pow` dependency (binary `.pow` import replaced by native `powercfg` calls)
 - Debunked settings removed from autoexec: `-tickrate 128`, `-threads N`, `cl_cmdrate`, `net_graph 1`, `r_dynamic 0`, `mat_queue_mode 2`
 
+### Audit (March 2026)
+16-loop code audit (A1-A3, B1-B6, C1-C2, D1-D2, E1-E3, F1) covering infrastructure, phase scripts, specialized modules, GUI, tests, documentation, and CI/CD.
+
+**Bug fixes:**
+- Step 29: mouse acceleration curves were 20 bytes instead of required 40 bytes (INT64 per entry)
+- Step 9 DNS: only fastest adapter was configured; now sets DNS on all active adapters
+- Phase 3 DRY-RUN switch: mode derivation was hardcoded CONTROL instead of matching profile
+- Phase 3 fallback state missing `baselineAvg`, `baselineP1`, `appliedSteps` fields
+- GPU driver clean: CIM/WMI primary enumeration for non-English Windows (pnputil labels are locale-dependent)
+- NVIDIA registry fallback missing `DisableDynamicPstate=1` in GPU class key
+- Install-NvidiaDriverClean: unconditional `$true` return on non-zero exit codes
+- Step 37 services: SysMain/WSearch did not check service existence before disable
+- Step 38: silent failure on missing helpers/ directory during Safe Mode file copy
+- Step 13 debloat: duplicate autostart cleanup overlapped with Step 14
+- Phase 2 bcdedit: re-run caused false CRITICAL error when safeboot value already cleared
+- Legacy bare step-number keys in progress.json caused P1:5/P3:5 collision on resume
+- Pester test parse errors: `$key:` inside double-quoted strings parsed as scope qualifier
+
+**Reliability improvements:**
+- `-ErrorAction Stop` on all critical JSON readers (state.json, progress.json, backup.json)
+- Missing `-SkipAction` on T1 steps 2, 3, 4, 6 (CUSTOM profile decline left progress unrecorded)
+- Backup I/O batching: ~60 read/write cycles reduced to 38 (one flush per step)
+- Advisory lockfile for concurrent backup.json access
+- GUI: async timers stopped on window close to prevent post-dispose crashes
+- Restart-Computer gated by DRY-RUN at Phase 1 completion
+
+**New:**
+- Pester 5.x test suite: 7 test files, 150+ test cases covering core helpers
+- CI: Pester test job, EstimateKey cross-reference check, enhanced PSScriptAnalyzer rules
+- CI: security workflow with Restart-Computer/Remove-Item gate checks
+- Verify-Settings: added missing qWave + 4 Xbox service checks (was only SysMain + WSearch)
+- GUI system-analysis: 9 additional checks for GUI-CLI parity
+
