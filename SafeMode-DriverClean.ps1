@@ -189,6 +189,7 @@ try {
     Write-Host "  ║  UNEXPECTED ERROR DURING SAFE MODE SCRIPT               ║" -ForegroundColor Red
     Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Red
     Write-Host "  Error: $_" -ForegroundColor Red
+    if ($_.ScriptStackTrace) { Write-Host "  Stack: $($_.ScriptStackTrace)" -ForegroundColor DarkGray }
     Write-Host "" -ForegroundColor Yellow
     Write-Host "  RECOVERY:" -ForegroundColor Yellow
     Write-Host "  Step 1 (bcdedit) runs first. If it completed, next boot = Normal Mode." -ForegroundColor White
