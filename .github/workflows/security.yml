@@ -106,6 +106,38 @@ jobs:
             echo "::warning::Set-ExecutionPolicy Unrestricted found — verify necessity"
           fi
 
+          # Restart-Computer -Force without DRY-RUN gate or user prompt
+          # All uses must be inside a DryRun guard or after Confirm-Risk/Read-Host.
+          RESTART_HITS=$(grep -rEn 'Restart-Computer\s+-Force' --include='*.ps1' . 2>/dev/null | grep -v '.git/' | grep -v 'tests/' || true)
+          if [ -n "$RESTART_HITS" ]; then
+            while IFS= read -r line; do
+              FILE=$(echo "$line" | cut -d: -f1)
+              LINENO_HIT=$(echo "$line" | cut -d: -f2)
+              START=$((LINENO_HIT > 15 ? LINENO_HIT - 15 : 1))
+              CONTEXT=$(sed -n "${START},${LINENO_HIT}p" "$FILE")
+              if ! echo "$CONTEXT" | grep -qEi 'DryRun|Confirm-Risk|Read-Host'; then
+                echo "::error::Restart-Computer -Force at $FILE:$LINENO_HIT without DRY-RUN gate or user prompt"
+                FOUND=$((FOUND + 1))
+              fi
+            done <<< "$RESTART_HITS"
+          fi
+
+          # Remove-Item -Recurse -Force on bare variable paths (dangerous if empty/wrong)
+          # Excludes test files (cleanup of temp dirs is expected) and literal paths.
+          REMOVE_HITS=$(grep -rEn 'Remove-Item\s+\$\w+\s+-Recurse\s+-Force' --include='*.ps1' . 2>/dev/null | grep -v '.git/' | grep -v 'tests/' || true)
+          if [ -n "$REMOVE_HITS" ]; then
+            while IFS= read -r line; do
+              FILE=$(echo "$line" | cut -d: -f1)
+              LINENO_HIT=$(echo "$line" | cut -d: -f2)
+              VARNAME=$(echo "$line" | grep -oP 'Remove-Item\s+\$\K\w+')
+              START=$((LINENO_HIT > 10 ? LINENO_HIT - 10 : 1))
+              CONTEXT=$(sed -n "${START},${LINENO_HIT}p" "$FILE")
+              if ! echo "$CONTEXT" | grep -qEi "Test-Path|if.*\\\$${VARNAME}"; then
+                echo "::warning::Remove-Item -Recurse -Force on \$$VARNAME at $FILE:$LINENO_HIT — verify path is validated"
+              fi
+            done <<< "$REMOVE_HITS"
+          fi
+
           if [ "$FOUND" -gt 0 ]; then
             echo "::error::Dangerous pattern(s) found. Review before merging."
             exit 1
