@@ -33,7 +33,7 @@ try {
     Write-Host "  - Press [Y] to continue with defaults." -ForegroundColor Yellow
     $r = Read-Host "  Continue with defaults? [y/N]"
     if ($r -notmatch "^[jJyY]$") { exit 1 }
-    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; fpsCap=$null; avgFps=$null; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
+    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; fpsCap=0; avgFps=0; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }
 $fpsCap   = $state.fpsCap
@@ -389,29 +389,59 @@ if ($startStep -le 9) {
                 $dnsAddrs = if ($dnsChoice -eq "1") { $CFG_DNS_Cloudflare } else { $CFG_DNS_Google }
                 $dnsName  = if ($dnsChoice -eq "1") { "Cloudflare" } else { "Google" }
                 try {
-                    # Set DNS on ALL active physical adapters (wired + WiFi) — DNS is protocol-layer,
+                    # Set DNS on active physical adapters (wired + WiFi) — DNS is protocol-layer,
                     # unlike NIC hardware tweaks which are wired-only.
-                    # Filter out: virtual switches (Hyper-V), VPN tunnels (TAP/WireGuard/Tailscale/
-                    # Cisco/OpenVPN), Docker vEthernet, Bluetooth PAN, loopback.
+                    # Filter out: virtual switches (Hyper-V/WSL2 vEthernet), VPN tunnels, Docker,
+                    # Bluetooth PAN, loopback. Each VPN product is listed explicitly — no bare "VPN"
+                    # pattern that could false-match legitimate NICs (e.g., "Killer VPN-capable").
                     $nics = @(Get-NetAdapter | Where-Object {
                         $_.Status -eq "Up" -and
-                        $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth|TAP-Windows|WireGuard|Tailscale|OpenVPN|Cisco AnyConnect|Juniper|Fortinet|vEthernet|Docker|VPN"
+                        $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth|TAP-Windows|WireGuard|Tailscale|OpenVPN|Cisco AnyConnect|Juniper|Fortinet|vEthernet|Docker|Mullvad|NordLynx|ProtonVPN|SoftEther|GlobalProtect|Pulse Secure"
                     })
                     if ($nics.Count -gt 0) {
-                        # Show user which adapters will be affected
-                        $nicNames = ($nics | ForEach-Object { $_.Name }) -join ", "
-                        Write-Info "Adapters to update: $nicNames"
-                        if ($nics.Count -gt 1) {
-                            Write-Warn "Multiple adapters detected. DNS will be changed on ALL listed adapters."
-                            Write-Info "If you have a VPN or special adapter, press [N] and configure DNS manually."
-                            $confirmDns = Read-Host "  Apply DNS to all $($nics.Count) adapters? [Y/n]"
+                        # Show numbered list so user can identify each adapter
+                        Write-Blank
+                        Write-Host "  Detected active adapters:" -ForegroundColor White
+                        for ($i = 0; $i -lt $nics.Count; $i++) {
+                            Write-Host "    [$($i+1)]  $($nics[$i].Name)  ($($nics[$i].InterfaceDescription))" -ForegroundColor Cyan
+                        }
+                        Write-Blank
+
+                        if ($nics.Count -eq 1) {
+                            $confirmDns = Read-Host "  Apply $dnsName DNS to this adapter? [Y/n]"
                             if ($confirmDns -match "^[nN]$") {
                                 Write-Info "DNS not changed. Configure manually in Network Settings."
                                 Complete-Step $PHASE 9 "DNS"
                                 return
                             }
+                            $selectedNics = $nics
+                        } else {
+                            Write-Host "  [A]  Apply to ALL listed adapters" -ForegroundColor White
+                            Write-Host "  [S]  Select individual adapters" -ForegroundColor White
+                            Write-Host "  [N]  Skip — configure DNS manually" -ForegroundColor DarkGray
+                            do { $multiChoice = Read-Host "  [A/S/N]" } while ($multiChoice -notmatch "^[aAsSnN]$")
+                            if ($multiChoice -match "^[nN]$") {
+                                Write-Info "DNS not changed. Configure manually in Network Settings."
+                                Complete-Step $PHASE 9 "DNS"
+                                return
+                            }
+                            if ($multiChoice -match "^[sS]$") {
+                                $selectedNics = @()
+                                for ($i = 0; $i -lt $nics.Count; $i++) {
+                                    $pick = Read-Host "  Apply DNS to [$($i+1)] $($nics[$i].Name)? [y/N]"
+                                    if ($pick -match "^[jJyY]$") { $selectedNics += $nics[$i] }
+                                }
+                                if ($selectedNics.Count -eq 0) {
+                                    Write-Info "No adapters selected. DNS not changed."
+                                    Complete-Step $PHASE 9 "DNS"
+                                    return
+                                }
+                            } else {
+                                $selectedNics = $nics
+                            }
                         }
-                        foreach ($nic in $nics) {
+
+                        foreach ($nic in $selectedNics) {
                             if ($SCRIPT:DryRun) {
                                 Write-Host "  [DRY-RUN] Would set DNS to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))" -ForegroundColor Magenta
                             } else {
