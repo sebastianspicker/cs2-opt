@@ -323,7 +323,12 @@ if ($startStep -le 6) {
                     if ($LASTEXITCODE -ne 0) {
                         Write-Warn "High Performance not available — falling back to Balanced."
                         powercfg /setactive SCHEME_BALANCED 2>&1 | Out-Null
-                        Write-OK "Balanced power plan active (fallback)."
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Warn "Balanced plan also unavailable. Current power plan unchanged."
+                            Write-Info "Manually set power plan: Control Panel -> Power Options"
+                        } else {
+                            Write-OK "Balanced power plan active (fallback)."
+                        }
                     } else {
                         Write-OK "Windows High Performance active (fallback)."
                     }

@@ -29,12 +29,12 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 
 ## Phase B: Phase Scripts
 
-### B1 — System Base (Round 2)
-- [ ] New Skip-Step additions (Steps 2,3,4,6) — correct params?
-- [ ] Shader cache lock detection — false positives?
-- [ ] FSO Get-CS2InstallPath integration — handles all Steam library formats?
-- [ ] Power plan HP→Balanced fallback — correct GUID?
-- [ ] Pagefile non-C: warning — actionable message?
+### B1 — System Base (Round 2) — COMPLETE
+- [x] New Skip-Step additions (Steps 2,3,4,6) — correct params? — All 8 steps (2-9) have SkipAction with correct $PHASE, step number, and title matching their Complete-Step calls. CUSTOM profile T1 decline path traces correctly through tier-system.ps1 line 348-350.
+- [x] Shader cache lock detection — false positives? — Get-Process -Name "steam" is exact match (does NOT match steamwebhelper). Pre-deletion warning is precautionary ("may be locked"), not assertive. If Steam runs but no files are locked, deletion succeeds and shows "Cleared". Remaining count includes directories (cosmetic, not functional). Step always completes.
+- [x] FSO Get-CS2InstallPath integration — handles all Steam library formats? — Returns game directory, FSO code correctly appends \game\bin\win64\cs2.exe. Null return falls through to manual instructions. VDF regex handles escaped backslashes and forward slashes. Fallback loop covers C/D/E/F common locations. Test-Path works on UNC/network paths.
+- [x] Power plan HP→Balanced fallback — correct GUID? — SCHEME_BALANCED is correct alias for 381b4222-f694-41f0-9685-ff5bb260df2e. DRY-RUN guard correct. FIXED: Added LASTEXITCODE check after SCHEME_BALANCED activation — if both HP and Balanced are unavailable, shows actionable manual instruction instead of false success message.
+- [x] Pagefile non-C: warning — actionable message? — WMI query correct, filter for non-C: StartsWith check correct. Warning names drives and directs user to System Properties -> Advanced. AutomaticManagedPagefile .Put() works. C: pagefile still configured regardless of other-drive pagefiles.
 
 ### B2 — Hardware (Round 2)
 - [ ] Debloat autostart removal — was the dedup correct?
