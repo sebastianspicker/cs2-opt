@@ -47,8 +47,13 @@ if ($startStep -le 34) {
                 if (Test-Path $autoexecPath) {
                     $existingLines = @(Get-Content $autoexecPath -Encoding UTF8)
                     foreach ($line in $existingLines) {
+                        # Skip blank lines, comments (// ...), and command lines (exec, bind)
+                        if ($line -match '^\s*(//|$)') { continue }
+                        if ($line -match '^\s*(exec|bind|alias)\b') { continue }
                         if ($line -match '^\s*(\S+)\s+(.+)$') {
-                            $existingKeys[$Matches[1]] = $Matches[2].Trim()
+                            # Strip inline comments (CS2 treats // as comment delimiter)
+                            $val = $Matches[2] -replace '\s*//.*$', ''
+                            $existingKeys[$Matches[1]] = $val.Trim()
                         }
                     }
                     Write-Info "autoexec.cfg: $($existingLines.Count) lines, $($existingKeys.Count) CVars detected."
@@ -376,9 +381,19 @@ if ($startStep -le 36) {
         -Undo "Remove-MpPreference -ExclusionPath/Process; restore VisualFXSetting + AutoHDREnabled" `
         -Action {
             # ── Visual Effects ─────────────────────────────────────────────────
+            # VisualFXSetting=2 tells the System Properties dialog "Best Performance" is selected.
+            # UserPreferencesMask is the actual bitmap controlling individual visual effects.
+            # Setting both ensures immediate effect without requiring a separate logon cycle.
             Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" `
                 "VisualFXSetting" 2 "DWord" "Best Performance"
-            Write-OK "Visual effects: Best Performance."
+            # UserPreferencesMask: 90 12 03 80 10 00 00 00 = "Best Performance" with font smoothing ON
+            # Byte 2 = 0x03 (instead of 0x01) preserves ClearType/font smoothing — text remains readable.
+            # Without this, "Best Performance" disables ClearType, making text aliased and hard to read.
+            $upmPath = "HKCU:\Control Panel\Desktop"
+            Set-RegistryValue $upmPath "UserPreferencesMask" ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) "Binary" "Best Performance + ClearType preserved"
+            # FontSmoothing=2 is the string value that enables ClearType at the GDI level
+            Set-RegistryValue $upmPath "FontSmoothing" "2" "String" "ClearType font smoothing enabled"
+            Write-OK "Visual effects: Best Performance (ClearType font smoothing preserved)."
 
             # ── Windows Defender CS2 Exclusions ───────────────────────────────
             # Exclude CS2 executable and shader cache directories from real-time scanning.
@@ -462,14 +477,24 @@ if ($startStep -le 37) {
                 }
                 # ── SysMain + WSearch (original) ─────────────────────────────────────
                 try {
-                    Set-Service SysMain -StartupType Disabled -ErrorAction SilentlyContinue
-                    Stop-Service SysMain -Force -ErrorAction SilentlyContinue
-                    Write-OK "SysMain (Superfetch) disabled."
+                    $smSvc = Get-Service "SysMain" -ErrorAction SilentlyContinue
+                    if ($smSvc) {
+                        Set-Service SysMain -StartupType Disabled -ErrorAction Stop
+                        Stop-Service SysMain -Force -ErrorAction SilentlyContinue
+                        Write-OK "SysMain (Superfetch) disabled."
+                    } else {
+                        Write-Sub "SysMain: not present on this system (skipped)."
+                    }
                 } catch { Write-Warn "Could not disable SysMain: $_" }
                 try {
-                    Set-Service WSearch -StartupType Disabled -ErrorAction SilentlyContinue
-                    Stop-Service WSearch -Force -ErrorAction SilentlyContinue
-                    Write-OK "Windows Search disabled."
+                    $wsSvc = Get-Service "WSearch" -ErrorAction SilentlyContinue
+                    if ($wsSvc) {
+                        Set-Service WSearch -StartupType Disabled -ErrorAction Stop
+                        Stop-Service WSearch -Force -ErrorAction SilentlyContinue
+                        Write-OK "Windows Search disabled."
+                    } else {
+                        Write-Sub "WSearch: not present on this system (skipped)."
+                    }
                 } catch { Write-Warn "Could not disable Windows Search: $_" }
 
                 # ── qWave — Quality Windows Audio/Video Experience ───────────────────
@@ -549,7 +574,7 @@ if ($startStep -le 38) {
         foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
             $src = "$ScriptRoot\$f"
             if (Test-Path $src) {
-                Copy-Item $src "$CFG_WorkDir\$f" -Force
+                Copy-Item $src "$CFG_WorkDir\$f" -Force -ErrorAction Stop
                 Write-OK "Copied: $f"
             } else {
                 Write-Err "Missing: $f — all scripts must be in the same folder."
@@ -558,12 +583,15 @@ if ($startStep -le 38) {
         }
         # NOTE: FPSHEAVEN2026.pow replaced by native helpers/power-plan.ps1
         # NOTE: cs2_blur_fix.nip settings applied natively via helpers/nvidia-drs.ps1 (52 DWORD settings)
-        # Copy helpers module directory
+        # Copy helpers module directory (required — Phase 2/3 won't load without it)
         $helpersSrc = "$ScriptRoot\helpers"
         if (Test-Path $helpersSrc) {
             Ensure-Dir "$CFG_WorkDir\helpers"
-            Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse
+            Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
             Write-OK "Copied: helpers/ directory"
+        } else {
+            Write-Err "Missing: helpers/ directory — Phase 2/3 will fail without helper modules."
+            throw "Required directory missing: helpers/"
         }
 
         Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1"

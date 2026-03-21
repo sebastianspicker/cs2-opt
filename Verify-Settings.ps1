@@ -133,6 +133,7 @@ Test-RegistryCheck "HKCU:\Software\Valve\Steam" "GameOverlayDisabled" 1 "Steam O
 Write-Host "`n  ═══ VISUAL EFFECTS / WIN11 ═══" -ForegroundColor Cyan
 
 Test-RegistryCheck "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" "VisualFXSetting" 2 "Visual Effects (Best Performance)"
+Test-RegistryCheck "HKCU:\Control Panel\Desktop" "FontSmoothing" "2" "ClearType font smoothing enabled"
 Test-RegistryCheck "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\VideoSettings" "AutoHDREnabled" 0 "Win11 Auto HDR disabled"
 
 # ══════════════════════════════════════════════════════════════════════════════
