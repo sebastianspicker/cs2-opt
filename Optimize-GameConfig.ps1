@@ -49,7 +49,13 @@ if ($startStep -le 34) {
                     foreach ($line in $existingLines) {
                         # Skip blank lines, comments (// ...), and command lines (not CVar assignments)
                         if ($line -match '^\s*(//|$)') { continue }
-                        if ($line -match '^\s*(exec|bind|unbind|alias|toggle|incrementvar|echo|host_writeconfig|clear|say|say_team)\b') { continue }
+                        # Source 2 commands: bind/unbind/bindtoggle (key bindings), alias (macros),
+                        # exec (run cfg), toggle/incrementvar (CVar manipulation), echo/say/say_team (output),
+                        # host_writeconfig (save), clear (console), setinfo (user info strings),
+                        # unbindall (reset bindings), +/- prefix (hold/release actions like +jump).
+                        # Longer keywords before shorter (unbindall before unbind, bindtoggle before bind)
+                        # so the \b word-boundary check works correctly on shorter-prefix matches.
+                        if ($line -match '^\s*(\+|-|exec|bindtoggle|bind|unbindall|unbind|alias|toggle|incrementvar|echo|host_writeconfig|clear|say_team|say|setinfo)\b') { continue }
                         if ($line -match '^\s*(\S+)\s+(.+)$') {
                             # Strip inline comments (CS2 treats // as comment delimiter)
                             $val = $Matches[2] -replace '\s*//.*$', ''

@@ -158,7 +158,9 @@ Test-RegistryCheck "HKCU:\Software\Valve\Steam" "GameOverlayDisabled" 1 "Steam O
 Write-Host "`n  ═══ VISUAL EFFECTS / WIN11 ═══" -ForegroundColor Cyan
 
 Test-RegistryCheck "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" "VisualFXSetting" 2 "Visual Effects (Best Performance)"
-# UserPreferencesMask: binary comparison (Test-RegistryCheck uses -eq which is reference equality for byte[])
+# UserPreferencesMask: inline binary comparison via Compare-Object -SyncWindow 0.
+# Test-RegistryCheck uses -eq which is reference equality for byte[] (always false).
+# This is the only binary check in Verify-Settings; extract to a helper if more are added.
 try {
     $upmDesktop = "HKCU:\Control Panel\Desktop"
     $upmVal = (Get-ItemProperty -Path $upmDesktop -Name "UserPreferencesMask" -ErrorAction Stop).UserPreferencesMask
