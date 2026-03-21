@@ -353,6 +353,7 @@ function Apply-NvidiaCS2ProfileRegistry {
     $regSettings = @(
         # GPU class key — confirmed effective
         @{ Path=$NvKeyPath;    Name="PerfLevelSrc";                  Value=0x2222; Why="Power Management: Max Performance" }
+        @{ Path=$NvKeyPath;    Name="DisableDynamicPstate";          Value=1;      Why="Lock P0 at driver level (complements PerfLevelSrc)" }
         # NVTweak
         @{ Path=$nvGlobalPath; Name="Gestalt";                       Value=1;      Why="Shader cache control enabled" }
         # d3d keys — may be ignored by modern drivers
