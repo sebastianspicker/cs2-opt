@@ -5,12 +5,12 @@ Simplification pass after R1-R4 added +4,093 lines across 121 commits. 3 loops. 
 ## Loop 1: Simplify
 
 ### SIMPLIFY-R5 — Complexity Reduction
-- [ ] Identify over-engineered patterns (verbose guards, redundant checks, unnecessary abstractions)
-- [ ] Audit-added comments: helpful or noise? Remove "added by audit" commentary
-- [ ] Lock system: is 4-hour auto-expire actually needed? Simpler approach?
-- [ ] DNS 14-pattern filter: could this be a simpler wildcard? Or configurable?
-- [ ] Progress bar: clean implementation or bolted on?
-- [ ] DRY-RUN Write-OK guards (15+ locations): is there a cleaner pattern than if/else at each site?
+- [x] Over-engineered patterns: Removed 2 dead functions (Write-ToolInfo 12 lines, Write-RiskBadge 5 lines). No over-engineered try/catch, no single-use helpers, no unnecessary null guards found. Save-State wrapper kept (used in 2 prod + 6 test sites). T2 prompt duplication in RECOMMENDED/COMPETITIVE kept (self-contained profile matrix is more readable than extracted helper).
+- [x] Audit-added comments: Removed 12 lines of WHAT docstrings restating function names (Set-BackupLock, Remove-BackupLock, Show-BackupSummary, etc.). Removed "# Summary" and "# Find the profile" inline WHAT comments. Kept all WHY comments (PS 5.1 quirks, crash behavior, cross-file lock references, JSON round-trip uint32 casting).
+- [x] Lock system: KEEP AS-IS. The 4-hour auto-expire, PID+ProcessName check, and stale-lock cleanup handle 4 real scenarios (no lockfile, expired lock, dead PID, reused PID). ~40 lines for Test-BackupLock is proportional to the problem. Advisory lock + Save-JsonAtomic atomic writes = correct layered approach.
+- [x] DNS 14-pattern filter: Extracted to $CFG_VirtualAdapterFilter in config.env.ps1. Users can now add custom VPN adapter names in one place. PostReboot-Setup.ps1 uses the variable. hardware-detect.ps1 wired-NIC filter kept separate (intentionally also excludes Wi-Fi for hardware tweaks).
+- [x] Progress bar: CLEAN. 10 lines in Write-Section, graceful no-op when $SCRIPT:PhaseTotal unset, regex matches "Step N" titles only. Set in both entry points (Run-Optimize $TOTAL_STEPS, PostReboot-Setup 13). No changes needed.
+- [x] DRY-RUN Write-OK guards: Added Write-ActionOK helper (logging.ps1) — suppresses success messages in DRY-RUN where Set-RegistryValue already prints "[DRY-RUN] Would set:". Replaced 17 single-line guards across 6 files. Multi-line guards protecting actual operations (file writes, service changes) left explicit.
 
 ## Loop 2: Adversarial Interactions
 
