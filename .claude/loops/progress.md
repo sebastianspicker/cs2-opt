@@ -47,12 +47,12 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [ ] All 30 Set-RegistryValue calls still match Verify-Settings after D1 changes?
 - [ ] New EstimateKey wiring from A1 — estimate values reasonable?
 
-### B4 — Game Config (Round 2)
-- [ ] Autoexec parser comment/command skip — regex correct?
-- [ ] Service existence check pattern — consistent with Step 37?
-- [ ] Copy-Item -ErrorAction Stop — error message actionable?
-- [ ] UserPreferencesMask + ClearType — byte values correct?
-- [ ] Verify-Settings check for visual effects added in B4 — matches D1 parity?
+### B4 — Game Config (Round 2) — COMPLETE
+- [x] Autoexec parser comment/command skip — FIXED: expanded command skip regex from (exec|bind|alias) to include unbind, toggle, incrementvar, echo, host_writeconfig, clear, say, say_team. Comment regex (// and blank lines) correct for CS2 Source 2 format (#-style comments not used in CS2 cfg). Inline comment stripping safe (no CS2 CVar values contain //). Three-way merge logic unaffected (operates on $existingKeys dict populated by parser).
+- [x] Service existence check pattern — consistent with Step 37: all 7 services (SysMain, WSearch, qWave, 4 Xbox via $CFG_XboxServices) pre-checked with Get-Service -ErrorAction SilentlyContinue before Set-Service -ErrorAction Stop. Catch messages include service name + $_ error detail. Debloat.ps1 uses different pattern (no pre-check, relies on try/catch) but Backup-ServiceState handles non-existent services gracefully. Double-disable is harmless (Set-Service to already-Disabled is a no-op).
+- [x] Copy-Item -ErrorAction Stop — correct behavior: core scripts abort with actionable "Missing: $f" message + throw. Helpers dir abort also correct (Phase 2/3 would fail without them). Guide-VideoSettings.ps1 included in copy list. Wildcard copy gets all 18 helper modules.
+- [x] UserPreferencesMask + ClearType — byte values correct: 0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00 is standard "Best Performance" with byte 2 = 0x03 (bit 0 = font smoothing, bit 1 = ClearType). FontSmoothing="2" is ClearType at GDI level. No FontSmoothingType needed on Win10+.
+- [x] Verify-Settings visual effects — FIXED: added UserPreferencesMask 8-byte binary comparison using Compare-Object (Test-RegistryCheck -eq is reference equality for byte[]). Also fixed NtfsDisableLastAccessUpdate: 0x80000001 literal is [int64] but registry DWORD reads as [int32]-2147483647, causing false CHANGED. FontSmoothing and VisualFXSetting checks were already present and correct.
 
 ### B5 — Safe Mode (Round 2)
 - [ ] CIM driver enumeration — fallback to pnputil correct?
