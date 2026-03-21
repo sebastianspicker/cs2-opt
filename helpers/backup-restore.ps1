@@ -15,13 +15,38 @@ $CFG_BackupFile = "$CFG_WorkDir\backup.json"
 # Must match between Backup-DrsSettings (write) and Restore-DrsSettings (read).
 $SCRIPT:DRS_FOUND_VIA_APP = "(found via cs2.exe)"
 
+# ── In-memory batch buffer ─────────────────────────────────────────────────
+# Backup entries are accumulated in $SCRIPT:_backupPending during a step, then
+# flushed to disk once via Flush-BackupBuffer.  This avoids O(n^2) I/O from
+# reading+writing backup.json on every single Set-RegistryValue call (~60+
+# calls per full Phase 1 run).  Flush is called automatically by
+# Invoke-TieredStep after each step's action completes, and also by any
+# function that reads backup data (Get-BackupData) to ensure consistency.
+$SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+
 function Initialize-Backup {
     if (-not (Test-Path $CFG_BackupFile)) {
         Save-JsonAtomic -Data @{ entries = @(); created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") } -Path $CFG_BackupFile
     }
 }
 
-function Get-BackupData {
+function Flush-BackupBuffer {
+    <#  Writes any pending in-memory backup entries to backup.json in a single I/O pass.
+        Safe to call multiple times — no-op when the buffer is empty.  #>
+    if ($SCRIPT:_backupPending.Count -eq 0) { return }
+    $backup = Get-BackupDataRaw
+    $entries = [System.Collections.ArrayList]@($backup.entries)
+    foreach ($e in $SCRIPT:_backupPending) {
+        $entries.Add($e) | Out-Null
+    }
+    $backup.entries = @($entries)
+    Save-BackupData $backup
+    $SCRIPT:_backupPending.Clear()
+}
+
+function Get-BackupDataRaw {
+    <#  Reads backup.json from disk without flushing the pending buffer.
+        Internal use only — callers outside this module should use Get-BackupData.  #>
     if (-not (Test-Path $CFG_BackupFile)) { Initialize-Backup }
     try {
         $raw = Get-Content $CFG_BackupFile -Raw -ErrorAction Stop | ConvertFrom-Json
@@ -40,14 +65,22 @@ function Get-BackupData {
     }
 }
 
+function Get-BackupData {
+    <#  Returns all backup data including any pending (unflushed) entries.
+        Flushes the buffer first to ensure disk and memory are consistent.  #>
+    Flush-BackupBuffer
+    return Get-BackupDataRaw
+}
+
 function Save-BackupData($data) {
     Save-JsonAtomic -Data $data -Path $CFG_BackupFile -Depth 10
 }
 
 function Backup-RegistryValue {
-    <#  Records the current value of a registry key before modification.  #>
+    <#  Records the current value of a registry key before modification.
+        Entries are buffered in memory and flushed to disk at step boundaries
+        (via Flush-BackupBuffer) to avoid O(n^2) I/O.  #>
     param([string]$Path, [string]$Name, [string]$StepTitle)
-    $backup = Get-BackupData
     $existing = $null
     $regType  = $null
     try {
@@ -68,16 +101,13 @@ function Backup-RegistryValue {
         step          = $StepTitle
         timestamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    $entries = [System.Collections.ArrayList]@($backup.entries)
-    $entries.Add($entry) | Out-Null
-    $backup.entries = @($entries)
-    Save-BackupData $backup
+    $SCRIPT:_backupPending.Add($entry)
 }
 
 function Backup-ServiceState {
-    <#  Records current service start type, delayed-start flag, and status before modification.  #>
+    <#  Records current service start type, delayed-start flag, and status before modification.
+        Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$ServiceName, [string]$StepTitle)
-    $backup = Get-BackupData
     try {
         $svc = Get-Service -Name $ServiceName -ErrorAction Stop
         $startType = (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop).StartMode
@@ -98,18 +128,15 @@ function Backup-ServiceState {
             step              = $StepTitle
             timestamp         = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
-        $entries = [System.Collections.ArrayList]@($backup.entries)
-        $entries.Add($entry) | Out-Null
-        $backup.entries = @($entries)
-        Save-BackupData $backup
+        $SCRIPT:_backupPending.Add($entry)
     } catch { Write-Debug "Backup-ServiceState: $ServiceName not found" }
 }
 
 function Backup-PowerPlan {
-    <#  Records the currently active power plan GUID before switching.  #>
+    <#  Records the currently active power plan GUID before switching.
+        Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$StepTitle)
     if ($SCRIPT:DryRun) { Write-Host "  [DRY-RUN] Would backup current power plan" -ForegroundColor Magenta; return }
-    $backup = Get-BackupData
     $originalGuid = $null
     $originalName = $null
     try {
@@ -130,18 +157,15 @@ function Backup-PowerPlan {
             step          = $StepTitle
             timestamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
-        $entries = [System.Collections.ArrayList]@($backup.entries)
-        $entries.Add($entry) | Out-Null
-        $backup.entries = @($entries)
-        Save-BackupData $backup
+        $SCRIPT:_backupPending.Add($entry)
         Write-Debug "Backup-PowerPlan: saved $originalGuid ($originalName)"
     }
 }
 
 function Backup-BootConfig {
-    <#  Records current bcdedit value before modification.  #>
+    <#  Records current bcdedit value before modification.
+        Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$Key, [string]$StepTitle)
-    $backup = Get-BackupData
     $existing = $null
     try {
         $bcdOutput = bcdedit /enum "{current}" 2>&1
@@ -161,35 +185,34 @@ function Backup-BootConfig {
         step          = $StepTitle
         timestamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    $entries = [System.Collections.ArrayList]@($backup.entries)
-    $entries.Add($entry) | Out-Null
-    $backup.entries = @($entries)
-    Save-BackupData $backup
+    $SCRIPT:_backupPending.Add($entry)
 }
 
 function Backup-ScheduledTask {
-    <#  Records whether a scheduled task existed before we create/replace it.  #>
+    <#  Records whether a scheduled task existed and its enabled state before we modify it.
+        Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$TaskName, [string]$StepTitle, [string]$ScriptPath = "")
-    $backup = Get-BackupData
     $existed = $false
+    $wasEnabled = $false
     try {
         $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         $existed = ($null -ne $task)
+        if ($existed) {
+            $wasEnabled = ($task.State -ne "Disabled")
+        }
     } catch { Write-Debug "Backup-ScheduledTask: could not query task '$TaskName' — assuming it does not exist." }
 
     $entry = [ordered]@{
         type       = "scheduledtask"
         taskName   = $TaskName
         existed    = $existed
+        wasEnabled = $wasEnabled
         scriptPath = $ScriptPath
         step       = $StepTitle
         timestamp  = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    $entries = [System.Collections.ArrayList]@($backup.entries)
-    $entries.Add($entry) | Out-Null
-    $backup.entries = @($entries)
-    Save-BackupData $backup
-    Write-Debug "Backup-ScheduledTask: '$TaskName' existed=$existed"
+    $SCRIPT:_backupPending.Add($entry)
+    Write-Debug "Backup-ScheduledTask: '$TaskName' existed=$existed wasEnabled=$wasEnabled"
 }
 
 function Backup-DrsSettings {
@@ -199,6 +222,7 @@ function Backup-DrsSettings {
         Reads each setting ID from the DRS profile and stores the current value
         (or null if the setting doesn't exist yet) in backup.json.
         Called from Apply-NvidiaCS2ProfileDrs before writing new values.
+        Uses the in-memory buffer (flushed at step boundaries).
     #>
     param(
         [IntPtr]$Session,
@@ -208,15 +232,18 @@ function Backup-DrsSettings {
         [string]$ProfileName,
         [bool]$ProfileCreated
     )
-    $backup = Get-BackupData
 
     $settings = @()
     foreach ($id in $SettingIds) {
         [uint32]$currentValue = 0
         $status = [NvApiDrs]::GetDwordSetting($Session, $DrsProfile, $id, [ref]$currentValue)
+        # Store previousValue as [double] to preserve uint32 values through JSON round-trip.
+        # ConvertTo-Json/ConvertFrom-Json loses uint32 type info; values >2^31 would become
+        # negative Int32 or Int64. Casting to [double] ensures lossless round-trip for all
+        # uint32 values (double has 53-bit mantissa, uint32 needs only 32 bits).
         $settings += [ordered]@{
-            id            = $id
-            previousValue = $(if ($status -eq 0) { $currentValue } else { $null })
+            id            = [double]$id
+            previousValue = $(if ($status -eq 0) { [double]$currentValue } else { $null })
             existed       = ($status -eq 0)
         }
     }
@@ -229,10 +256,7 @@ function Backup-DrsSettings {
         settings       = $settings
         timestamp      = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    $entries = [System.Collections.ArrayList]@($backup.entries)
-    $entries.Add($entry) | Out-Null
-    $backup.entries = @($entries)
-    Save-BackupData $backup
+    $SCRIPT:_backupPending.Add($entry)
     Write-Debug "Backup-DrsSettings: saved $($SettingIds.Count) DRS settings for '$StepTitle'"
 }
 
