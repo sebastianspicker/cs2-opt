@@ -33,7 +33,7 @@ function Initialize-Backup {
     # (the lock is advisory; concurrent writes are protected by Save-JsonAtomic)
     if (Test-BackupLock) {
         Write-Warn "Another CS2 Optimization process appears to be running (backup.lock exists)."
-        Write-Warn "If the other process crashed, the lock will auto-clear."
+        Write-Warn "Close it first, or wait — stale locks auto-clear when the process exits (or after 4 hours)."
     }
     Set-BackupLock
 }
@@ -41,12 +41,25 @@ function Initialize-Backup {
 function Test-BackupLock {
     <#  Checks if another process is actively modifying backup.json.
         Returns $true if the lock is held (and the holding process is still alive).
-        Stale locks (from crashed processes) are automatically cleaned up.
+        Stale locks are automatically cleaned up in three cases:
+          1. The locking process is no longer running (crashed/exited).
+          2. The PID was reused by a non-PowerShell process.
+          3. The lock is older than 4 hours (handles hung/stalled processes).
         Mitigates PID reuse: verifies the process is PowerShell, not an unrelated
         process that inherited the recycled PID.  #>
     if (-not (Test-Path $CFG_BackupLockFile)) { return $false }
     try {
         $lockData = Get-Content $CFG_BackupLockFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        # Auto-expire: no optimization run should take more than 4 hours.
+        # Handles the case where a process is alive but hung/stalled indefinitely.
+        if ($lockData.started) {
+            $lockAge = (Get-Date) - [datetime]$lockData.started
+            if ($lockAge.TotalHours -gt 4) {
+                Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+                Write-Debug "Removed expired backup lock (age: $([math]::Round($lockAge.TotalHours, 1))h, PID $($lockData.pid))."
+                return $false
+            }
+        }
         # Check if the locking process is still alive
         $proc = Get-Process -Id $lockData.pid -ErrorAction SilentlyContinue
         if ($proc) {
