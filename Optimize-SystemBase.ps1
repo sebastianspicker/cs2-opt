@@ -187,15 +187,11 @@ if ($startStep -le 4) {
         -SideEffects "None — only affects cs2.exe rendering mode" `
         -Undo "Delete AppCompatFlags\Layers entry for cs2.exe" `
         -Action {
-            $cs2Paths = @(
-                "${env:ProgramFiles(x86)}\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe",
-                "$env:ProgramFiles\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
-            )
-            $steamBase = Get-SteamPath
-            if ($steamBase) {
-                $cs2Paths += "$steamBase\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
-            }
-            $cs2Exe = $cs2Paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+            # Use Get-CS2InstallPath which parses libraryfolders.vdf for custom library locations
+            $cs2Install = Get-CS2InstallPath
+            $cs2Exe = if ($cs2Install) { "$cs2Install\game\bin\win64\cs2.exe" } else { $null }
+            # Verify the exe actually exists at the detected path
+            if ($cs2Exe -and -not (Test-Path $cs2Exe)) { $cs2Exe = $null }
 
             if ($cs2Exe) {
                 Write-Debug "cs2.exe: $cs2Exe"
