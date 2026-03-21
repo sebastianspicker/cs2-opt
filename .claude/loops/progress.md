@@ -132,13 +132,13 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 ## Phase E: Quality
 
 ### E1 — Pester Tests
-- [ ] _TestInit.ps1
-- [ ] hardware-detect.Tests.ps1
-- [ ] tier-system.Tests.ps1
-- [ ] system-utils.Tests.ps1
-- [ ] backup-restore.Tests.ps1
-- [ ] step-state.Tests.ps1
-- [ ] config.Tests.ps1
+- [x] _TestInit.ps1 — common setup: loads config+helpers into temp dir, $SCRIPT: defaults, New-TestStateFile/ProgressFile/BackupFile helpers, Reset-TestState
+- [x] hardware-detect.Tests.ps1 — Get-IntelHybridCpuName (6 CPU cases + edge), Get-SteamPath (3 cases), Calculate-FpsCap (5 cases), Parse-BenchmarkOutput (6 cases), Test-XmpActive (DDR4/DDR5, 5 cases), Test-DualChannel (5 cases), Get-NvidiaDriverVersion (3 cases)
+- [x] tier-system.Tests.ps1 — Test-RiskAllowed (4x4 matrix + edge), Get-ProfileMaxRisk (6 cases), Invoke-TieredStep (T1/T2/T3 behavior, DRY-RUN, EstimateKey tracking, CUSTOM prompts, SkipAction), Get-ImprovementEstimate (4 cases), Save/Load-AppliedSteps round-trip (3 cases)
+- [x] system-utils.Tests.ps1 — Save-JsonAtomic (5 cases), Set-RegistryValue DRY-RUN (3 cases), Set-BootConfig DRY-RUN (3 cases), VerifyCounters (3 cases), Test-RegistryCheck quiet+counter modes (7 cases), Load/Save-State + Initialize-ScriptDefaults (7 cases)
+- [x] backup-restore.Tests.ps1 — Initialize-Backup (3 cases), Backup-RegistryValue buffering (2 cases), Flush-BackupBuffer (2 cases), Get-BackupData (4 cases incl. corrupted JSON), accumulation (2 cases), Restore-StepChanges (5 cases incl. failure retention), Backup-ServiceState (2 cases), lock system (5 cases)
+- [x] step-state.Tests.ps1 — Complete-Step/Test-StepDone round-trip (7 cases), phase key collision avoidance (2 cases), Skip-Step (6 cases), Clear-Progress (4 cases), Load-Progress corrupted JSON (4 cases), integration mixed complete+skip (1 case)
+- [x] config.Tests.ps1 — EstimateKey cross-reference (4 cases), CS2 autoexec (7 cases incl. duplicate check), NIC tweaks (5 cases), path format (4 cases), NVIDIA profile estimates (3 cases), DNS (3 cases), FPS cap bounds (2 cases)
 
 ### E2 — Documentation Accuracy
 - [ ] evidence.md
