@@ -5,11 +5,11 @@ Adversarial pass after R1+R2+R3 = ~108 fixes, 107 commits. Ultra-lean: 4 loops. 
 ## Loop 1: Hot Files Deep Review
 
 ### HOT-R4 — Most-Modified Files
-- [ ] Optimize-SystemBase.ps1 (5 commits) — re-read entire file end-to-end, verify coherent flow
-- [ ] PostReboot-Setup.ps1 (4+ commits) — re-read entire file, verify state handling coherent
-- [ ] SafeMode-DriverClean.ps1 (4+ commits) — re-read entire file, verify all 3 rounds of locale fixes compose correctly
-- [ ] helpers/backup-restore.ps1 (5+ commits) — re-read buffer+lock+restore, verify no dead code or orphaned functions
-- [ ] Verify-Settings.ps1 (4+ commits) — re-read all 52 checks, verify no duplicates or contradictions
+- [x] Optimize-SystemBase.ps1 — Steps 2-9 coherent. Skip/Complete pairs correct. FSO uses Get-CS2InstallPath (clean). Power plan HP->Balanced->error fallback clean. Fixed unused $hpResult variable (-> | Out-Null). No orphaned vars.
+- [x] PostReboot-Setup.ps1 — 10 state fields in fallback (all used). DRY-RUN derivation matches Setup-Profile. try/finally wraps Initialize-Backup correctly. DNS per-adapter menu handles all paths (single/multi/skip). Step 13 Load-AppliedSteps works with empty appliedSteps. No dead code.
+- [x] SafeMode-DriverClean.ps1 — All 3 rounds of locale fixes compose into ONE clean implementation: bcdedit /v with 0x26000081 (raw BCD element ID). No dead code from intermediate approaches. DRY-RUN guard at line 78. try/catch/finally correct. Crash recovery includes stack trace. CIM ClassGuid used in gpu-driver-clean.ps1 (not DeviceClass).
+- [x] helpers/backup-restore.ps1 — Buffer system clean: _backupPending init -> Backup-* add -> Flush writes -> Clear. Lock system: Initialize -> Test (PID+ProcessName) -> Set -> Remove. Restore: binary [0,255] validation, MultiString scalar wrap, $null guard all in place. wasEnabled captured and restored with $null default. All 19 functions used. No orphaned functions.
+- [x] Verify-Settings.ps1 — 52 checks on max path (40 registry + 1 UPM binary + 2 bcdedit + 2 INFO + 7 services). Zero duplicates (verified programmatically). All values match optimizer code (spot-checked: MouseDataQueueSize=50, UserDuckingPreference=3, AllowAutoGameMode=1, OverlayTestMode=5, NtfsDisableLastAccessUpdate=-2147483647). XboxGipSvc warning label present. GPU key uses $CFG_GUID_Display (consistent).
 
 ## Loop 2: New Code Audit
 
