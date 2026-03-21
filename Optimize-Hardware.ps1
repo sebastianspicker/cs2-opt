@@ -281,7 +281,7 @@ if ($startStep -le 16) {
                         Write-Debug "URO: command failed (build $osBuild) — $_"
                     }
                 } else {
-                    Write-Info "[DRY-RUN] Would run: netsh int udp set global uro=disabled"
+                    Write-Host "  [DRY-RUN] Would run: netsh int udp set global uro=disabled" -ForegroundColor Magenta
                 }
             } else {
                 Write-Sub "URO: Windows 10 detected (build $osBuild) — Win11+ only, skipping"
@@ -316,7 +316,7 @@ if ($startStep -le 16) {
                 Write-Info "Consumer ISPs strip DSCP markings at the first hop."
                 Write-Info "Undo: Remove-NetQosPolicy -Name CS2_UDP_Ports,CS2_App -Confirm:`$false"
             } else {
-                Write-Info "[DRY-RUN] Would create: QoS DSCP EF=46 policies for CS2 (port + app-path)"
+                Write-Host "  [DRY-RUN] Would create: QoS DSCP EF=46 policies for CS2 (port + app-path)" -ForegroundColor Magenta
             }
 
             # ── IPv6 — LEFT ENABLED (2026 reversal) ──────────────────────────────────
