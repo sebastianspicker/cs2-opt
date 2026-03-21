@@ -88,15 +88,19 @@ if ($startStep -le 1) {
             Write-Info "If you downloaded the driver manually, provide the path now."
             $driverExe = Read-Host "  Path to NVIDIA driver .exe (or [Enter] to download)"
             if ([string]::IsNullOrWhiteSpace($driverExe)) {
-                Write-Step "Attempting automatic driver download..."
-                $driverInfo = Get-LatestNvidiaDriver
-                if ($driverInfo -and -not $driverInfo.ManualDownload) {
-                    $driverExe = "$CFG_WorkDir\nvidia_driver.exe"
-                    Invoke-Download $driverInfo.Url $driverExe "NVIDIA Driver $($driverInfo.Version)" | Out-Null
+                if ($SCRIPT:DryRun) {
+                    Write-Host "  [DRY-RUN] Would attempt automatic NVIDIA driver download" -ForegroundColor Magenta
                 } else {
-                    Write-Warn "Auto-download failed. Download manually:"
-                    Write-Info "https://www.nvidia.com/en-us/drivers/"
-                    $driverExe = Read-Host "  Path to downloaded .exe"
+                    Write-Step "Attempting automatic driver download..."
+                    $driverInfo = Get-LatestNvidiaDriver
+                    if ($driverInfo -and -not $driverInfo.ManualDownload) {
+                        $driverExe = "$CFG_WorkDir\nvidia_driver.exe"
+                        Invoke-Download $driverInfo.Url $driverExe "NVIDIA Driver $($driverInfo.Version)" | Out-Null
+                    } else {
+                        Write-Warn "Auto-download failed. Download manually:"
+                        Write-Info "https://www.nvidia.com/en-us/drivers/"
+                        $driverExe = Read-Host "  Path to downloaded .exe"
+                    }
                 }
             }
         }

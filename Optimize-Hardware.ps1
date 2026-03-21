@@ -443,6 +443,15 @@ if ($startStep -le 19) {
                     "https://www.nvidia.com/en-us/drivers/" | Set-Clipboard
                     Write-OK "NVIDIA download page copied to clipboard."
                     Write-Info "Download the driver .exe, then provide the path in Phase 3."
+                } elseif ($SCRIPT:DryRun) {
+                    $driverInfo = Get-LatestNvidiaDriver
+                    if ($driverInfo -and -not $driverInfo.ManualDownload) {
+                        Write-Host "  [DRY-RUN] Would download NVIDIA driver: $($driverInfo.Version)" -ForegroundColor Magenta
+                        Write-Host "  [DRY-RUN]   URL: $($driverInfo.Url)" -ForegroundColor DarkMagenta
+                        Write-Host "  [DRY-RUN]   Dest: $CFG_WorkDir\nvidia_driver.exe (~600 MB)" -ForegroundColor DarkMagenta
+                    } else {
+                        Write-Host "  [DRY-RUN] Would prompt manual download from nvidia.com/drivers" -ForegroundColor Magenta
+                    }
                 } else {
                     $driverInfo = Get-LatestNvidiaDriver
                     if ($driverInfo -and -not $driverInfo.ManualDownload) {
