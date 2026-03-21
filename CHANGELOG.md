@@ -53,7 +53,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Debunked settings removed from autoexec: `-tickrate 128`, `-threads N`, `cl_cmdrate`, `net_graph 1`, `r_dynamic 0`, `mat_queue_mode 2`
 
 ### Audit (March 2026)
-16-loop code audit (A1-A3, B1-B6, C1-C2, D1-D2, E1-E3, F1) covering infrastructure, phase scripts, specialized modules, GUI, tests, documentation, and CI/CD.
+5-round, 16-loop code audit covering infrastructure, phase scripts, specialized modules, GUI, tests, documentation, CI/CD, UX, and code simplification.
 
 **Bug fixes:**
 - Step 29: mouse acceleration curves were 20 bytes instead of required 40 bytes (INT64 per entry)
@@ -69,17 +69,31 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Phase 2 bcdedit: re-run caused false CRITICAL error when safeboot value already cleared
 - Legacy bare step-number keys in progress.json caused P1:5/P3:5 collision on resume
 - Pester test parse errors: `$key:` inside double-quoted strings parsed as scope qualifier
+- Verify-Settings counter leaks: HAGS and PowerThrottling branches missed counter increment
 
 **Reliability improvements:**
 - `-ErrorAction Stop` on all critical JSON readers (state.json, progress.json, backup.json)
 - Missing `-SkipAction` on T1 steps 2, 3, 4, 6 (CUSTOM profile decline left progress unrecorded)
 - Backup I/O batching: ~60 read/write cycles reduced to 38 (one flush per step)
-- Advisory lockfile for concurrent backup.json access
+- Advisory lockfile for concurrent backup.json access with 4-hour auto-expire
 - GUI: async timers stopped on window close to prevent post-dispose crashes
 - Restart-Computer gated by DRY-RUN at Phase 1 completion
+- Initialize-Backup moved inside try/finally in all entry points
+
+**UX improvements:**
+- Step progress bar (`[Step 5/38]`) in Phase 1 and Phase 3 banners
+- DRY-RUN completion banners clarified (no longer imply changes were applied)
+- Resume prompt shows previously skipped steps for context
+- Verify-Settings summary with OK/MISSING/WARN counts
+- `Write-ActionOK` helper consolidates 17 single-line DRY-RUN success-message guards
+
+**Simplification:**
+- DNS virtual-adapter filter extracted to `$CFG_VirtualAdapterFilter` in config.env.ps1
+- Removed dead functions: `Write-ToolInfo`, `Write-RiskBadge`
+- Removed 12 WHAT-docstrings that restated function names
 
 **New:**
-- Pester 5.x test suite: 6 test files, 200+ test cases covering core helpers
+- Pester 5.x test suite: 6 test files, 203 test cases covering core helpers
 - CI: Pester test job, EstimateKey cross-reference check, enhanced PSScriptAnalyzer rules
 - CI: security workflow with Restart-Computer/Remove-Item gate checks
 - Verify-Settings: added missing qWave + 4 Xbox service checks (was only SysMain + WSearch)

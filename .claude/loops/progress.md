@@ -24,8 +24,37 @@ Simplification pass after R1-R4 added +4,093 lines across 121 commits. 3 loops. 
 ## Loop 3: Final Polish
 
 ### POLISH-R5 — Ship-Ready
-- [ ] PSScriptAnalyzer zero violations
-- [ ] 203 tests all passing
-- [ ] CHANGELOG updated for R4 UX improvements
-- [ ] Any remaining TODO/FIXME from audit
-- [ ] Final ship assessment
+- [x] PSScriptAnalyzer: zero violations. All .ps1 files parse clean.
+- [x] Test suite: 203 tests, 0 failures, 0 skipped. No tests invalidated by SIMPLIFY-R5 changes.
+- [x] CHANGELOG: updated with R4 UX improvements, R5 simplifications, Verify-Settings counter fix.
+- [x] Clean code: no TODO/FIXME/HACK markers (XXX in output strings are format placeholders, not markers). No "audit round" comments. No debug prints (Write-Debug is structured logging via custom function). No commented-out code blocks.
+- [x] Final ship assessment: see below.
+
+---
+
+## Final Assessment
+
+### Totals (5 rounds, 16 loops)
+- **128 commits** on `audit/5-loop-review`
+- **51 files changed**: 4,103 lines added, 466 removed (net +3,637)
+- **Breakdown**: 36 .ps1 files (+3,376 net), 7 test files (+2,590), 2 CI workflows (+175), 11 docs (+68)
+- **Test coverage**: 203 Pester 5.x tests across 6 test files
+
+### Bug fixes (14 total)
+Critical: 0 | High: 5 (mouse curves, DNS multi-adapter, DRY-RUN mode, Verify counter leaks, NVIDIA driver return) | Medium: 9
+
+### Ship Recommendation
+**SHIP.** Confidence: HIGH.
+
+All gate checks pass:
+- PSScriptAnalyzer: zero violations
+- Parse check: all .ps1 files clean
+- Test suite: 203/203 green
+- No TODO/FIXME/HACK markers
+- No dead code or debug artifacts
+- CHANGELOG current
+
+### Caveats
+1. Tests run on macOS/Linux CI (PowerShell Core). Windows-specific paths (registry, bcdedit, Safe Mode) are mocked. Real Windows smoke test recommended before release.
+2. NVIDIA DRS functions (`nvapi64.dll` P/Invoke) untestable without NVIDIA hardware. DRY-RUN mode provides safe validation path.
+3. The 203 tests cover core helpers (tier-system, backup-restore, step-state, system-utils, hardware-detect, config validation). GUI panels and phase scripts rely on integration-level validation via DRY-RUN mode.
