@@ -92,7 +92,9 @@ Write-Host "`n  ═══ SYSTEM LATENCY TWEAKS ═══" -ForegroundColor Cyan
 Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\FTH" "Enabled" 0 "Fault Tolerant Heap disabled"
 Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Installer" "DisableCoInstallers" 1 "PnP co-installers disabled"
 Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance" "MaintenanceDisabled" 1 "Automatic Maintenance disabled"
-Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisableLastAccessUpdate" 0x80000001 "NTFS last-access update disabled"
+# 0x80000001 stored as DWORD reads back as [int32]-2147483647 in PowerShell
+# (0x80000001 literal is [int64]2147483649 — int32/int64 mismatch would fail -eq)
+Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisableLastAccessUpdate" (-2147483647) "NTFS last-access update disabled"
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisable8dot3NameCreation" 1 "NTFS 8.3 name creation disabled"
 
 Write-Host "`n  ═══ MOUSE ═══" -ForegroundColor Cyan
@@ -133,6 +135,29 @@ Test-RegistryCheck "HKCU:\Software\Valve\Steam" "GameOverlayDisabled" 1 "Steam O
 Write-Host "`n  ═══ VISUAL EFFECTS / WIN11 ═══" -ForegroundColor Cyan
 
 Test-RegistryCheck "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" "VisualFXSetting" 2 "Visual Effects (Best Performance)"
+# UserPreferencesMask: binary comparison (Test-RegistryCheck uses -eq which is reference equality for byte[])
+try {
+    $upmDesktop = "HKCU:\Control Panel\Desktop"
+    $upmVal = (Get-ItemProperty -Path $upmDesktop -Name "UserPreferencesMask" -ErrorAction Stop).UserPreferencesMask
+    $upmExpected = [byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)
+    if ($null -eq $upmVal) {
+        Write-Host "  ?  MISSING   UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Red
+        Write-Host "               $upmDesktop\UserPreferencesMask" -ForegroundColor DarkGray
+        $global:_verifyMissingCount++
+    } elseif (@(Compare-Object $upmVal $upmExpected -SyncWindow 0).Count -eq 0) {
+        Write-Host "  ✓  OK        UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Green
+        $global:_verifyOkCount++
+    } else {
+        $hexVal = ($upmVal | ForEach-Object { '{0:X2}' -f $_ }) -join ' '
+        Write-Host "  ✗  CHANGED   UserPreferencesMask (is: $hexVal, expected: 90 12 03 80 10 00 00 00)" -ForegroundColor Yellow
+        Write-Host "               $upmDesktop\UserPreferencesMask" -ForegroundColor DarkGray
+        $global:_verifyChangedCount++
+    }
+} catch {
+    Write-Host "  ?  MISSING   UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Red
+    Write-Host "               HKCU:\Control Panel\Desktop\UserPreferencesMask" -ForegroundColor DarkGray
+    $global:_verifyMissingCount++
+}
 Test-RegistryCheck "HKCU:\Control Panel\Desktop" "FontSmoothing" "2" "ClearType font smoothing enabled"
 Test-RegistryCheck "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\VideoSettings" "AutoHDREnabled" 0 "Win11 Auto HDR disabled"
 

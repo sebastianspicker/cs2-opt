@@ -47,9 +47,9 @@ if ($startStep -le 34) {
                 if (Test-Path $autoexecPath) {
                     $existingLines = @(Get-Content $autoexecPath -Encoding UTF8)
                     foreach ($line in $existingLines) {
-                        # Skip blank lines, comments (// ...), and command lines (exec, bind)
+                        # Skip blank lines, comments (// ...), and command lines (not CVar assignments)
                         if ($line -match '^\s*(//|$)') { continue }
-                        if ($line -match '^\s*(exec|bind|alias)\b') { continue }
+                        if ($line -match '^\s*(exec|bind|unbind|alias|toggle|incrementvar|echo|host_writeconfig|clear|say|say_team)\b') { continue }
                         if ($line -match '^\s*(\S+)\s+(.+)$') {
                             # Strip inline comments (CS2 treats // as comment delimiter)
                             $val = $Matches[2] -replace '\s*//.*$', ''
