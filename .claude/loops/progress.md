@@ -151,12 +151,12 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [ ] README.md
 
 ### E3 — CI/CD Enhancement
-- [ ] Pester test job
-- [ ] EstimateKey cross-reference check
-- [ ] PSScriptAnalyzer rules review
-- [ ] Security workflow enhancements
-- [ ] Stale SHA pin fix
-- [ ] Concurrency and caching
+- [x] Pester test job — added `pester` job to lint.yml: windows-latest, Pester 5.x install, NUnit XML output, upload-artifact v4.6.2 (SHA-pinned), 5-min timeout, module caching via actions/cache v4.3.0
+- [x] EstimateKey cross-reference check — added `estimate-keys` job to lint.yml: ubuntu-latest, parses 5 phase scripts for -EstimateKey values, verifies each exists in $CFG_ImprovementEstimates. Fails build on mismatch.
+- [x] PSScriptAnalyzer rules review — all 11 exclusions validated (updated PSAvoidUsingEmptyCatchBlock comment with exact 7 instances, added PS 5.1 note to PSAvoidGlobalVars). Added 5 explicit security rules: ConvertToSecureStringWithPlainText, InvokeExpression, PlainTextForPassword, UsernameAndPasswordParams, UseCompatibleSyntax (5.1+7.4). Added review date header.
+- [x] Security workflow enhancements — added Restart-Computer -Force gate check (verifies DryRun/Confirm-Risk/Read-Host within 15 preceding lines, fails build if ungated). Added Remove-Item -Recurse -Force variable path check (warns when bare variable passed without Test-Path guard, excludes tests/).
+- [x] Stale SHA pin fix — updated descriptive comment from "v4.2.2 (2024-10-28)" to "v6.0.2 (2026-01-09)" matching actual SHA de0fac2e... Inline comments were already correct.
+- [x] Concurrency and caching — concurrency patterns verified correct (head_ref for PRs, run_id for pushes). Added actions/cache v4.3.0 (SHA-pinned) for PSScriptAnalyzer and Pester modules. Reduced PSScriptAnalyzer timeout from 10 to 5 minutes. All jobs now 5-min timeout.
 
 ---
 
