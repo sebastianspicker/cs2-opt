@@ -195,8 +195,8 @@ function Load-Optimize {
 
     $rows = foreach ($s in $SCRIPT:StepCatalog) {
         $stepKey = "P$($s.Phase):$($s.Step)"
-        $isDone  = $stepKey -in $completed -or $s.Step -in $completed
-        $isSkip  = $stepKey -in $skipped -or $s.Step -in $skipped
+        $isDone  = $stepKey -in $completed
+        $isSkip  = $stepKey -in $skipped
 
         $statusKey   = if ($s.CheckOnly) { "Check" } elseif ($isDone) { "Done" } elseif ($isSkip) { "Skipped" } else { "Pending" }
         $statusLabel = if ($s.CheckOnly) { "—  Check" } elseif ($isDone) { "✓  Done" } elseif ($isSkip) { "—  Skipped" } else { "○  Pending" }
@@ -709,7 +709,7 @@ $writeVideo = {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Settings {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile | ConvertFrom-Json } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
 
     $prof = if ($state) { $state.profile } else { "RECOMMENDED" }
     switch ($prof) {
@@ -735,7 +735,7 @@ function Save-SettingsToState {
     }
     try {
         $state = $null
-        if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile | ConvertFrom-Json }
+        if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop }
         # Skip write if nothing changed
         if ($state -and $state.profile -eq $prof -and $state.mode -eq $mode) { return }
         if (-not $state) { $state = [PSCustomObject]@{ mode = $mode; profile = $prof } }

@@ -171,6 +171,10 @@ Write-Host "`n  ═══ SERVICES ═══" -ForegroundColor Cyan
 
 Test-ServiceCheck "SysMain" "Disabled" "SysMain (Superfetch)"
 Test-ServiceCheck "WSearch" "Disabled" "Windows Search"
+Test-ServiceCheck "qWave"   "Disabled" "qWave (QoS network probes)"
+foreach ($xSvc in $CFG_XboxServices) {
+    Test-ServiceCheck $xSvc "Disabled" "$xSvc (Xbox background service)"
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SUMMARY

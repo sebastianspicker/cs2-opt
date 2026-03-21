@@ -237,13 +237,15 @@ if ($doDriver) {
     }
 
     foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
-        if (Test-Path "$ScriptRoot\$f") { Copy-Item "$ScriptRoot\$f" "$CFG_WorkDir\$f" -Force }
+        if (Test-Path "$ScriptRoot\$f") { Copy-Item "$ScriptRoot\$f" "$CFG_WorkDir\$f" -Force -ErrorAction Stop }
     }
     # Copy helpers module directory
     $helpersSrc = "$ScriptRoot\helpers"
     if (Test-Path $helpersSrc) {
         Ensure-Dir "$CFG_WorkDir\helpers"
-        Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse
+        Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
+    } else {
+        throw "helpers/ directory not found at $helpersSrc — cannot proceed with Driver Refresh."
     }
 
     # Reset all progress unconditionally — Phase 2+3 will re-run from scratch

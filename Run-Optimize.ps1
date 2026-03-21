@@ -78,5 +78,9 @@ Write-Host "  ╚═════════════════════
 Write-Info "Log: $CFG_LogFile"
 
 if (Confirm-Risk "Restart now?" "Save all files!") {
-    Start-Sleep 5; Restart-Computer -Force
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would restart computer for Phase 2 Safe Mode." -ForegroundColor Magenta
+    } else {
+        Start-Sleep 5; Restart-Computer -Force
+    }
 }

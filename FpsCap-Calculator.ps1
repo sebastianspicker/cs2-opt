@@ -137,7 +137,7 @@ Write-Debug "FPS cap calculated: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
 # Update state
 if (Test-Path $CFG_StateFile) {
     try {
-        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+        $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
         $st | Add-Member -NotePropertyName "fpsCap"  -NotePropertyValue $cap  -Force
         $st | Add-Member -NotePropertyName "avgFps"  -NotePropertyValue $avg  -Force
         $st | Add-Member -NotePropertyName "p1Fps"   -NotePropertyValue $p1   -Force

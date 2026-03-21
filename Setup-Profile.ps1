@@ -135,7 +135,7 @@ if ($startStep -eq 1) {
 # Load or create state
 $state = $null
 if (Test-Path $CFG_StateFile) {
-    try { $state = Get-Content $CFG_StateFile | ConvertFrom-Json } catch {}
+    try { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } catch {}
 }
 
 if (-not $state -or $startStep -eq 1) {

@@ -778,7 +778,7 @@ function Switch-Panel {
 # ── Sidebar status helpers ────────────────────────────────────────────────────
 function Update-SidebarStatus {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile | ConvertFrom-Json } } catch {}
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch {}
     $prof = if ($state) { $state.profile } else { "—" }
     $dry  = if ($state -and $state.mode -eq "DRY-RUN") { "DRY-RUN ON" } else { "" }
     $Window.Dispatcher.Invoke({
