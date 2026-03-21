@@ -22,11 +22,11 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [ ] Scheduled task backup
 
 ### A3 — DRY-RUN Correctness
-- [ ] DRY-RUN leak audit (all write operations)
-- [ ] State persistence in DRY-RUN
-- [ ] Cross-phase inheritance
-- [ ] Per-helper DRY-RUN audit
-- [ ] Output completeness
+- [x] DRY-RUN leak audit (all write operations) — FIXED: shader cache Remove-Item in Optimize-SystemBase.ps1 Step 3, bcdedit /deletevalue safeboot in SafeMode-DriverClean.ps1, Clear-Dir/ipconfig/wevtutil/prefetch/RAM-trim/Steam-validate in Cleanup.ps1. All now gated with descriptive [DRY-RUN] messages. Confirmed: debloat, MSI, power-plan, NIC tweaks, QoS policies, services, NVIDIA install/profile all properly gated.
+- [x] State persistence in DRY-RUN — INTENTIONAL: state.json written in DRY-RUN for mode propagation across phases (Setup-Profile.ps1). progress.json properly guarded (Complete-Step/Skip-Step return early). backup.json entries properly guarded (Set-RegistryValue/Set-BootConfig only backup when not DRY-RUN). Directory creation intentional for infrastructure.
+- [x] Cross-phase inheritance — CORRECT: Phase 1 saves mode="DRY-RUN" to state.json. Phase 2 loads via Load-State, now properly guards bcdedit /deletevalue safeboot + Restart-Computer. Phase 3 loads state, shows DRY-RUN banner, offers switch; persists mode change. Phase 1 Step 38 Set-BootConfig "safeboot" intercepted so DRY-RUN never actually reaches Safe Mode.
+- [x] Per-helper DRY-RUN audit — ALL PASS: msi-interrupts.ps1 (Set-ItemProperty/New-Item inside DryRun guards), gpu-driver-clean.ps1 (early return line 24-32), process-priority.ps1 (IFEO via Set-RegistryValue, task via early return line 165-168), power-plan.ps1 (Set-PowerPlanValue wrapper + New-CS2PowerPlan early return), debloat.ps1 (all 5 operation types gated), nvidia-driver.ps1 (early return line 127-133 + post-install services gated), nvidia-profile.ps1 (DRS writes gated line 304-306)
+- [x] Output completeness — ALL DRY-RUN interceptions include descriptive [DRY-RUN] prefix messages in Magenta/DarkMagenta. Invoke-TieredStep shows title+depth+improvement. Set-RegistryValue shows name+value+type+path. Set-BootConfig shows key+val. No silent skips found. Complete-Step/Skip-Step use Write-Debug (intentional for internal tracking).
 
 ---
 
