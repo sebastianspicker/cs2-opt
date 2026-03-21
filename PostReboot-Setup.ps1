@@ -388,13 +388,28 @@ if ($startStep -le 9) {
                 $dnsAddrs = if ($dnsChoice -eq "1") { $CFG_DNS_Cloudflare } else { $CFG_DNS_Google }
                 $dnsName  = if ($dnsChoice -eq "1") { "Cloudflare" } else { "Google" }
                 try {
-                    # Set DNS on ALL active adapters (wired + WiFi) — DNS is protocol-layer,
-                    # unlike NIC hardware tweaks which are wired-only
+                    # Set DNS on ALL active physical adapters (wired + WiFi) — DNS is protocol-layer,
+                    # unlike NIC hardware tweaks which are wired-only.
+                    # Filter out: virtual switches (Hyper-V), VPN tunnels (TAP/WireGuard/Tailscale/
+                    # Cisco/OpenVPN), Docker vEthernet, Bluetooth PAN, loopback.
                     $nics = @(Get-NetAdapter | Where-Object {
                         $_.Status -eq "Up" -and
-                        $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth"
+                        $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth|TAP-Windows|WireGuard|Tailscale|OpenVPN|Cisco AnyConnect|Juniper|Fortinet|vEthernet|Docker|VPN"
                     })
                     if ($nics.Count -gt 0) {
+                        # Show user which adapters will be affected
+                        $nicNames = ($nics | ForEach-Object { $_.Name }) -join ", "
+                        Write-Info "Adapters to update: $nicNames"
+                        if ($nics.Count -gt 1) {
+                            Write-Warn "Multiple adapters detected. DNS will be changed on ALL listed adapters."
+                            Write-Info "If you have a VPN or special adapter, press [N] and configure DNS manually."
+                            $confirmDns = Read-Host "  Apply DNS to all $($nics.Count) adapters? [Y/n]"
+                            if ($confirmDns -match "^[nN]$") {
+                                Write-Info "DNS not changed. Configure manually in Network Settings."
+                                Complete-Step $PHASE 9 "DNS"
+                                return
+                            }
+                        }
                         foreach ($nic in $nics) {
                             if ($SCRIPT:DryRun) {
                                 Write-Host "  [DRY-RUN] Would set DNS to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))" -ForegroundColor Magenta

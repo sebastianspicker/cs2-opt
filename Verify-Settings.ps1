@@ -59,6 +59,29 @@ try {
     Write-Host "  ?  MISSING   HAGS key not found" -ForegroundColor DarkGray
 }
 
+# NVIDIA GPU class registry keys — PerfLevelSrc + DisableDynamicPstate (P-state locks)
+# Only checked if an NVIDIA GPU is detected in the device class registry
+$_nvClassPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$CFG_GUID_Display"
+$_nvKeyPath = $null
+if (Test-Path $_nvClassPath) {
+    $_nvSubkeys = Get-ChildItem $_nvClassPath -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSChildName -match "^\d{4}$" }
+    foreach ($_nvKey in $_nvSubkeys) {
+        $_nvProps = Get-ItemProperty $_nvKey.PSPath -ErrorAction SilentlyContinue
+        if ($_nvProps.ProviderName -match "NVIDIA" -or $_nvProps.DriverDesc -match "NVIDIA") {
+            $_nvKeyPath = $_nvKey.PSPath
+            break
+        }
+    }
+}
+if ($_nvKeyPath) {
+    Test-RegistryCheck $_nvKeyPath "PerfLevelSrc" 0x2222 "NVIDIA PerfLevelSrc (P-state: Max Performance)"
+    Test-RegistryCheck $_nvKeyPath "DisableDynamicPstate" 1 "NVIDIA DisableDynamicPstate (lock P0)"
+} else {
+    Write-Host "  ✓  INFO      NVIDIA GPU class key: N/A (no NVIDIA GPU detected)" -ForegroundColor Cyan
+    $global:_verifyOkCount++
+}
+
 Write-Host "`n  ═══ SYSTEM PROFILE / GAMING ═══" -ForegroundColor Cyan
 
 $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
