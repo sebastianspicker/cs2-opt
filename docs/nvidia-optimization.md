@@ -62,7 +62,7 @@ GPU driver removal must happen in Safe Mode because Windows prevents deletion of
 
 The NVIDIA driver `.exe` is a self-extracting 7-Zip archive. The suite:
 1. Extracts the archive to a temp directory
-2. Removes 14 bloat components:
+2. Removes 15 bloat components/files:
    - GeForce Experience + telemetry
    - NVIDIA FrameView SDK
    - NVIDIA NVCAT container
@@ -170,7 +170,7 @@ HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968}\0000
 |---------|-----------|------------------|
 | SAFE | None | None |
 | RECOMMENDED | None | None |
-| COMPETITIVE | 52 DRS settings + GPU class key | 24 settings via d3d\ + GPU class key |
+| COMPETITIVE | 52 DRS settings + GPU class key | 25 settings (22 d3d + 1 NVTweak + 2 GPU class key) |
 | CUSTOM | Same as COMPETITIVE | Same as COMPETITIVE |
 
 All settings are applied natively — no external tools or third-party files required.
