@@ -60,33 +60,35 @@ Ensure-Dir $CFG_LogDir
 $TOTAL_STEPS = 38
 $PHASE = 1
 
-. "$ScriptRoot\Setup-Profile.ps1"
-. "$ScriptRoot\Optimize-SystemBase.ps1"
-. "$ScriptRoot\Optimize-Hardware.ps1"
-. "$ScriptRoot\Optimize-RegistryTweaks.ps1"
-. "$ScriptRoot\Optimize-GameConfig.ps1"
+try {
+    . "$ScriptRoot\Setup-Profile.ps1"
+    . "$ScriptRoot\Optimize-SystemBase.ps1"
+    . "$ScriptRoot\Optimize-Hardware.ps1"
+    . "$ScriptRoot\Optimize-RegistryTweaks.ps1"
+    . "$ScriptRoot\Optimize-GameConfig.ps1"
 
-# ── Phase 1 complete ─────────────────────────────────────────────────────────
-# Persist applied step keys so Phase 3 improvement estimates are cumulative
-Save-AppliedSteps
-Write-Blank
-Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║  PHASE 1 COMPLETE                                   ║" -ForegroundColor Green
-Write-Host "  ║  -> Restart -> Safe Mode -> GPU driver clean removal ║" -ForegroundColor Green
-Write-Host "  ║  -> Normal boot -> Phase 3 starts automatically     ║" -ForegroundColor Green
-Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
-Write-Info "Log: $CFG_LogFile"
+    # ── Phase 1 complete ─────────────────────────────────────────────────────────
+    # Persist applied step keys so Phase 3 improvement estimates are cumulative
+    Save-AppliedSteps
+    Write-Blank
+    Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
+    Write-Host "  ║  PHASE 1 COMPLETE                                   ║" -ForegroundColor Green
+    Write-Host "  ║  -> Restart -> Safe Mode -> GPU driver clean removal ║" -ForegroundColor Green
+    Write-Host "  ║  -> Normal boot -> Phase 3 starts automatically     ║" -ForegroundColor Green
+    Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
+    Write-Info "Log: $CFG_LogFile"
 
-# Release backup lock — acquired by Initialize-Backup in Setup-Profile.ps1.
-# On restart, the lock file will be stale (process dead) and auto-cleaned by
-# Test-BackupLock on next boot. Release here for clean exit paths (DRY-RUN, user
-# declines restart, or script completes without restart).
-Remove-BackupLock
-
-if (Confirm-Risk "Restart now?" "Save all files!") {
-    if ($SCRIPT:DryRun) {
-        Write-Host "  [DRY-RUN] Would restart computer for Phase 2 Safe Mode." -ForegroundColor Magenta
-    } else {
-        Start-Sleep 5; Restart-Computer -Force
+    if (Confirm-Risk "Restart now?" "Save all files!") {
+        if ($SCRIPT:DryRun) {
+            Write-Host "  [DRY-RUN] Would restart computer for Phase 2 Safe Mode." -ForegroundColor Magenta
+        } else {
+            Start-Sleep 5; Restart-Computer -Force
+        }
     }
+} finally {
+    # Release backup lock — acquired by Initialize-Backup in Setup-Profile.ps1.
+    # In try/finally to ensure release on crash, Ctrl+C, or normal exit.
+    # On Restart-Computer, the lock file becomes stale (process dead) and is
+    # auto-cleaned by Test-BackupLock on next boot.
+    Remove-BackupLock
 }

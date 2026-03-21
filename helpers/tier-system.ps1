@@ -353,7 +353,7 @@ function Invoke-TieredStep {
     # Flush any pending backup entries to disk in one I/O pass.
     # This is the primary flush point — backup functions buffer entries in memory
     # during the step's action, and we persist them here once the step finishes.
-    try { Flush-BackupBuffer } catch { Write-Debug "Flush-BackupBuffer failed after '$Title': $_" }
+    try { Flush-BackupBuffer } catch { Write-Warn "Backup entries could not be saved to disk after '$Title': $_  (entries retained in memory for next flush)" }
 
     $SCRIPT:CurrentStepTitle = $null
     return ($run -and $actionOk)

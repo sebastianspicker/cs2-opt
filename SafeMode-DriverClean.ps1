@@ -28,112 +28,115 @@ Write-Info "Safe Mode active. GPU driver files are unlocked."
 
 $PHASE = 2
 
-# Validate we're actually in Safe Mode
-# $env:SAFEBOOT_OPTION is set by winload.exe on Safe Mode boot ("MINIMAL" or "NETWORK").
-# Reliable on all Windows 10/11 editions. If absent, we're in normal boot.
-if (-not $env:SAFEBOOT_OPTION) {
-    Write-Warn "WARNING: This script is designed for Safe Mode but normal boot was detected."
-    Write-Warn "GPU driver removal in normal mode may fail — driver files may be locked by"
-    Write-Warn "running services (NVDisplay, AMD External Events, etc.)."
-    Write-Warn "Partially removed drivers can cause black screen or BSOD on next boot."
-    $confirm = Read-Host "  Continue anyway? [y/N]"
-    if ($confirm -notmatch "^[jJyY]$") {
-        Write-Info "Aborted. Boot into Safe Mode first (START.bat -> [1])."
-        exit 0
+try {
+    # Validate we're actually in Safe Mode
+    # $env:SAFEBOOT_OPTION is set by winload.exe on Safe Mode boot ("MINIMAL" or "NETWORK").
+    # Reliable on all Windows 10/11 editions. If absent, we're in normal boot.
+    if (-not $env:SAFEBOOT_OPTION) {
+        Write-Warn "WARNING: This script is designed for Safe Mode but normal boot was detected."
+        Write-Warn "GPU driver removal in normal mode may fail — driver files may be locked by"
+        Write-Warn "running services (NVDisplay, AMD External Events, etc.)."
+        Write-Warn "Partially removed drivers can cause black screen or BSOD on next boot."
+        $confirm = Read-Host "  Continue anyway? [y/N]"
+        if ($confirm -notmatch "^[jJyY]$") {
+            Write-Info "Aborted. Boot into Safe Mode first (START.bat -> [1])."
+            exit 0
+        }
     }
-}
 
-Write-Section "Step 1 — Disable Safe Mode"
-if ($SCRIPT:DryRun) {
-    Write-Host "  [DRY-RUN] Would run: bcdedit /deletevalue safeboot" -ForegroundColor Magenta
-    Write-Host "  [DRY-RUN] CRITICAL: In a real run this removes Safe Mode boot flag" -ForegroundColor Magenta
-} else {
-    $smOutput = bcdedit /deletevalue safeboot 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        # bcdedit returns non-zero if the value doesn't exist — this is expected on re-run
-        # (safeboot was already cleared by a previous execution) or if not in Safe Mode.
-        # NOTE: bcdedit error text is LOCALIZED ("element not found" in English, but different
-        # on German/French/etc Windows). Instead of parsing the error message, we verify the
-        # actual BCD state: run "bcdedit /enum {current}" and check whether "safeboot" still
-        # appears. The element name "safeboot" is an internal BCD identifier, NOT localized.
-        $bcdEnum = bcdedit /enum "{current}" 2>&1
-        # bcdedit output is an array of lines; join with newlines for reliable regex matching.
-        $bcdEnumText = ($bcdEnum | Out-String)
-        $safebootStillSet = $bcdEnumText -match "(?m)^\s*safeboot\s"
-        if (-not $safebootStillSet) {
-            Write-OK "Safe Mode already disabled (safeboot value not present). OK to continue."
+    Write-Section "Step 1 — Disable Safe Mode"
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would run: bcdedit /deletevalue safeboot" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] CRITICAL: In a real run this removes Safe Mode boot flag" -ForegroundColor Magenta
+    } else {
+        $smOutput = bcdedit /deletevalue safeboot 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            # bcdedit returns non-zero if the value doesn't exist — this is expected on re-run
+            # (safeboot was already cleared by a previous execution) or if not in Safe Mode.
+            # NOTE: bcdedit error text is LOCALIZED ("element not found" in English, but different
+            # on German/French/etc Windows). Instead of parsing the error message, we verify the
+            # actual BCD state: run "bcdedit /enum {current}" and check whether "safeboot" still
+            # appears. The element name "safeboot" is an internal BCD identifier, NOT localized.
+            $bcdEnum = bcdedit /enum "{current}" 2>&1
+            # bcdedit output is an array of lines; join with newlines for reliable regex matching.
+            $bcdEnumText = ($bcdEnum | Out-String)
+            $safebootStillSet = $bcdEnumText -match "(?m)^\s*safeboot\s"
+            if (-not $safebootStillSet) {
+                Write-OK "Safe Mode already disabled (safeboot value not present). OK to continue."
+            } else {
+                Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
+                Write-Err "System may boot into Safe Mode again on next restart!"
+                Write-Err ""
+                Write-Err "MANUAL FIX (run in elevated cmd.exe):"
+                Write-Err "  bcdedit /deletevalue safeboot"
+                Write-Err "  shutdown /r /t 0"
+                $smConfirm = Read-Host "  Continue anyway? [y/N]"
+                if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+            }
         } else {
-            Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
-            Write-Err "System may boot into Safe Mode again on next restart!"
-            Write-Err ""
-            Write-Err "MANUAL FIX (run in elevated cmd.exe):"
-            Write-Err "  bcdedit /deletevalue safeboot"
-            Write-Err "  shutdown /r /t 0"
-            $smConfirm = Read-Host "  Continue anyway? [y/N]"
-            if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+            Write-OK "Safe Mode disabled (next boot = normal)."
+        }
+    }
+    Complete-Step $PHASE 1 "SafeMode off"
+
+    Write-Section "Step 2 — GPU Driver Clean Removal"
+    $gpuName = switch ($state.gpuInput) {
+        "1" {"NVIDIA"} "2" {"NVIDIA"} "3" {"AMD"} "4" {"Intel"} default {"NVIDIA"}
+    }
+
+    Write-Info "Detected GPU vendor: $gpuName"
+    Write-Info "This performs a complete driver removal using native PowerShell."
+    Write-Info "Equivalent to DDU — stops services, removes drivers, cleans registry."
+
+    # Check if rollback was requested
+    if ($state.rollbackDriver) {
+        Write-Blank
+        $drvLabel = $state.rollbackDriver
+        $pad = [math]::Max(0, 30 - $drvLabel.Length)
+        Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+        Write-Host "  ║  ROLLBACK REQUESTED: Driver $drvLabel$((' ' * $pad))║" -ForegroundColor Yellow
+        Write-Host "  ║  Make sure you have downloaded this driver version       ║" -ForegroundColor Yellow
+        Write-Host "  ║  BEFORE proceeding. It will be installed in Phase 3.    ║" -ForegroundColor Yellow
+        Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+    }
+
+    Write-Blank
+    $r = Read-Host "  Proceed with GPU driver removal? [Y/n]"
+    if ($r -match "^[nN]$") {
+        Write-Warn "Skipped GPU driver removal."
+        Skip-Step $PHASE 2 "DriverClean"
+
+        # Ask whether to still proceed with Phase 3
+        Write-Blank
+        $rPhase3 = Read-Host "  Still register Phase 3 for next boot? [y/N]"
+        if ($rPhase3 -match "^[jJyY]$") {
+            Write-Section "Step 3 — Register Phase 3 for next boot"
+            Set-RunOnce "CS2_Phase3" "$CFG_WorkDir\PostReboot-Setup.ps1"
+            Complete-Step $PHASE 3 "RunOnce Phase3"
+        } else {
+            Write-Info "Phase 3 not registered. Re-run from START.bat when ready."
+            Skip-Step $PHASE 3 "RunOnce Phase3"
         }
     } else {
-        Write-OK "Safe Mode disabled (next boot = normal)."
-    }
-}
-Complete-Step $PHASE 1 "SafeMode off"
+        Remove-GpuDriverClean -GpuVendor $gpuName
+        Complete-Step $PHASE 2 "DriverClean"
 
-Write-Section "Step 2 — GPU Driver Clean Removal"
-$gpuName = switch ($state.gpuInput) {
-    "1" {"NVIDIA"} "2" {"NVIDIA"} "3" {"AMD"} "4" {"Intel"} default {"NVIDIA"}
-}
-
-Write-Info "Detected GPU vendor: $gpuName"
-Write-Info "This performs a complete driver removal using native PowerShell."
-Write-Info "Equivalent to DDU — stops services, removes drivers, cleans registry."
-
-# Check if rollback was requested
-if ($state.rollbackDriver) {
-    Write-Blank
-    $drvLabel = $state.rollbackDriver
-    $pad = [math]::Max(0, 30 - $drvLabel.Length)
-    Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
-    Write-Host "  ║  ROLLBACK REQUESTED: Driver $drvLabel$((' ' * $pad))║" -ForegroundColor Yellow
-    Write-Host "  ║  Make sure you have downloaded this driver version       ║" -ForegroundColor Yellow
-    Write-Host "  ║  BEFORE proceeding. It will be installed in Phase 3.    ║" -ForegroundColor Yellow
-    Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
-}
-
-Write-Blank
-$r = Read-Host "  Proceed with GPU driver removal? [Y/n]"
-if ($r -match "^[nN]$") {
-    Write-Warn "Skipped GPU driver removal."
-    Skip-Step $PHASE 2 "DriverClean"
-
-    # Ask whether to still proceed with Phase 3
-    Write-Blank
-    $rPhase3 = Read-Host "  Still register Phase 3 for next boot? [y/N]"
-    if ($rPhase3 -match "^[jJyY]$") {
+        # Register Phase 3 RunOnce AFTER driver removal
         Write-Section "Step 3 — Register Phase 3 for next boot"
         Set-RunOnce "CS2_Phase3" "$CFG_WorkDir\PostReboot-Setup.ps1"
         Complete-Step $PHASE 3 "RunOnce Phase3"
-    } else {
-        Write-Info "Phase 3 not registered. Re-run from START.bat when ready."
-        Skip-Step $PHASE 3 "RunOnce Phase3"
     }
-} else {
-    Remove-GpuDriverClean -GpuVendor $gpuName
-    Complete-Step $PHASE 2 "DriverClean"
 
-    # Register Phase 3 RunOnce AFTER driver removal
-    Write-Section "Step 3 — Register Phase 3 for next boot"
-    Set-RunOnce "CS2_Phase3" "$CFG_WorkDir\PostReboot-Setup.ps1"
-    Complete-Step $PHASE 3 "RunOnce Phase3"
-}
-
-# Release backup lock — acquired by Initialize-Backup at the top of this script.
-Remove-BackupLock
-
-Write-Blank
-Write-Info "Restart to continue."
-if ($SCRIPT:DryRun) {
-    Write-Host "  [DRY-RUN] Would prompt for restart" -ForegroundColor Magenta
-} else {
-    $r2 = Read-Host "  Restart now? [Y/n]"
-    if ($r2 -notmatch "^[nN]$") { Restart-Computer -Force }
+    Write-Blank
+    Write-Info "Restart to continue."
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would prompt for restart" -ForegroundColor Magenta
+    } else {
+        $r2 = Read-Host "  Restart now? [Y/n]"
+        if ($r2 -notmatch "^[nN]$") { Restart-Computer -Force }
+    }
+} finally {
+    # Release backup lock — acquired by Initialize-Backup at the top of this script.
+    # In try/finally to ensure release on crash, Ctrl+C, or normal exit.
+    Remove-BackupLock
 }

@@ -70,6 +70,7 @@ if ($SCRIPT:DryRun) {
 # Initialize backup system for this phase
 Initialize-Backup
 
+try {
 # Load Phase 1 applied steps so improvement estimates are cumulative
 Load-AppliedSteps
 
@@ -636,9 +637,6 @@ if ($startStep -le 13) {
     Complete-Step $PHASE 13 "FinalBenchmark"
 }
 
-# Release backup lock — acquired by Initialize-Backup at the top of this script.
-Remove-BackupLock
-
 Write-Blank
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "  ║  ALL 3 PHASES COMPLETE — GOOD LUCK!                 ║" -ForegroundColor Green
@@ -652,4 +650,9 @@ if ($r -match "^[jJyY]$") {
     } else {
         Restart-Computer -Force
     }
+}
+} finally {
+    # Release backup lock — acquired by Initialize-Backup at the top of this script.
+    # In try/finally to ensure release on crash, Ctrl+C, or normal exit.
+    Remove-BackupLock
 }

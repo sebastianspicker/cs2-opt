@@ -52,7 +52,7 @@ function Test-BackupLock {
         if ($proc) {
             # Mitigate PID reuse: Windows recycles PIDs, so a live process with the
             # same PID may be entirely unrelated. Verify it's a PowerShell instance.
-            $isPowerShell = $proc.ProcessName -match '^(?:powershell|pwsh)$'
+            $isPowerShell = $proc.ProcessName -match '^(?:powershell|pwsh|powershell_ise)$'
             if ($isPowerShell) { return $true }
             # PID was reused by a non-PowerShell process — stale lock
             Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
@@ -462,7 +462,9 @@ function Restore-StepChanges {
                         # PS 5.1 ConvertFrom-Json unwraps single-element arrays to scalars, so
                         # a MultiString backup with one entry arrives as a plain string — wrap it.
                         if ($restoreType -eq "MultiString") {
-                            if ($restoreValue -is [array]) {
+                            if ($null -eq $restoreValue) {
+                                $restoreValue = [string[]]@()
+                            } elseif ($restoreValue -is [array]) {
                                 $restoreValue = [string[]]@($restoreValue)
                             } elseif ($restoreValue -is [string]) {
                                 $restoreValue = [string[]]@($restoreValue)
