@@ -24,7 +24,7 @@ function Initialize-Backup {
 function Get-BackupData {
     if (-not (Test-Path $CFG_BackupFile)) { Initialize-Backup }
     try {
-        $raw = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
+        $raw = Get-Content $CFG_BackupFile -Raw -ErrorAction Stop | ConvertFrom-Json
         if ($null -eq $raw.entries) { $raw | Add-Member -NotePropertyName "entries" -NotePropertyValue @() -Force }
         # Force entries to array — PS 5.1 ConvertFrom-Json unwraps single-element arrays to scalars
         $raw.entries = @($raw.entries)

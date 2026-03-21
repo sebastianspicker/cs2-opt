@@ -39,7 +39,7 @@ function Get-BenchmarkHistory {
     <#  Returns all recorded benchmark results as an array.  #>
     if (-not (Test-Path $CFG_BenchmarkFile)) { return @() }
     try {
-        $data = Get-Content $CFG_BenchmarkFile -Raw | ConvertFrom-Json
+        $data = Get-Content $CFG_BenchmarkFile -Raw -ErrorAction Stop | ConvertFrom-Json
         if ($data -is [array]) { return $data }
         return @($data)
     } catch { return @() }

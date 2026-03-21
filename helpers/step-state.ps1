@@ -4,7 +4,7 @@
 
 function Load-Progress {
     if (Test-Path $CFG_ProgressFile) {
-        try { return (Get-Content $CFG_ProgressFile | ConvertFrom-Json) }
+        try { return (Get-Content $CFG_ProgressFile -ErrorAction Stop | ConvertFrom-Json) }
         catch {
             Write-Warn "progress.json is corrupted — progress tracking reset. (Backup: progress.json.corrupt)"
             try { Copy-Item $CFG_ProgressFile "$CFG_ProgressFile.corrupt" -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted progress file." }

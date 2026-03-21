@@ -47,7 +47,7 @@ function Save-AppliedSteps {
     <#  Persists $SCRIPT:AppliedSteps to state.json so Phase 3 can read Phase 1 estimates.  #>
     if (-not (Test-Path $CFG_StateFile)) { return }
     try {
-        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+        $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
         $st | Add-Member -NotePropertyName "appliedSteps" -NotePropertyValue @($SCRIPT:AppliedSteps) -Force
         Save-JsonAtomic -Data $st -Path $CFG_StateFile
     } catch { Write-Debug "Could not persist AppliedSteps: $_" }
@@ -57,7 +57,7 @@ function Load-AppliedSteps {
     <#  Loads previously applied step keys from state.json into $SCRIPT:AppliedSteps.  #>
     if (-not (Test-Path $CFG_StateFile)) { return }
     try {
-        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+        $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
         if ($st.appliedSteps) {
             foreach ($key in @($st.appliedSteps)) {
                 if ($key -notin $SCRIPT:AppliedSteps) { $SCRIPT:AppliedSteps.Add($key) }

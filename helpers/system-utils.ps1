@@ -74,7 +74,9 @@ function Save-State($obj, $path) {
 
 function Load-State($path) {
     if (-not (Test-Path $path)) { throw "state.json missing at '$path' — run Phase 1 first." }
-    $s = Get-Content $path | ConvertFrom-Json
+    # Use -ErrorAction Stop so Get-Content failures are not silently swallowed
+    # under the global $ErrorActionPreference = "SilentlyContinue" set by entry-point scripts.
+    $s = Get-Content $path -ErrorAction Stop | ConvertFrom-Json
     $SCRIPT:Mode     = $s.mode
     $SCRIPT:LogLevel = if ($s.logLevel) { $s.logLevel } else { "NORMAL" }
     $SCRIPT:Profile  = if ($s.profile) { $s.profile } else { "RECOMMENDED" }
@@ -87,7 +89,9 @@ function Initialize-ScriptDefaults {
         Loads state.json if present, otherwise sets safe defaults. Never exits.  #>
     if (Test-Path $CFG_StateFile) {
         try {
-            $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+            # -ErrorAction Stop ensures Get-Content failures throw into the catch block
+            # rather than being silently swallowed by the global SilentlyContinue preference.
+            $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
             $SCRIPT:Mode     = $st.mode
             $SCRIPT:LogLevel = if ($st.logLevel) { $st.logLevel } else { "NORMAL" }
             $SCRIPT:Profile  = if ($st.profile) { $st.profile } else { "RECOMMENDED" }
