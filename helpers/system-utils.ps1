@@ -184,14 +184,12 @@ function Clear-Dir($path, $label) {
 # Initialize-VerifyCounters and read via Get-VerifyCounters.
 
 function Initialize-VerifyCounters {
-    <#  Resets verification counters. Call before a batch of Test-RegistryCheck/Test-ServiceCheck calls.  #>
     $global:_verifyOkCount      = 0
     $global:_verifyChangedCount = 0
     $global:_verifyMissingCount = 0
 }
 
 function Get-VerifyCounters {
-    <#  Returns a hashtable with current ok/changed/missing counts.  #>
     return @{
         okCount      = [int]$global:_verifyOkCount
         changedCount = [int]$global:_verifyChangedCount

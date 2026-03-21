@@ -60,7 +60,6 @@ function Test-BackupLock {
                 return $false
             }
         }
-        # Check if the locking process is still alive
         $proc = Get-Process -Id $lockData.pid -ErrorAction SilentlyContinue
         if ($proc) {
             # Mitigate PID reuse: Windows recycles PIDs, so a live process with the
@@ -83,14 +82,12 @@ function Test-BackupLock {
 }
 
 function Set-BackupLock {
-    <#  Creates a lockfile indicating this process is modifying backup.json.
-        Called at the start of optimization and restore operations.  #>
+    <#  Called at the start of optimization and restore operations.  #>
     $lockData = @{ pid = $PID; started = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
     $lockData | ConvertTo-Json | Set-Content $CFG_BackupLockFile -Encoding UTF8 -Force
 }
 
 function Remove-BackupLock {
-    <#  Removes the lockfile. Called at the end of operations.  #>
     Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
 }
 
@@ -350,7 +347,6 @@ function Restore-DrsSettings {
         Invoke-DrsSession -Action {
             param($session)
 
-            # Find the profile
             $drsProfile = [IntPtr]::Zero
             if ($Entry.profile -and $Entry.profile -ne $SCRIPT:DRS_FOUND_VIA_APP) {
                 $drsProfile = [NvApiDrs]::FindProfileByName($session, $Entry.profile)
@@ -409,7 +405,6 @@ function Restore-DrsSettings {
 }
 
 function Show-BackupSummary {
-    <#  Displays all backed-up settings grouped by step.  #>
     $backup = Get-BackupData
     if (-not $backup.entries -or $backup.entries.Count -eq 0) {
         Write-Info "No backups recorded yet."
@@ -443,7 +438,6 @@ function Show-BackupSummary {
 }
 
 function Restore-StepChanges {
-    <#  Restores all backed-up settings from a specific step.  #>
     param([string]$StepTitle)
     $backup = Get-BackupData
     $entries = @($backup.entries | Where-Object { $_.step -eq $StepTitle })
@@ -600,7 +594,6 @@ function Restore-StepChanges {
         }
     }
 
-    # Summary
     if ($restoreFail -gt 0) {
         Write-Warn "Restore '$StepTitle': $restoreOk succeeded, $restoreFail failed — check warnings above."
     }
@@ -616,7 +609,6 @@ function Restore-StepChanges {
 }
 
 function Restore-AllChanges {
-    <#  Interactive restore of ALL backed-up settings.  #>
     $backup = Get-BackupData
     if (-not $backup.entries -or $backup.entries.Count -eq 0) {
         Write-Info "No backups to restore."
@@ -643,7 +635,6 @@ function Restore-AllChanges {
 }
 
 function Restore-Interactive {
-    <#  Let the user pick which steps to restore.  #>
     if (Test-BackupLock) {
         Write-Warn "Another CS2 Optimization process is currently running (backup.json is locked)."
         Write-Warn "Wait for it to finish, or close it manually before restoring."
