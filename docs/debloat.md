@@ -1,8 +1,8 @@
 # Debloat & Telemetry — Deep Dive
 
-> Covers Phase 1 Step 13 and `helpers/debloat.ps1`.
+> Covers Phase 1 Step 13 (debloat via `helpers/debloat.ps1`) and Step 14 (autostart cleanup in `Optimize-Hardware.ps1`).
 
-"Debloat" is an imprecise term that covers a range of actions from aggressive (removing core Windows components) to conservative (removing third-party apps pre-installed by OEMs). The suite is conservative: it removes known Microsoft bloatware AppX packages, disables two telemetry services, disables telemetry scheduled tasks, and removes autostart entries — nothing that is load-bearing for Windows functionality.
+"Debloat" is an imprecise term that covers a range of actions from aggressive (removing core Windows components) to conservative (removing third-party apps pre-installed by OEMs). The suite is conservative: it removes known Microsoft bloatware AppX packages, disables two telemetry services, disables telemetry scheduled tasks, and disables consumer features — nothing that is load-bearing for Windows functionality. Autostart cleanup is handled separately by Step 14.
 
 ---
 
@@ -72,18 +72,6 @@ HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo
 
 Disables the Windows advertising identifier. Apps use this ID to correlate user behavior for targeted advertising. No impact on gaming performance; privacy benefit.
 
-### Autostart Entries
-
-Configured via `$CFG_Autostart_Remove` in `config.env.ps1`. The default list includes common apps that register autostart entries without clear gaming benefit:
-
-- `Discord` — Discord's autostart; the app still works when launched manually
-- `Spotify` — background startup for faster launch
-- `OneDrive` — cloud sync daemon
-
-These are removed from `HKCU:\...\Run` and `HKLM:\...\Run`. The applications themselves are not removed — they still function when launched manually.
-
-**Customization:** Edit `$CFG_Autostart_Remove` in `config.env.ps1` to add or remove entries before running Step 13.
-
 ---
 
 ## What Debloat Does NOT Do
@@ -119,7 +107,7 @@ Start-Service DiagTrack
 
 Telemetry scheduled tasks can be re-enabled via Task Scheduler (taskschd.msc) → navigate to the task path → right-click → Enable.
 
-Autostart entries are backed up by the suite's backup system and can be restored via START.bat → [7] Restore / Rollback → select Step 13.
+Autostart entries (Step 14) are backed up by the suite's backup system and can be restored via START.bat → [7] Restore / Rollback → select Step 14.
 
 Consumer features and Advertising ID can be reverted:
 ```powershell

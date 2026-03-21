@@ -54,7 +54,8 @@ function Get-BenchmarkHistory {
     try {
         $data = Get-Content $CFG_BenchmarkFile -Raw -ErrorAction Stop | ConvertFrom-Json
         # PS 5.1: ConvertFrom-Json returns $null for empty arrays ("[]")
-        if (-not $data) { return @() }
+        # Use $null -eq (not -not) to avoid false positives on valid falsy values (0, "")
+        if ($null -eq $data) { return @() }
         if ($data -is [array]) { return $data }
         return @($data)
     } catch { return @() }
