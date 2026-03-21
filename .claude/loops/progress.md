@@ -1,59 +1,31 @@
-# Audit Progress Tracker — Round 4
+# Audit Progress Tracker — Round 5
 
-Adversarial pass after R1+R2+R3 = ~108 fixes, 107 commits. Ultra-lean: 4 loops. Focus: audit-introduced regressions, most-modified file deep review, user experience trace, final gate.
+Simplification pass after R1-R4 added +4,093 lines across 121 commits. 3 loops. Focus: remove complexity, adversarial interaction testing, final polish.
 
-## Loop 1: Hot Files Deep Review
+## Loop 1: Simplify
 
-### HOT-R4 — Most-Modified Files
-- [x] Optimize-SystemBase.ps1 — Steps 2-9 coherent. Skip/Complete pairs correct. FSO uses Get-CS2InstallPath (clean). Power plan HP->Balanced->error fallback clean. Fixed unused $hpResult variable (-> | Out-Null). No orphaned vars.
-- [x] PostReboot-Setup.ps1 — 10 state fields in fallback (all used). DRY-RUN derivation matches Setup-Profile. try/finally wraps Initialize-Backup correctly. DNS per-adapter menu handles all paths (single/multi/skip). Step 13 Load-AppliedSteps works with empty appliedSteps. No dead code.
-- [x] SafeMode-DriverClean.ps1 — All 3 rounds of locale fixes compose into ONE clean implementation: bcdedit /v with 0x26000081 (raw BCD element ID). No dead code from intermediate approaches. DRY-RUN guard at line 78. try/catch/finally correct. Crash recovery includes stack trace. CIM ClassGuid used in gpu-driver-clean.ps1 (not DeviceClass).
-- [x] helpers/backup-restore.ps1 — Buffer system clean: _backupPending init -> Backup-* add -> Flush writes -> Clear. Lock system: Initialize -> Test (PID+ProcessName) -> Set -> Remove. Restore: binary [0,255] validation, MultiString scalar wrap, $null guard all in place. wasEnabled captured and restored with $null default. All 19 functions used. No orphaned functions.
-- [x] Verify-Settings.ps1 — 52 checks on max path (40 registry + 1 UPM binary + 2 bcdedit + 2 INFO + 7 services). Zero duplicates (verified programmatically). All values match optimizer code (spot-checked: MouseDataQueueSize=50, UserDuckingPreference=3, AllowAutoGameMode=1, OverlayTestMode=5, NtfsDisableLastAccessUpdate=-2147483647). XboxGipSvc warning label present. GPU key uses $CFG_GUID_Display (consistent).
+### SIMPLIFY-R5 — Complexity Reduction
+- [ ] Identify over-engineered patterns (verbose guards, redundant checks, unnecessary abstractions)
+- [ ] Audit-added comments: helpful or noise? Remove "added by audit" commentary
+- [ ] Lock system: is 4-hour auto-expire actually needed? Simpler approach?
+- [ ] DNS 14-pattern filter: could this be a simpler wildcard? Or configurable?
+- [ ] Progress bar: clean implementation or bolted on?
+- [ ] DRY-RUN Write-OK guards (15+ locations): is there a cleaner pattern than if/else at each site?
 
-## Loop 2: New Code Audit
+## Loop 2: Adversarial Interactions
 
-### NEW-R4 — Code Written by the Audit
-- [x] Lock system — added 4-hour auto-expire for hung processes, improved warning message, expanded docstring
-- [x] Flush-BackupBuffer — documented failure mode (entries retained on Save failure) and crash tradeoff in docstring
-- [x] UserPreferencesMask binary comparison — correct; added comment explaining -SyncWindow 0 positional semantics
-- [x] DNS per-adapter selection — UX correct, all edge cases handled; improved empty-adapter message
-- [x] Crash recovery catch block — correct design (shows recovery instructions, does not auto-retry); added stack trace
-- [x] try/finally blocks — moved Initialize-Backup inside try in SafeMode + PostReboot for consistency with Run-Optimize
+### ADVERSARIAL-R5 — Cross-Fix Interaction Testing
+- [x] Buffer + Lock + try/finally + DRY-RUN: NO CONFLICT. DRY-RUN skips backup writes, empty flush is no-op, finally always releases lock. Advisory lock warns but doesn't block (correct: Save-JsonAtomic provides atomic writes).
+- [x] Resume + Skip-Step + EstimateKey: CORRECT. EstimateKey only added on `$run -and $actionOk` (line 345). Skipped steps excluded from estimates. Show-ResumePrompt displays skipped steps via `skippedSteps` array. Verify-Settings shows MMCSS as MISSING (correct).
+- [x] CIM ClassGuid + pnputil fallback + DRY-RUN: CORRECT. DRY-RUN early return at line 24 of gpu-driver-clean.ps1 fires before driver listing. Set-RunOnce has own DRY-RUN guard (line 108 system-utils.ps1). Phase 3 won't auto-start in DRY-RUN (inherent to purpose). Complete-Step has DRY-RUN guard (line 22 step-state.ps1).
+- [x] Verify-Settings counter leaks: FIXED 2 bugs. (1) HAGS catch block displayed "MISSING" without incrementing _verifyMissingCount. (2) PowerThrottling null-CPU branch displayed "WARN" without incrementing any counter. Both now increment _verifyMissingCount. Binary check (UserPreferencesMask), int32 check (NtfsDisableLastAccessUpdate), GPU-conditional checks, service checks all correctly increment counters.
+- [x] Phase 1->2->3 full state chain: CORRECT. Save-AppliedSteps runs at line 73 BEFORE restart prompt (line 90). Start-Sleep 5 before Restart-Computer -Force. Lock becomes stale on restart, auto-cleaned by Test-BackupLock. Phase 2 reads state, modifies nothing in appliedSteps. Phase 3 calls Load-AppliedSteps for cumulative estimates.
 
-## Loop 3: User Experience Trace
+## Loop 3: Final Polish
 
-### UX-R4 — End-to-End User Journey
-- [x] First-time user: START.bat → [1] → profile selection → 38 steps → restart. What do they see? **Fixed: Added step progress bar (e.g., "8/38 21%") to Write-Section. RECOMMENDED resume prompt now interactive instead of silent auto-resume.**
-- [x] DRY-RUN user: same flow but preview only. Are messages clear? Does it feel like a preview? **Fixed: 15+ misleading Write-OK calls after Set-RegistryValue now DRY-RUN guarded. Phase 1/3 completion banners show "DRY-RUN PREVIEW COMPLETE" (magenta) instead of "PHASE COMPLETE" (green). Restart prompts suppressed.**
-- [x] Resume user: stopped at Step 20, re-runs. Does resume work? Is the prompt clear? **Fixed: Composite keys "P1:1" now display as plain step numbers. Label changed from "Completed:" to "Done: steps". Corrupted progress.json handled gracefully (preserved as .corrupt, starts fresh).**
-- [x] Restore user: START.bat → [7]. Can they pick steps? Is backup.json readable? **Verified: Restore-Interactive shows grouped backup summary, numbered step list, individual or [A]ll selection. Lock check warns if another process is running. Empty backup handled with "No backups to restore."**
-- [x] Verify user: START.bat → [6]. Do all 52 checks produce clear output? **Fixed: Summary now distinguishes CHANGED (Windows Update reset) from MISSING (never applied/skipped steps) instead of blanket "Windows Update" message.**
-- [x] Error user: CS2 not installed, no NVIDIA GPU, WiFi only. Are error messages helpful? **Verified: CS2 not found -> manual instructions with paths. No NVIDIA -> AMD/Intel skip with links. WiFi only -> explicit warning box explaining why NIC tweaks skipped. Disk full -> Save-JsonAtomic throws, Flush-BackupBuffer retains entries, user sees warnings.**
-
-## Loop 4: Final Gate
-
-### GATE-R4 — Ship/No-Ship Decision
-- [x] PSScriptAnalyzer: ZERO violations (confirmed with project settings)
-- [x] 203 tests: ALL PASS (fixed 45 failures: cross-platform stubs, Pester 5 scoping, timestamp bug in step-state.ps1)
-- [x] DRY-RUN: 100% gated. Set-RegistryValue/Set-BootConfig have internal guards. Direct Set-ItemProperty calls in msi-interrupts.ps1 and Optimize-RegistryTweaks.ps1 wrapped in if (-not $SCRIPT:DryRun).
-- [x] Verify-Settings: 53 checks on max path (41 registry + 7 service + 2 bcdedit + 3 inline). All values cross-checked against optimizer code.
-- [x] Git log: 121 commits, 50 files changed, +4093/-433 lines. Largest deletion (254 lines) was progress.md reorganization + SafeMode refactor — no accidental reverts. All files are expected. No secrets, no credentials.
-- [x] No commits to revert. Every commit serves a clear purpose (audit fix, test, doc, UX improvement).
-
-## SHIP DECISION: SHIP
-
-**Confidence: HIGH**
-
-Evidence:
-1. Zero PSScriptAnalyzer violations
-2. 203/203 tests pass (including a real production bug fix — timestamp loss on fresh progress files)
-3. 100% DRY-RUN gating verified via grep
-4. 53 Verify-Settings checks with bidirectional parity against optimizer code
-5. 121 clean, well-described commits with no unexplained deletions
-6. All 4 R4 loops (Hot Files, New Code, UX Trace, Final Gate) complete with findings addressed
-7. Prior R1+R2+R3 rounds resolved ~108 issues across the entire codebase
-
-Caveats (none blocking):
-- Tests run on macOS with stubs for Windows-only cmdlets; full integration testing requires Windows
-- CI runs on windows-latest and will provide the definitive test pass
+### POLISH-R5 — Ship-Ready
+- [ ] PSScriptAnalyzer zero violations
+- [ ] 203 tests all passing
+- [ ] CHANGELOG updated for R4 UX improvements
+- [ ] Any remaining TODO/FIXME from audit
+- [ ] Final ship assessment
