@@ -141,14 +141,14 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [x] config.Tests.ps1 — EstimateKey cross-reference (4 cases), CS2 autoexec (7 cases incl. duplicate check), NIC tweaks (5 cases), path format (4 cases), NVIDIA profile estimates (3 cases), DNS (3 cases), FPS cap bounds (2 cases)
 
 ### E2 — Documentation Accuracy
-- [ ] evidence.md
-- [ ] nic-latency-stack.md
-- [ ] windows-scheduler.md
-- [ ] nvidia-optimization.md + nvidia-drs-settings.md
-- [ ] power-plan.md
-- [ ] services.md
-- [ ] backup-restore.md
-- [ ] README.md
+- [x] evidence.md — FIXED: Phase 2 step order swapped (2.2/2.3), Steps 20-22 changed to passthrough (—), Step 23 RECOMMENDED/COMPETITIVE auto->prompted, profile totals recalculated, T2 power plan count 16-17->15-16
+- [x] nic-latency-stack.md — FIXED: TransmitBuffers "NOT do" table clarified (suite sets 512, not the aggressive 256). All 6 layers verified against Step 16 code.
+- [x] windows-scheduler.md — FIXED: Fast Startup boot time estimate 20-30s->5-15s (matches code -Caveat param). All MMCSS/scheduler values verified.
+- [x] nvidia-optimization.md + nvidia-drs-settings.md — FIXED: registry fallback count 24->25 (22 d3d + 1 NVTweak + 2 GPU class key), bloat component count 14->15. All 52 DRS IDs/values verified. nvidia-drs-settings.md fully accurate (no changes).
+- [x] power-plan.md — FIXED: T2 count 16-17->15-16, T1 table removed incorrect "Core parking min" (T2 in code), split standby/hibernate into 2 entries, IDLEDISABLE verify comment T2->T3. All GUIDs and 4 bug fixes verified.
+- [x] services.md — VERIFIED: all 7 Step 37 services + 2 Step 13 services match code exactly. $CFG_XboxServices 4 entries confirmed. No changes needed.
+- [x] backup-restore.md — FIXED: added missing wasEnabled field to scheduledtask JSON example (present in code since A2 audit). All 6 backup types and Restore-Interactive workflow verified.
+- [x] README.md — FIXED: added missing gui-panels.ps1 to file tree (18th helper), Phase 2 step order swapped, Step 5 risk SAFE->AGGRESSIVE, power plan T2 +17->+15-16, bloat count 14->15 in 2 places
 
 ### E3 — CI/CD Enhancement
 - [x] Pester test job — added `pester` job to lint.yml: windows-latest, Pester 5.x install, NUnit XML output, upload-artifact v4.6.2 (SHA-pinned), 5-min timeout, module caching via actions/cache v4.3.0
