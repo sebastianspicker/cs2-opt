@@ -23,7 +23,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      # Pinned to actions/checkout v4.2.2 (2024-10-28) full SHA.
+      # Pinned to actions/checkout v6.0.2 (2026-01-09) full SHA.
       # Prevents supply-chain attacks via compromised action tags.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
