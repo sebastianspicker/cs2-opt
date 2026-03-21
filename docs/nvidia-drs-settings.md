@@ -43,7 +43,7 @@ The suite writes 52 DWORD settings directly to the NVIDIA DRS binary database (`
 
 | Name | DRS ID | Value | Explanation |
 |------|--------|-------|-------------|
-| Enable FXAA (master gate) | `276089202` | `1` (Disallowed) | **Note: `1` means Disallowed in this DRS enum.** This is the master gate that prevents FXAA injection at the driver level — stronger than just disabling FXAA in settings. |
+| Enable FXAA (master gate) | `276089202` | `0` (Off) | Disables driver-level FXAA injection. In NVAPI DRS, `0` = Off, `1` = On. |
 | Predefined FXAA usage | `271895433` | `0` | Secondary FXAA disable. Belt-and-suspenders with the master gate above. |
 
 ### VSync / Frame Rate
@@ -127,7 +127,7 @@ Identified by family name in the leak DB; precise semantics inferred from positi
 | `11313945` | `0xACA319` | `1` | PS_ pipeline / shader cache variant — `1` = enabled; exact sub-option unknown. |
 | `12623113` | `0xC09D09` | `2` | FORCE_GPUKERNEL_COP_ARCH variant — GPU kernel cooperative architecture hint; value `2` selects a specific kernel execution path. |
 | `270883746` | `0x10255BA2` | `0` | SHIM_RENDERING_OPTIONS companion flag — always `0` in known profiles; companion to the entry below. |
-| `270883750` | `0x10255BA6` | `469762050` | SHIM_RENDERING_OPTIONS extended — `0x1C004002` = `EHSHELL_DETECT \| DISABLE_CUDA \| DISABLE_TURING_POWER_POLICY` per leak DB bitmask definitions. |
+| `270883750` | `0x10255BA6` | `469762050` | SHIM_RENDERING_OPTIONS extended — `0x1C000002` = `EHSHELL_DETECT \| DISABLE_TURING_POWER_POLICY` per leak DB bitmask definitions. |
 | `271076560` | `0x10284CD0` | `0` | MCSXX / SLI flag — disabled; no-op on single-GPU systems. |
 | `539250342` | `0x20244EA6` | `1` | Vulkan workaround flag (VK_SLI_WAR family) — `1` = active. No-op on single-GPU. |
 | `544173595` | `0x206F6E1B` | `60` | VK_LOW_LATENCY family — value `60` is likely a sleep/overlap target in microseconds for the low-latency Vulkan submission path. |

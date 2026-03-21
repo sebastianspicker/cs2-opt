@@ -72,6 +72,7 @@ function Get-LatestNvidiaDriver {
 
         # Parse the response for download link and version
         $content = $response.Content
+        $downloadUrl = $null
         if ($content -match "downloadURL\s*=\s*'([^']+)'") {
             $downloadUrl = $Matches[1]
         } elseif ($content -match '(https://[^"''<>\s]+\.exe)') {

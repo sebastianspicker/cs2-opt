@@ -105,7 +105,7 @@ $NV_DRS_SETTINGS = @(
     @{ Id=11313945;   Value=1;          Name="PS_ pipeline/shader cache variant (0xACA319; value=1=enabled)" }
     @{ Id=12623113;   Value=2;          Name="FORCE_GPUKERNEL_COP_ARCH variant (0xC09D09; GPU kernel arch override)" }
     @{ Id=270883746;  Value=0;          Name="SHIM_RENDERING_OPTIONS companion flag (0x10255BA2; always 0)" }
-    @{ Id=270883750;  Value=469762050;  Name="SHIM_RENDERING_OPTIONS extended (0x10255BA6; 0x1C004002 = EHSHELL_DETECT|DISABLE_CUDA|DISABLE_TURING_POWER_POLICY)" }
+    @{ Id=270883750;  Value=469762050;  Name="SHIM_RENDERING_OPTIONS extended (0x10255BA6; 0x1C000002 = EHSHELL_DETECT|DISABLE_TURING_POWER_POLICY)" }
     @{ Id=271076560;  Value=0;          Name="MCSXX/SLI flag (0x10284CD0; disabled; no-op on single-GPU)" }
     @{ Id=539250342;  Value=1;          Name="VK_SLI_WAR or similar Vulkan workaround flag (0x20244EA6; 1=enabled)" }
     @{ Id=544173595;  Value=60;         Name="VK_LOW_LATENCY family (0x206F6E1B; value=60; likely sleep/overlap target µs)" }
