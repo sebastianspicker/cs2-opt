@@ -87,11 +87,11 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 
 ## Phase D: Surface Layer
 
-### D1 — Entry Points & Utilities (Round 2)
-- [ ] 5 new Verify-Settings service checks — correct service names and states?
-- [ ] Cleanup.ps1 -ErrorAction Stop — error messages actionable?
-- [ ] Run-Optimize DRY-RUN restart guard — consistent with B5 pattern?
-- [ ] FpsCap/Setup-Profile -ErrorAction Stop — any behavioral changes?
+### D1 — Entry Points & Utilities (Round 2) — COMPLETE
+- [x] 5 new Verify-Settings service checks — Service names (qWave, XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc) all correct, matching $CFG_XboxServices and Step 37. Checks use StartType "Disabled" (via CIM Win32_Service), consistent with SysMain/WSearch. Non-existent services handled gracefully (Test-ServiceCheck catch → "Service not found" as MISSING). FIXED: XboxGipSvc label now warns about Xbox wireless peripherals, matching Step 37 caveat.
+- [x] Cleanup.ps1 -ErrorAction Stop — FIXED: wrapped Driver Refresh copy operations in try/catch with actionable Write-Err message including path. Added missing-file detection (Test-Path else throw) matching Step 38 (B4) pattern. Catch re-throws after showing user-friendly message. No other operations in Cleanup.ps1 need -ErrorAction Stop (Clear-Dir, DNS flush, event logs all have their own error handling).
+- [x] Run-Optimize DRY-RUN restart guard — Pattern is `if ($SCRIPT:DryRun) { Write-Host DRY-RUN } else { restart }` inside Confirm-Risk prompt. Message clear: "Would restart computer for Phase 2 Safe Mode." Consistent with B5 guards in SafeMode-DriverClean.ps1 (lines 134-138) and PostReboot-Setup.ps1 (lines 650-654). After DRY-RUN skip, script exits naturally at line 93. No fix needed.
+- [x] FpsCap/Setup-Profile -ErrorAction Stop — FpsCap-Calculator: state update (lines 138-147) is best-effort by design — catch logs Write-Debug and continues; FPS cap already calculated and displayed to user. Correct behavior. Setup-Profile: FIXED empty catch block — now shows Write-Warn "Previous state file could not be read (corrupt or empty). Starting fresh." with explicit $state = $null. If read fails, falls through to fresh-state path (line 146: `if (-not $state -or $startStep -eq 1)`) which prompts user for full configuration. No PowerShell traceback exposed to user.
 
 ### D2 — GUI Layer (Round 2)
 - [ ] 7 step-catalog fixes — verify against actual Invoke-TieredStep params
