@@ -99,7 +99,8 @@ if ($startStep -le 2) {
             Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor DarkGray
 
             Complete-Step $PHASE 2 "XMP-Check"
-        }
+        } `
+        -SkipAction { Skip-Step $PHASE 2 "XMP-Check" }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -152,7 +153,8 @@ if ($startStep -le 3) {
             }
             Write-Info "Restart CS2 -> 'Compiling Shaders' appears briefly -> normal."
             Complete-Step $PHASE 3 "ShaderCache"
-        }
+        } `
+        -SkipAction { Skip-Step $PHASE 3 "ShaderCache" }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -191,7 +193,8 @@ if ($startStep -le 4) {
                 Write-Info "Typical path: Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\"
             }
             Complete-Step $PHASE 4 "FSO"
-        }
+        } `
+        -SkipAction { Skip-Step $PHASE 4 "FSO" }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -308,7 +311,8 @@ if ($startStep -le 6) {
                 Write-OK "Windows High Performance active (fallback)."
             }
             Complete-Step $PHASE 6 "PowerPlan"
-        }
+        } `
+        -SkipAction { Skip-Step $PHASE 6 "PowerPlan" }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
