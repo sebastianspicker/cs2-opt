@@ -20,7 +20,9 @@ $Script:Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path $MyInvocat
 # ── Async engine ──────────────────────────────────────────────────────────────
 $Script:Pool   = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 3)
 $Script:Pool.Open()
-$Script:UISync = [hashtable]::Synchronized(@{})
+$Script:UISync    = [hashtable]::Synchronized(@{})
+$Script:Closing   = $false
+$Script:AsyncTimers = [System.Collections.Generic.List[System.Windows.Threading.DispatcherTimer]]::new()
 
 function Invoke-Async {
     param([scriptblock]$Work, [object[]]$WorkArgs = @(), [scriptblock]$OnDone = {})
@@ -35,6 +37,11 @@ function Invoke-Async {
     $capturedRs     = $rs
     $capturedDone   = $OnDone
     $timer.Add_Tick({
+        if ($Script:Closing) {
+            $timer.Stop()
+            try { $capturedRs.Stop(); $capturedRs.Dispose() } catch {}
+            return
+        }
         if ($capturedHandle.IsCompleted) {
             $timer.Stop()
             try { $capturedRs.EndInvoke($capturedHandle) } catch { $Script:UISync.AsyncError = $_.Exception.Message }
@@ -42,6 +49,7 @@ function Invoke-Async {
             & $capturedDone
         }
     }.GetNewClosure())
+    $Script:AsyncTimers.Add($timer)
     $timer.Start()
 }
 
@@ -799,6 +807,8 @@ $Window.Add_Loaded({
 })
 
 $Window.Add_Closed({
+    $Script:Closing = $true
+    foreach ($t in $Script:AsyncTimers) { try { $t.Stop() } catch {} }
     try { $Script:Pool.Close(); $Script:Pool.Dispose() } catch {}
 })
 
