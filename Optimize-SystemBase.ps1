@@ -235,7 +235,7 @@ if ($startStep -le 5 -and $gpuInput -in @("1","2")) {
                     "https://www.nvidia.com/en-us/drivers/" | Set-Clipboard
                     Write-OK "NVIDIA download page copied to clipboard."
                     try {
-                        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+                        $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
                         $st | Add-Member -NotePropertyName "rollbackDriver" -NotePropertyValue $NVIDIA_STABLE_VERSION -Force
                         Save-JsonAtomic -Data $st -Path $CFG_StateFile
                     } catch { Write-Warn "Could not persist rollback flag: $_" }
