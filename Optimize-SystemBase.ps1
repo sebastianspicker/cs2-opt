@@ -319,9 +319,17 @@ if ($startStep -le 6) {
                 Write-Warn "Power plan creation failed: $_"
                 Write-Info "Fallback: activating Windows High Performance..."
                 if (-not $SCRIPT:DryRun) {
-                    powercfg /setactive SCHEME_MIN 2>&1 | Out-Null
+                    $hpResult = powercfg /setactive SCHEME_MIN 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warn "High Performance not available — falling back to Balanced."
+                        powercfg /setactive SCHEME_BALANCED 2>&1 | Out-Null
+                        Write-OK "Balanced power plan active (fallback)."
+                    } else {
+                        Write-OK "Windows High Performance active (fallback)."
+                    }
+                } else {
+                    Write-Host "  [DRY-RUN] Would fallback to High Performance plan" -ForegroundColor Magenta
                 }
-                Write-OK "Windows High Performance active (fallback)."
             }
             Complete-Step $PHASE 6 "PowerPlan"
         } `
