@@ -10,7 +10,7 @@
 #     This is the same mechanism NVIDIA Profile Inspector uses.
 #
 #  2. Registry Fallback (if DRS unavailable):
-#     Writes ~24 settings to HKLM registry keys. Only PerfLevelSrc=0x2222
+#     Writes 25 settings to HKLM registry keys. Only PerfLevelSrc=0x2222
 #     in the GPU class key is confirmed effective on modern drivers.
 #     Directs users to re-run with DRS or use NPI manually.
 #
@@ -121,7 +121,7 @@ $NV_DRS_SETTINGS = @(
 
 # ── Excluded settings ──────────────────────────────────────────────────────
 # 2966161525 (0xB0CC0875) — Smooth Motion APIs = 1 → frame interpolation adds latency
-# 550564838  (0x20D3A2E6) — OpenGL GPU Affinity → hardcoded GPU-specific PCI device ID
+# 550564838  (0x20D0F3E6) — OpenGL GPU Affinity → hardcoded GPU-specific PCI device ID
 # 269308407  (0x100D51F7) — String setting "Buffers=(Depth)" → DRS string type, marginal
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -335,7 +335,7 @@ function Apply-NvidiaCS2ProfileRegistry {
     <#
     .SYNOPSIS  Registry-only fallback for NVIDIA settings.
     .DESCRIPTION
-        Applies ~24 settings via registry. Only PerfLevelSrc=0x2222 is
+        Applies 25 settings via registry. Only PerfLevelSrc=0x2222 is
         confirmed effective on modern drivers. Included for systems where
         nvapi64.dll is unavailable (AMD GPU, 32-bit PS, old driver).
     #>

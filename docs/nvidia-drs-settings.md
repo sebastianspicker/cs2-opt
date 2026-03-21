@@ -168,7 +168,7 @@ Three settings are intentionally excluded:
 | DRS ID | Hex | Reason |
 |--------|-----|--------|
 | `2966161525` | `0xB0CC0875` | **Smooth Motion APIs = 1** — frame interpolation. Generates intermediate frames between real frames. Adds 1–2 frames of input lag. In competitive CS2, you react to interpolated frames that don't represent the server's current state. Strictly harmful for competitive play. |
-| `550564838` | `0x20D3A2E6` | **OpenGL GPU Affinity** — a string-type setting that hardcodes a specific GPU's PCI device ID. Applying this on any other GPU confuses the driver's device routing. |
+| `550564838` | `0x20D0F3E6` | **OpenGL GPU Affinity** — a string-type setting that hardcodes a specific GPU's PCI device ID. Applying this on any other GPU confuses the driver's device routing. |
 | `269308407` | `0x100D51F7` | **String setting** `"Buffers=(Depth)"` — DRS string type (not DWORD). Unclear semantics, possibly DLSS-related. No documented effect on CS2. |
 
 ---
