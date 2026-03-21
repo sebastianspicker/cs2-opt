@@ -33,7 +33,7 @@ try {
     Write-Host "  - Press [Y] to continue with defaults." -ForegroundColor Yellow
     $r = Read-Host "  Continue with defaults? [y/N]"
     if ($r -notmatch "^[jJyY]$") { exit 1 }
-    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; fpsCap=$null; avgFps=$null; rollbackDriver=$null; nvidiaDriverPath=$null }
+    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; fpsCap=$null; avgFps=$null; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }
 $fpsCap   = $state.fpsCap
@@ -603,4 +603,10 @@ Write-Host "  ╚═════════════════════
 Write-Blank
 
 $r = Read-Host "  Final restart recommended (MSI changes). Now? [y/N]"
-if ($r -match "^[jJyY]$") { Restart-Computer -Force }
+if ($r -match "^[jJyY]$") {
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would restart computer." -ForegroundColor Magenta
+    } else {
+        Restart-Computer -Force
+    }
+}
