@@ -117,13 +117,14 @@ Recorded by `Backup-ScheduledTask` before creating the X3D CCD affinity task.
   "type": "scheduledtask",
   "taskName": "CS2_Optimize_CCD_Affinity",
   "existed": false,
+  "wasEnabled": false,
   "scriptPath": "C:\\CS2_OPTIMIZE\\cs2_affinity.ps1",
   "step": "Process Priority + CCD Affinity",
   "timestamp": "2026-03-13 15:05:00"
 }
 ```
 
-If `existed: false` (the task was created by the suite), restore unregisters it and deletes the affinity script.
+If `existed: false` (the task was created by the suite), restore unregisters it and deletes the affinity script. If `existed: true`, restore uses `wasEnabled` to restore the exact enabled/disabled state rather than blindly re-enabling.
 
 ---
 
