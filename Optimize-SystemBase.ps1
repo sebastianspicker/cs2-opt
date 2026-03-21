@@ -123,9 +123,13 @@ if ($startStep -le 3) {
                 if (Test-Path $p) {
                     $n = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue).Count
                     Write-Step "CS2 Cache: $p  ($n files)"
-                    Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue |
-                        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-OK "Cleared: $p"
+                    if (-not $SCRIPT:DryRun) {
+                        Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue |
+                            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                        Write-OK "Cleared: $p"
+                    } else {
+                        Write-Host "  [DRY-RUN] Would clear: $p ($n files)" -ForegroundColor Magenta
+                    }
                     $found = $true
                 }
             }
@@ -133,9 +137,13 @@ if ($startStep -le 3) {
                 if (Test-Path $c) {
                     $n = (Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue).Count
                     Write-Step "GPU Cache: $c  ($n files)"
-                    Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue |
-                        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-OK "Cleared: $c"
+                    if (-not $SCRIPT:DryRun) {
+                        Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue |
+                            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                        Write-OK "Cleared: $c"
+                    } else {
+                        Write-Host "  [DRY-RUN] Would clear: $c ($n files)" -ForegroundColor Magenta
+                    }
                     $found = $true
                 }
             }

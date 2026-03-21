@@ -65,7 +65,15 @@ $cachePaths = [System.Collections.Generic.List[string]]$CFG_ShaderCache_Paths
 if ($steamBase) { $cachePaths.Add("$steamBase\steamapps\shadercache\730") }
 $cs2Found = $false
 foreach ($p in ($cachePaths | Select-Object -Unique)) {
-    if (Test-Path $p) { $total += Clear-Dir $p "CS2 Shader Cache"; $cs2Found = $true }
+    if (Test-Path $p) {
+        if (-not $SCRIPT:DryRun) {
+            $total += Clear-Dir $p "CS2 Shader Cache"
+        } else {
+            $n = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
+            Write-Host "  [DRY-RUN] Would clear: $p ($n files)" -ForegroundColor Magenta
+        }
+        $cs2Found = $true
+    }
 }
 if (-not $cs2Found) {
     Write-Warn "CS2 Shader Cache not found."
@@ -74,29 +82,41 @@ if (-not $cs2Found) {
 
 # Windows Temp
 Write-TierBadge 3 "Temp files  (no direct 1%-low effect — system hygiene)"
-$total += Clear-Dir "$env:SystemRoot\Temp" "Windows Temp"
-$total += Clear-Dir $env:TEMP              "User Temp"
+if (-not $SCRIPT:DryRun) {
+    $total += Clear-Dir "$env:SystemRoot\Temp" "Windows Temp"
+    $total += Clear-Dir $env:TEMP              "User Temp"
+} else {
+    Write-Host "  [DRY-RUN] Would clear: Windows Temp + User Temp" -ForegroundColor Magenta
+}
 
 # DNS Cache
 Write-TierBadge 3 "Flush DNS cache"
-try { ipconfig /flushdns | Out-Null; Write-OK "DNS cache flushed." } catch { Write-Warn "DNS flush failed." }
+if (-not $SCRIPT:DryRun) {
+    try { ipconfig /flushdns | Out-Null; Write-OK "DNS cache flushed." } catch { Write-Warn "DNS flush failed." }
+} else {
+    Write-Host "  [DRY-RUN] Would run: ipconfig /flushdns" -ForegroundColor Magenta
+}
 
 # RAM Working Set
 Write-TierBadge 3 "Trim RAM working set"
-try {
-    Add-Type @"
+if (-not $SCRIPT:DryRun) {
+    try {
+        Add-Type @"
 using System; using System.Runtime.InteropServices;
 public class MemHelper {
     [DllImport("kernel32.dll")] public static extern bool SetSystemFileCacheSize(UIntPtr min, UIntPtr max, uint flags);
 }
 "@ -ErrorAction SilentlyContinue
-    $before = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB, 0)
-    [MemHelper]::SetSystemFileCacheSize([UIntPtr]::new(1), [UIntPtr]::new(1), 0) | Out-Null
-    # Reset file cache limits back to system defaults (flag 0x4 = FILE_CACHE_MAX_HARD_DISABLE)
-    [MemHelper]::SetSystemFileCacheSize([UIntPtr]::Zero, [UIntPtr]::Zero, 4) | Out-Null
-    $after  = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB, 0)
-    Write-OK "RAM: ${after} MB free (before: ${before} MB)"
-} catch { Write-Info "Working set trim skipped." }
+        $before = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB, 0)
+        [MemHelper]::SetSystemFileCacheSize([UIntPtr]::new(1), [UIntPtr]::new(1), 0) | Out-Null
+        # Reset file cache limits back to system defaults (flag 0x4 = FILE_CACHE_MAX_HARD_DISABLE)
+        [MemHelper]::SetSystemFileCacheSize([UIntPtr]::Zero, [UIntPtr]::Zero, 4) | Out-Null
+        $after  = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB, 0)
+        Write-OK "RAM: ${after} MB free (before: ${before} MB)"
+    } catch { Write-Info "Working set trim skipped." }
+} else {
+    Write-Host "  [DRY-RUN] Would trim RAM working set" -ForegroundColor Magenta
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FULL CLEANUP
@@ -106,20 +126,32 @@ if ($doFull) {
 
     # GPU Shader Caches  [T1]
     Write-TierBadge 1 "Clear GPU Shader Caches"
-    $total += Clear-Dir $CFG_NV_ShaderCache "NVIDIA DX Cache"
-    $total += Clear-Dir $CFG_NV_GLCache     "NVIDIA GL Cache"
-    $total += Clear-Dir $CFG_DX_ShaderCache "DirectX D3D Cache"
-    $amdCache = "$env:LOCALAPPDATA\AMD\DxCache"
-    if (Test-Path $amdCache) { $total += Clear-Dir $amdCache "AMD DX Cache" }
+    if (-not $SCRIPT:DryRun) {
+        $total += Clear-Dir $CFG_NV_ShaderCache "NVIDIA DX Cache"
+        $total += Clear-Dir $CFG_NV_GLCache     "NVIDIA GL Cache"
+        $total += Clear-Dir $CFG_DX_ShaderCache "DirectX D3D Cache"
+        $amdCache = "$env:LOCALAPPDATA\AMD\DxCache"
+        if (Test-Path $amdCache) { $total += Clear-Dir $amdCache "AMD DX Cache" }
+    } else {
+        foreach ($cp in @($CFG_NV_ShaderCache, $CFG_NV_GLCache, $CFG_DX_ShaderCache)) {
+            if (Test-Path $cp) { Write-Host "  [DRY-RUN] Would clear: $cp" -ForegroundColor Magenta }
+        }
+        $amdCache = "$env:LOCALAPPDATA\AMD\DxCache"
+        if (Test-Path $amdCache) { Write-Host "  [DRY-RUN] Would clear: $amdCache" -ForegroundColor Magenta }
+    }
 
     # Prefetch  [T3]
     Write-TierBadge 3 "Prefetch  (no 1%-low effect — system hygiene)"
     $pfPath = "$env:SystemRoot\Prefetch"
     if (Test-Path $pfPath) {
         $n = (Get-ChildItem $pfPath -Filter "*.pf" -ErrorAction SilentlyContinue).Count
-        Get-ChildItem $pfPath -Filter "*.pf" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-        Write-OK "Prefetch: $n .pf files deleted"
-        $total += $n
+        if (-not $SCRIPT:DryRun) {
+            Get-ChildItem $pfPath -Filter "*.pf" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-OK "Prefetch: $n .pf files deleted"
+            $total += $n
+        } else {
+            Write-Host "  [DRY-RUN] Would delete $n prefetch files from $pfPath" -ForegroundColor Magenta
+        }
     }
 
     # Winsock Reset  [T2]
@@ -138,12 +170,16 @@ if ($doFull) {
 
     # Event Logs  [Hygiene]
     Write-TierBadge 3 "Clear Event Logs  (no 1%-low effect)"
-    try {
-        foreach ($l in @("Application","System","Security","Setup")) {
-            wevtutil cl $l 2>$null
-        }
-        Write-OK "Event Logs cleared."
-    } catch { Write-Warn "Event Logs partially not cleared." }
+    if (-not $SCRIPT:DryRun) {
+        try {
+            foreach ($l in @("Application","System","Security","Setup")) {
+                wevtutil cl $l 2>$null
+            }
+            Write-OK "Event Logs cleared."
+        } catch { Write-Warn "Event Logs partially not cleared." }
+    } else {
+        Write-Host "  [DRY-RUN] Would clear: Application, System, Security, Setup event logs" -ForegroundColor Magenta
+    }
 
     # Steam Verification  [T2]
     Invoke-TieredStep -Tier 2 -Title "Verify CS2 game integrity (Steam)" `
@@ -155,18 +191,22 @@ if ($doFull) {
         -SideEffects "Takes 2-5 minutes. Steam must be running." `
         -Undo "N/A (verification only)" `
         -Action {
-            $steamExe = @(
-                "${env:ProgramFiles(x86)}\Steam\steam.exe",
-                "$env:ProgramFiles\Steam\steam.exe",
-                "$(if($steamBase){"$steamBase\steam.exe"})"
-            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-            if ($steamExe) {
-                Write-Step "Starting CS2 verification..."
-                Start-Process "steam://validate/730" -ErrorAction SilentlyContinue
-                Write-OK "Steam verification started — wait for Steam to finish."
+            if (-not $SCRIPT:DryRun) {
+                $steamExe = @(
+                    "${env:ProgramFiles(x86)}\Steam\steam.exe",
+                    "$env:ProgramFiles\Steam\steam.exe",
+                    "$(if($steamBase){"$steamBase\steam.exe"})"
+                ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+                if ($steamExe) {
+                    Write-Step "Starting CS2 verification..."
+                    Start-Process "steam://validate/730" -ErrorAction SilentlyContinue
+                    Write-OK "Steam verification started — wait for Steam to finish."
+                } else {
+                    Write-Warn "Steam.exe not found."
+                    Write-Info "Manual: Steam -> CS2 -> Properties -> Local Files -> Verify"
+                }
             } else {
-                Write-Warn "Steam.exe not found."
-                Write-Info "Manual: Steam -> CS2 -> Properties -> Local Files -> Verify"
+                Write-Host "  [DRY-RUN] Would trigger: Steam CS2 game integrity verification" -ForegroundColor Magenta
             }
         }
 }

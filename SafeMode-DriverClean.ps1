@@ -35,14 +35,19 @@ if (-not $env:SAFEBOOT_OPTION) {
 }
 
 Write-Section "Step 1 — Disable Safe Mode"
-$smOutput = bcdedit /deletevalue safeboot 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
-    Write-Err "System may boot into Safe Mode again! Run: bcdedit /deletevalue safeboot"
-    $smConfirm = Read-Host "  Continue anyway? [y/N]"
-    if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+if ($SCRIPT:DryRun) {
+    Write-Host "  [DRY-RUN] Would run: bcdedit /deletevalue safeboot" -ForegroundColor Magenta
+    Write-Host "  [DRY-RUN] CRITICAL: In a real run this removes Safe Mode boot flag" -ForegroundColor Magenta
 } else {
-    Write-OK "Safe Mode disabled (next boot = normal)."
+    $smOutput = bcdedit /deletevalue safeboot 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
+        Write-Err "System may boot into Safe Mode again! Run: bcdedit /deletevalue safeboot"
+        $smConfirm = Read-Host "  Continue anyway? [y/N]"
+        if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+    } else {
+        Write-OK "Safe Mode disabled (next boot = normal)."
+    }
 }
 Complete-Step $PHASE 1 "SafeMode off"
 
