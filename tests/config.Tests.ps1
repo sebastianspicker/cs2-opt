@@ -151,7 +151,7 @@ Describe "Path format validation" {
 
     It "CFG_WorkDir uses backslash Windows path format" {
         $SCRIPT:_OriginalCfgWorkDir | Should -Not -Match "/" -Because "Windows paths should use backslashes"
-        $SCRIPT:_OriginalCfgWorkDir | Should -Match "^[A-Z]:\\\\" -Because "WorkDir should be an absolute Windows path"
+        $SCRIPT:_OriginalCfgWorkDir | Should -Match "^[A-Z]:\\" -Because "WorkDir should be an absolute Windows path"
     }
 
     It "CFG_StateFile uses backslash path format" {

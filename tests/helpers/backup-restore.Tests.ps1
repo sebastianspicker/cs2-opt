@@ -129,6 +129,26 @@ Describe "Flush-BackupBuffer" {
         $data = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
         @($data.entries).Count | Should -Be 0
     }
+
+    It "retains entries in buffer when save fails (for retry)" {
+        New-TestBackupFile
+
+        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+        $SCRIPT:_backupPending.Add([ordered]@{
+            type = "registry"; path = "HKLM:\Test"; name = "RetryVal";
+            originalValue = $null; existed = $false; step = "Step Retry";
+            timestamp = "2026-01-01 00:00:00"
+        })
+
+        # Mock Save-JsonAtomic to simulate disk failure
+        Mock Save-JsonAtomic { throw "Disk full" } -ParameterFilter { $Path -eq $CFG_BackupFile }
+
+        { Flush-BackupBuffer } | Should -Throw
+
+        # Entries should still be in the buffer for retry (Clear() was not reached)
+        $SCRIPT:_backupPending.Count | Should -Be 1
+        $SCRIPT:_backupPending[0].name | Should -Be "RetryVal"
+    }
 }
 
 # ── Get-BackupData ────────────────────────────────────────────────────────────
