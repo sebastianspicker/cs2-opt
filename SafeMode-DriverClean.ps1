@@ -52,13 +52,15 @@ try {
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }
 Initialize-Log
-Initialize-Backup
 Write-Banner 2 3 "Safe Mode  ·  GPU Driver Clean Removal"
 Write-Info "Safe Mode active. GPU driver files are unlocked."
 
 $PHASE = 2
 
 try {
+    # Initialize backup inside try so finally releases the lock on error
+    Initialize-Backup
+
     # Validate we're actually in Safe Mode
     # $env:SAFEBOOT_OPTION is set by winload.exe on Safe Mode boot ("MINIMAL" or "NETWORK").
     # Reliable on all Windows 10/11 editions. If absent, we're in normal boot.

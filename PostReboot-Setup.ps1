@@ -67,10 +67,10 @@ if ($SCRIPT:DryRun) {
     }
 }
 
-# Initialize backup system for this phase
+try {
+# Initialize backup system for this phase (inside try so finally releases the lock on error)
 Initialize-Backup
 
-try {
 # Load Phase 1 applied steps so improvement estimates are cumulative
 Load-AppliedSteps
 
