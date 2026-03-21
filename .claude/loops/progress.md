@@ -76,12 +76,69 @@ Security + compatibility pass. The tool runs as Administrator — one injection 
 ## Loop 2: Compatibility
 
 ### COMPAT-R6 — Windows + PowerShell Version Matrix
-- [ ] Windows 10 (1903-22H2) vs Windows 11 (21H2-24H2): any API differences?
-- [ ] PowerShell 5.1 vs 7.x: ConvertFrom-Json, Get-CimInstance, Test-Path behavior differences
-- [ ] ARM64 Windows: any x64 assumptions? (nvapi64.dll, driver paths)
-- [ ] Non-English Windows: any remaining localized string dependencies after R3 locale fixes?
-- [ ] Windows Server editions: missing AppX packages, missing services, different defaults
-- [ ] Restricted environments: AppLocker, WDAC, Constrained Language Mode — does the tool work?
+- [x] Windows 10 vs 11 — VERIFIED + DOCUMENTED
+- [x] PowerShell 5.1 vs 7.x — VERIFIED + DOCUMENTED
+- [x] ARM64 Windows — FIXED (nvapi64.dll detection, graceful fallback)
+- [x] Non-English Windows — VERIFIED (CIM locale-independent, pnputil documented English-only)
+- [x] Windows Server / LTSC — FIXED (AppX guard, service existence checks, Test-SystemCompatibility)
+- [x] Restricted environments — FIXED (CLM detection, GP path warning)
+
+#### Findings Detail
+
+**1. Windows 10 vs 11**
+- URO build check: `$osBuild -ge 22000` is correct. Win11 21H2 = build 22000.
+- AppX packages: `Clipchamp.Clipchamp` is Win11-only but `-ErrorAction SilentlyContinue` handles absence. No fix needed.
+- Game Mode registry paths: Same on Win10 and Win11 (`HKCU:\SOFTWARE\Microsoft\GameBar`). Verified.
+- `bcdedit` output format: Element names and Yes/No values are locale-independent. Verified.
+- Win11 24H2: No new API breaking changes affecting this tool.
+
+**2. PowerShell 5.1 vs 7.x**
+- ConvertFrom-Json empty arrays: Already handled in `benchmark-history.ps1` (`$null -eq $data` check) and `backup-restore.ps1` (`@($raw.entries)` wrapping).
+- `$null` comparison order: All comparisons use `$null -eq $x` (LHS). Verified grep: zero instances of `$x -eq $null`.
+- Get-CimInstance vs Get-WmiObject: Only pagefile step uses `Get-WmiObject` (justified — `.Put()` method is WMI-specific). Added PS7 deprecation comment.
+- `-ErrorAction` on native commands: Zero instances found. All native commands use `$LASTEXITCODE` or `2>&1`. Verified.
+- `[System.Collections.Generic.List[object]]::new()`: Works in PS 5.1 (.NET generics available). Verified.
+
+**3. ARM64 Windows**
+- `nvapi64.dll`: x64-only. ARM64 PowerShell reports `[IntPtr]::Size == 8` but cannot load x64 DLLs via Add-Type P/Invoke. **Fixed**: Added `$env:PROCESSOR_ARCHITECTURE -eq "ARM64"` check in `Initialize-NvApiDrs`. Falls back to registry-only NVIDIA profile path.
+- Driver paths: `DriverStore\FileRepository` is the same on ARM64. `pnputil` is available on ARM64.
+- `bcdedit`: Available on ARM64 (ships with all Windows editions).
+- Struct sizes in C# interop: NVAPI structs use explicit byte offsets, not `sizeof()`. Safe on any platform where the DLL loads (which it won't on ARM64 — guarded above).
+
+**4. Non-English Windows**
+- `bcdedit /enum "{current}"`: Element names (`disabledynamictick`, `useplatformtick`) are BCD identifiers, not localized. Values (`Yes`/`No`) are BCD format strings, also not localized. **Verified**.
+- CIM `ClassGuid`: Used for GPU driver clean (primary path). Device setup class GUID `{4d36e968-...}` is always the same. **Locale-independent**.
+- `pnputil` text parsing: Field names ("Published Name", "Class Name") ARE localized. CIM is the primary path; pnputil is fallback only. Already documented with comment: "this method will not find drivers on non-English Windows installations." **Accepted limitation**.
+- `Get-Service` names: `SysMain`, `WSearch`, `qWave`, `XblAuthManager`, etc. are internal service names (not display names). **Locale-independent**.
+- Error messages: All caught by exception type (`catch { }`) not by message text. **Verified**.
+
+**5. Windows Server / LTSC**
+- AppX packages: `Get-AppxPackage` cmdlet may not exist on Server Core. **Fixed**: Added `Get-Command Get-AppxPackage` guard in `Invoke-GamingDebloat`. Skips AppX removal, falls through to telemetry services.
+- Xbox services: `Get-Service` with `-ErrorAction SilentlyContinue` already handles missing services. Step 37 checks `if ($svc)` before each service operation. **No fix needed**.
+- Game Mode: Registry writes (`AllowAutoGameMode`, `AutoGameModeEnabled`) succeed even if Game Mode feature is absent — benign writes. **No fix needed**.
+- High Performance power plan: May not exist on some OEM systems. `New-CS2PowerPlan` already falls back to Balanced as base. **Already handled**.
+- Added `Test-SystemCompatibility` function: detects Server editions via `Win32_OperatingSystem.ProductType != 1` and logs warning at startup.
+
+**6. Restricted Environments**
+- **AppLocker**: `START.bat` uses `-ExecutionPolicy Bypass` which is overridden by AppLocker script rules. **Accepted limitation** — documented in Run-Optimize.ps1 header.
+- **WDAC**: Code integrity policies block unsigned scripts. **Accepted limitation** — tool must be whitelisted or WDAC policy adjusted.
+- **Constrained Language Mode**: `Add-Type` is blocked. **Fixed**: Added CLM detection in `Initialize-NvApiDrs` (falls back to registry-only NVIDIA path) and `Cleanup.ps1` (skips RAM trim). Documented.
+- **Group Policy**: Registry writes under `Policies\` paths may be overridden by GP. **Fixed**: Added GP path detection in `Test-RegistryCheck` — warns "may be managed by Group Policy" when a CHANGED value is under a `\Policies\` path.
+
+#### Minimum Supported Configuration
+- Windows 10 1903+ or Windows 11 (any build) — x64 desktop edition
+- PowerShell 5.1 (shipped with Windows)
+- Administrator privileges
+- Full Language Mode (ConstrainedLanguage degrades gracefully)
+
+#### Known Graceful Degradations
+| Environment | Feature Lost | Fallback |
+|---|---|---|
+| ARM64 Windows | NVIDIA DRS writes | Registry-only NVIDIA profile |
+| Constrained Language Mode | DRS writes + RAM trim | Registry profile + skip trim |
+| Windows Server / LTSC | AppX debloat | Skipped (services + registry still work) |
+| PowerShell 7 | Pagefile configuration | Use PS 5.1 for full functionality |
+| Non-English Windows | pnputil GPU driver enum | CIM primary path (locale-independent) |
 
 ## Loop 3: Final Gate
 
