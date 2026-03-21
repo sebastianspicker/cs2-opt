@@ -8,7 +8,7 @@ function Remove-GpuDriverClean {
                for Display Driver Uninstaller (DDU).
     .DESCRIPTION
         1. Stops and disables GPU-related services
-        2. Removes GPU driver packages via pnputil (with CIM fallback for non-English Windows)
+        2. Removes GPU driver packages (CIM primary, pnputil text-parsing fallback)
         3. Cleans GPU registry entries
         4. Removes DriverStore orphans
         5. Cleans shader caches and temp folders

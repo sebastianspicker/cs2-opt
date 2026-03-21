@@ -52,8 +52,15 @@ if ($SCRIPT:DryRun) {
     if ($LASTEXITCODE -ne 0) {
         # bcdedit returns non-zero if the value doesn't exist — this is expected on re-run
         # (safeboot was already cleared by a previous execution) or if not in Safe Mode.
-        $alreadyCleared = "$smOutput" -match "not found|not valid|element not found"
-        if ($alreadyCleared) {
+        # NOTE: bcdedit error text is LOCALIZED ("element not found" in English, but different
+        # on German/French/etc Windows). Instead of parsing the error message, we verify the
+        # actual BCD state: run "bcdedit /enum {current}" and check whether "safeboot" still
+        # appears. The element name "safeboot" is an internal BCD identifier, NOT localized.
+        $bcdEnum = bcdedit /enum "{current}" 2>&1
+        # bcdedit output is an array of lines; join with newlines for reliable regex matching.
+        $bcdEnumText = ($bcdEnum | Out-String)
+        $safebootStillSet = $bcdEnumText -match "(?m)^\s*safeboot\s"
+        if (-not $safebootStillSet) {
             Write-OK "Safe Mode already disabled (safeboot value not present). OK to continue."
         } else {
             Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
