@@ -36,11 +36,11 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [x] Power plan HP→Balanced fallback — correct GUID? — SCHEME_BALANCED is correct alias for 381b4222-f694-41f0-9685-ff5bb260df2e. DRY-RUN guard correct. FIXED: Added LASTEXITCODE check after SCHEME_BALANCED activation — if both HP and Balanced are unavailable, shows actionable manual instruction instead of false success message.
 - [x] Pagefile non-C: warning — actionable message? — WMI query correct, filter for non-C: StartsWith check correct. Warning names drives and directs user to System Properties -> Advanced. AutomaticManagedPagefile .Put() works. C: pagefile still configured regardless of other-drive pagefiles.
 
-### B2 — Hardware (Round 2)
-- [ ] Debloat autostart removal — was the dedup correct?
-- [ ] Driver path Write-Debug→Write-Warn — log level appropriate?
-- [ ] -ErrorAction Stop additions — any behavioral changes?
-- [ ] State.json field names still match Phase 3 after B6 changes?
+### B2 — Hardware (Round 2) — COMPLETE
+- [x] Debloat autostart removal — was the dedup correct? — YES. Old debloat code and Step 14 both iterated `$CFG_Autostart_Remove` over same registry paths. No entries lost. FIXED: docs/debloat.md header still said "Step 13" only; updated to reference both Step 13 and Step 14.
+- [x] Driver path Write-Debug→Write-Warn — log level appropriate? — YES. Write-Warn is correct: failure means Phase 3 will unnecessarily prompt for already-downloaded driver. Error details included via `$_`. Catch correctly swallows (download succeeded, only state tracking failed).
+- [x] -ErrorAction Stop additions — any behavioral changes? — NO regressions. Both calls (lines 401, 461) are inside try/catch with appropriate Write-Warn handlers that swallow and continue. Before: silent null passed to ConvertFrom-Json causing corrupt state write. Now: catch fires cleanly. No other `Get-Content $CFG_StateFile` calls in this file are missing -ErrorAction Stop.
+- [x] State.json field names still match Phase 3 after B6 changes? — YES. All 5 Phase-1-written fields read by Phase 3 match: `baselineAvg`/`baselineP1` (Step 17→line 608-609), `nvidiaDriverPath` (Step 19→line 92), `rollbackDriver` (Step 9→lines 129/132), `appliedSteps` (Save-AppliedSteps→Load-AppliedSteps). Fallback state on line 36 includes all required fields. `nvidiaDriverVersion` written but not read by Phase 3 (metadata only, not an issue).
 
 ### B3 — Registry Tweaks (Round 2)
 - [ ] SmoothMouse 40-byte curves — values produce correct 1:1 mapping?
@@ -77,11 +77,11 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [ ] $downloadUrl init — any other uninitialized vars in StrictMode?
 - [ ] Doc fix propagation — nvidia-drs-settings.md consistent with code?
 
-### C2 — Network & Hardware (Round 2)
-- [ ] MSI -ErrorAction Stop — any operations that should remain SilentlyContinue?
-- [ ] Benchmark history cap (200) — FIFO trim logic correct?
-- [ ] PS 5.1 null guard — does it handle all ConvertFrom-Json edge cases?
-- [ ] Debloat pre-fetch — still correct after B2 dedup changes?
+### C2 — Network & Hardware (Round 2) — COMPLETE
+- [x] MSI -ErrorAction Stop — VERIFIED: registry paths always created via New-Item -Force before Set-ItemProperty; try/catch provides device-specific error messages; no operations should remain SilentlyContinue
+- [x] Benchmark history cap (200) — VERIFIED: FIFO trim removes oldest (index 0 excluded via array slice from tail), applied after adding new entry, boundary case (200→201→200) correct, saved atomically via Save-JsonAtomic, cap defined in benchmark-history.ps1 line 6
+- [x] PS 5.1 null guard — FIXED: changed `-not $data` to `$null -eq $data` to avoid false positives on valid falsy values (0, ""); single-element array and PSCustomObject cases already handled by `-is [array]` + `@()` wrapper
+- [x] Debloat pre-fetch — VERIFIED: no autostart code in debloat.ps1 (comment on line 122 confirms Step 14 handles it), pre-fetch optimization intact (line 37), telemetry service backups in place (line 75), 18 AppX packages match docs exactly; FIXED stale autostart references in docs/debloat.md
 
 ---
 
