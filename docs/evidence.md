@@ -121,10 +121,10 @@ Shows exactly how each step behaves under every profile. **DRY-RUN** is a modifi
 | 17 | Baseline benchmark (CapFrameX) | T1 | SAFE | `auto` | `auto` | `auto` | `prompted` | Required for before/after comparison |
 | 18 | GPU driver clean (prep) | T1 | SAFE | `—` | `—` | `—` | `—` | Informational; removal happens in Phase 2 |
 | 19 | NVIDIA driver download | T1 | SAFE | `auto` | `auto` | `auto` | `prompted` | AMD/Intel: manual download link shown |
-| 20 | NVIDIA profile (prep) | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | Applied in Phase 3 Step 4 |
-| 21 | MSI interrupts (prep) | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Applied in Phase 3 Step 2 |
-| 22 | NIC interrupt affinity (prep) | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | Applied in Phase 3 Step 3 |
-| 23 | Disable Fast Startup | T2 | SAFE | `auto` | `auto` | `auto` | `prompted` | MSI interrupt settings require cold boot — Fast Startup bypasses this |
+| 20 | NVIDIA profile (prep) | — | — | `—` | `—` | `—` | `—` | Passthrough; actual gating in Phase 3 Step 4 |
+| 21 | MSI interrupts (prep) | — | — | `—` | `—` | `—` | `—` | Passthrough; actual gating in Phase 3 Step 2 |
+| 22 | NIC interrupt affinity (prep) | — | — | `—` | `—` | `—` | `—` | Passthrough; actual gating in Phase 3 Step 3 |
+| 23 | Disable Fast Startup | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | MSI interrupt settings require cold boot — Fast Startup bypasses this |
 | 24 | Dual-channel RAM detection | T1 | SAFE | `auto` | `auto` | `auto` | `prompted` | Warns + guides if single-channel detected |
 | 25 | Nagle's Algorithm disable | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Affects TCP only; no in-game latency change |
 | 26 | GameConfigStore FSE | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Supplements Step 4 fullscreen tweak |
@@ -145,10 +145,10 @@ Shows exactly how each step behaves under every profile. **DRY-RUN** is a modifi
 
 | Profile | Auto | Prompted | Skipped |
 |---------|------|----------|---------|
-| SAFE | 23 | 0 | 13 |
-| RECOMMENDED | 9 | 18 | 9 |
-| COMPETITIVE | 9 | 26 | 1 |
-| CUSTOM | 1 | 35 | 0 |
+| SAFE | 23 | 0 | 11 |
+| RECOMMENDED | 9 | 18 | 7 |
+| COMPETITIVE | 9 | 24 | 1 |
+| CUSTOM | 1 | 33 | 0 |
 
 ### Phase 2 — Safe Mode (3 steps)
 
@@ -157,8 +157,8 @@ Phase 2 runs automatically from `RunOnce`. **No profile interaction — all step
 | Step | Action | Notes |
 |------|--------|-------|
 | 2.1 | Remove Safe Mode boot flag | `bcdedit /deletevalue safeboot` |
-| 2.2 | Register Phase 3 via RunOnce | Registers `PostReboot-Setup.ps1` for next normal boot |
-| 2.3 | Native GPU driver removal | PowerShell-based removal (stops services, removes drivers, cleans registry) |
+| 2.2 | Native GPU driver removal | PowerShell-based removal (stops services, removes drivers, cleans registry) |
+| 2.3 | Register Phase 3 via RunOnce | Registers `PostReboot-Setup.ps1` for next normal boot |
 
 ### Phase 3 — 13 Steps
 
@@ -185,5 +185,5 @@ Step 6 is T1 (always runs), but `Apply-PowerPlan` applies three separate tiers o
 | Setting Group | SAFE | RECOMMENDED | COMPETITIVE | CUSTOM |
 |---------------|------|-------------|-------------|--------|
 | **T1** — CPU max, no parking, USB/disk off, sleep off, active cooling, PCIe ASPM off (9 settings) | Applied | Applied | Applied | Applied |
-| **T2** — EPP=0, boost 254/255, max idle C1, NVMe/USB-C off, GPU pref=4, vendor CPU min (16–17 settings) | Skipped | Applied | Applied | Applied |
+| **T2** — EPP=0, boost 254/255, max idle C1, NVMe/USB-C off, GPU pref=4, vendor CPU min (15–16 settings) | Skipped | Applied | Applied | Applied |
 | **T3** — C-states off, duty cycling off, perf history=1, fast ramp (5 settings) | Skipped | Skipped | Applied | Applied |
