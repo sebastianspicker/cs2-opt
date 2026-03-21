@@ -522,6 +522,7 @@ function Restore-StepChanges {
                 }
                 "scheduledtask" {
                     if (-not $e.existed) {
+                        # Task didn't exist before we created it — remove it entirely
                         try {
                             $task = Get-ScheduledTask -TaskName $e.taskName -ErrorAction SilentlyContinue
                             if ($task) {
@@ -534,16 +535,24 @@ function Restore-StepChanges {
                             Write-OK "Removed: $($e.scriptPath)"
                         }
                     } else {
-                        # Task existed before — re-enable it (we disabled it, not removed it)
+                        # Task existed before — restore its enabled/disabled state
+                        # Use wasEnabled field (added in batch buffer update) to avoid
+                        # blindly re-enabling tasks that were already disabled before optimization.
+                        $shouldBeEnabled = if ($null -ne $e.wasEnabled) { $e.wasEnabled } else { $true }
                         try {
                             $task = Get-ScheduledTask -TaskName $e.taskName -ErrorAction SilentlyContinue
-                            if ($task -and $task.State -eq "Disabled") {
+                            if (-not $task) {
+                                Write-Warn "Scheduled task '$($e.taskName)' no longer exists — cannot restore."
+                            } elseif ($shouldBeEnabled -and $task.State -eq "Disabled") {
                                 Enable-ScheduledTask -TaskName $e.taskName -ErrorAction Stop | Out-Null
                                 Write-OK "Re-enabled scheduled task: $($e.taskName)"
+                            } elseif (-not $shouldBeEnabled -and $task.State -ne "Disabled") {
+                                Disable-ScheduledTask -TaskName $e.taskName -ErrorAction Stop | Out-Null
+                                Write-OK "Re-disabled scheduled task: $($e.taskName) (was disabled before optimization)"
                             } else {
-                                Write-Info "Scheduled task '$($e.taskName)' already enabled — kept."
+                                Write-Info "Scheduled task '$($e.taskName)' already in correct state — kept."
                             }
-                        } catch { Write-Warn "Could not re-enable task $($e.taskName): $_" }
+                        } catch { Write-Warn "Could not restore task $($e.taskName): $_" }
                     }
                     $restoreOk++
                 }
