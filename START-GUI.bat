@@ -4,7 +4,7 @@
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    powershell -NoProfile -Command ^
+    powershell -NoProfile -WindowStyle Hidden -Command ^
         "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""%~dp0CS2-Optimize-GUI.ps1""' -Verb RunAs"
     exit /b
 )

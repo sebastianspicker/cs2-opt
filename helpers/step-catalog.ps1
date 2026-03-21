@@ -13,7 +13,7 @@ $SCRIPT:StepCatalog = @(
     [PSCustomObject]@{ Phase=1; Step=6;  Category="System";   Title="CS2 Power Plan";               Tier=1; Risk="MODERATE";   Depth="REGISTRY";   EstKey="CS2 Optimized Power Plan";  CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=1; Step=7;  Category="GPU";      Title="HAGS";                         Tier=2; Risk="MODERATE";   Depth="REGISTRY";   EstKey="HAGS Toggle";               CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=8;  Category="System";   Title="Pagefile";                     Tier=2; Risk="MODERATE";   Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$true  }
-    [PSCustomObject]@{ Phase=1; Step=9;  Category="GPU";      Title="Resizable BAR";                Tier=2; Risk="MODERATE";   Depth="REGISTRY";   EstKey="";      CheckOnly=$false; Reboot=$true  }
+    [PSCustomObject]@{ Phase=1; Step=9;  Category="GPU";      Title="Resizable BAR";                Tier=2; Risk="SAFE";       Depth="CHECK";      EstKey="";      CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=10; Category="System";   Title="Dynamic Tick + Platform Clock";Tier=3; Risk="MODERATE";   Depth="BOOT";       EstKey="Timer Resolution";          CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=11; Category="Display";  Title="Disable MPO";                  Tier=3; Risk="SAFE";       Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=12; Category="System";   Title="Game Mode";                    Tier=3; Risk="SAFE";       Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$false }
