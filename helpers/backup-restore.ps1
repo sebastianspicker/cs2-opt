@@ -274,7 +274,8 @@ function Restore-DrsSettings {
     param($Entry)
 
     if (-not (Initialize-NvApiDrs)) {
-        Write-Warn "Cannot restore DRS settings — nvapi64.dll unavailable."
+        Write-Warn "Cannot restore DRS settings — nvapi64.dll unavailable (driver uninstalled or 32-bit PowerShell)."
+        Write-Warn "To restore DRS settings: reinstall the NVIDIA driver, then re-run Restore."
         return
     }
 
@@ -311,7 +312,9 @@ function Restore-DrsSettings {
                 foreach ($s in $Entry.settings) {
                     try {
                         if ($s.existed) {
-                            [NvApiDrs]::SetDwordSetting($session, $drsProfile, [uint32]$s.id, [uint32]$s.previousValue)
+                            # Cast through [double] -> [uint32] to handle JSON round-trip
+                            # (ConvertFrom-Json may produce Int64 or Double for numeric values)
+                            [NvApiDrs]::SetDwordSetting($session, $drsProfile, [uint32][double]$s.id, [uint32][double]$s.previousValue)
                             $restored++
                         } else {
                             # Setting didn't exist before — skip (writing 0 is NOT equivalent to "not set"
@@ -394,13 +397,32 @@ function Restore-StepChanges {
                         $restoreValue = $e.originalValue
                         # Binary values are serialized as int arrays in JSON; cast back to byte[]
                         if ($restoreType -eq "Binary" -and $restoreValue -is [array]) {
+                            # Validate each element is in [0,255] before casting — JSON may
+                            # contain Int64 values from manual editing or corruption.
+                            $badValues = @($restoreValue | Where-Object { $_ -lt 0 -or $_ -gt 255 })
+                            if ($badValues.Count -gt 0) {
+                                Write-Warn "Binary restore for $($e.name): $($badValues.Count) byte(s) outside [0,255] — skipping (backup may be corrupted)."
+                                $restoreFail++
+                                continue
+                            }
                             $restoreValue = [byte[]]@($restoreValue | ForEach-Object { [byte]$_ })
+                        }
+                        # MultiString values are deserialized as Object[] from JSON; ensure string[]
+                        if ($restoreType -eq "MultiString" -and $restoreValue -is [array]) {
+                            $restoreValue = [string[]]@($restoreValue)
+                        }
+                        if (-not (Test-Path $e.path)) {
+                            New-Item -Path $e.path -Force -ErrorAction Stop | Out-Null
                         }
                         Set-ItemProperty -Path $e.path -Name $e.name -Value $restoreValue -Type $restoreType -ErrorAction Stop
                         Write-OK "Restored: $($e.name) = $($e.originalValue)"
                     } else {
-                        Remove-ItemProperty -Path $e.path -Name $e.name -ErrorAction Stop
-                        Write-OK "Removed: $($e.name) (was not set before)"
+                        if (Test-Path $e.path) {
+                            Remove-ItemProperty -Path $e.path -Name $e.name -ErrorAction Stop
+                            Write-OK "Removed: $($e.name) (was not set before)"
+                        } else {
+                            Write-Debug "Restore: path '$($e.path)' no longer exists — skip remove for '$($e.name)'"
+                        }
                     }
                     $restoreOk++
                 }
