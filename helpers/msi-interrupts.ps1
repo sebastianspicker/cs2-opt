@@ -43,11 +43,11 @@ function Enable-DeviceMSI {
                             Backup-RegistryValue -Path $msiPath -Name "MessageNumberLimit" -StepTitle $SCRIPT:CurrentStepTitle
                         }
                     }
-                    Set-ItemProperty -Path $msiPath -Name "MSISupported" -Value 1 -Type DWord
+                    Set-ItemProperty -Path $msiPath -Name "MSISupported" -Value 1 -Type DWord -ErrorAction Stop
 
                     # Set MSI vector count limit for GPU (16 vectors = full multi-queue support)
                     if ($dc.MsiLimit -gt 0) {
-                        Set-ItemProperty -Path $msiPath -Name "MessageNumberLimit" -Value $dc.MsiLimit -Type DWord
+                        Set-ItemProperty -Path $msiPath -Name "MessageNumberLimit" -Value $dc.MsiLimit -Type DWord -ErrorAction Stop
                     }
 
                     Write-OK "$($dc.Label) MSI enabled: $($dev.FriendlyName)"
@@ -269,8 +269,8 @@ function Set-NicInterruptAffinity {
             }
 
             # DevicePolicy = 4 means "Specified Processors"
-            Set-ItemProperty -Path $affinityPath -Name "DevicePolicy" -Value 4 -Type DWord
-            Set-ItemProperty -Path $affinityPath -Name "AssignmentSetOverride" -Value ([byte[]]$maskBytes) -Type Binary
+            Set-ItemProperty -Path $affinityPath -Name "DevicePolicy" -Value 4 -Type DWord -ErrorAction Stop
+            Set-ItemProperty -Path $affinityPath -Name "AssignmentSetOverride" -Value ([byte[]]$maskBytes) -Type Binary -ErrorAction Stop
 
             Write-OK "NIC affinity set: $($nic.FriendlyName) -> Core $targetCore"
             Write-Info "Affinity mask: 0x$($mask.ToString('X')) (Core $targetCore of $coreCount)"

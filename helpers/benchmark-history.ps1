@@ -2,12 +2,17 @@
 #  helpers/benchmark-history.ps1  —  Iterative Benchmark Tracking
 # ==============================================================================
 
-$CFG_BenchmarkFile = "$CFG_WorkDir\benchmark_history.json"
+$CFG_BenchmarkFile    = "$CFG_WorkDir\benchmark_history.json"
+$CFG_BenchmarkMaxEntries = 200   # Cap history size — prevents unbounded JSON growth
 
 function Add-BenchmarkResult {
     <#
     .SYNOPSIS  Records a benchmark result with timestamp and optional label.
                Enables before/after comparison and tracking over time.
+    .NOTES
+        History is capped at $CFG_BenchmarkMaxEntries entries. When the cap is
+        reached, the oldest entries are trimmed (FIFO). This prevents the JSON
+        file from growing unboundedly on systems that benchmark frequently.
     #>
     param(
         [Parameter(Mandatory)]
@@ -30,16 +35,26 @@ function Add-BenchmarkResult {
     }
 
     $history += $entry
+
+    # Trim oldest entries if history exceeds cap
+    if ($history.Count -gt $CFG_BenchmarkMaxEntries) {
+        $history = $history[($history.Count - $CFG_BenchmarkMaxEntries)..($history.Count - 1)]
+    }
+
     Save-JsonAtomic -Data $history -Path $CFG_BenchmarkFile
 
     return $entry
 }
 
 function Get-BenchmarkHistory {
-    <#  Returns all recorded benchmark results as an array.  #>
+    <#  Returns all recorded benchmark results as an array.
+        Handles: missing file, corrupted JSON, empty JSON array (PS 5.1 returns $null
+        for "[]"), single-object JSON (not wrapped in array).  #>
     if (-not (Test-Path $CFG_BenchmarkFile)) { return @() }
     try {
         $data = Get-Content $CFG_BenchmarkFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        # PS 5.1: ConvertFrom-Json returns $null for empty arrays ("[]")
+        if (-not $data) { return @() }
         if ($data -is [array]) { return $data }
         return @($data)
     } catch { return @() }
