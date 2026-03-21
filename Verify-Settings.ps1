@@ -221,7 +221,12 @@ Test-ServiceCheck "SysMain" "Disabled" "SysMain (Superfetch)"
 Test-ServiceCheck "WSearch" "Disabled" "Windows Search"
 Test-ServiceCheck "qWave"   "Disabled" "qWave (QoS network probes)"
 foreach ($xSvc in $CFG_XboxServices) {
-    Test-ServiceCheck $xSvc "Disabled" "$xSvc (Xbox background service)"
+    $xLabel = if ($xSvc -eq "XboxGipSvc") {
+        "$xSvc (Xbox wireless accessories — re-enable if using Xbox controller/headset)"
+    } else {
+        "$xSvc (Xbox background service)"
+    }
+    Test-ServiceCheck $xSvc "Disabled" $xLabel
 }
 
 # ══════════════════════════════════════════════════════════════════════════════

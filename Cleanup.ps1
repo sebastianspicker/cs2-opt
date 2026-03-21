@@ -236,16 +236,26 @@ if ($doDriver) {
         Write-Info "Cancelled."; exit 0
     }
 
-    foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
-        if (Test-Path "$ScriptRoot\$f") { Copy-Item "$ScriptRoot\$f" "$CFG_WorkDir\$f" -Force -ErrorAction Stop }
-    }
-    # Copy helpers module directory
-    $helpersSrc = "$ScriptRoot\helpers"
-    if (Test-Path $helpersSrc) {
-        Ensure-Dir "$CFG_WorkDir\helpers"
-        Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
-    } else {
-        throw "helpers/ directory not found at $helpersSrc — cannot proceed with Driver Refresh."
+    try {
+        foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
+            if (Test-Path "$ScriptRoot\$f") {
+                Copy-Item "$ScriptRoot\$f" "$CFG_WorkDir\$f" -Force -ErrorAction Stop
+            } else {
+                throw "Required file missing: $ScriptRoot\$f"
+            }
+        }
+        # Copy helpers module directory
+        $helpersSrc = "$ScriptRoot\helpers"
+        if (Test-Path $helpersSrc) {
+            Ensure-Dir "$CFG_WorkDir\helpers"
+            Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
+        } else {
+            throw "helpers/ directory not found at $helpersSrc"
+        }
+    } catch {
+        Write-Err "Driver Refresh: failed to copy scripts — $_"
+        Write-Info "Ensure all suite files are in: $ScriptRoot"
+        throw
     }
 
     # Reset all progress unconditionally — Phase 2+3 will re-run from scratch

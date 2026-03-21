@@ -135,7 +135,12 @@ if ($startStep -eq 1) {
 # Load or create state
 $state = $null
 if (Test-Path $CFG_StateFile) {
-    try { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } catch {}
+    try {
+        $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        Write-Warn "Previous state file could not be read (corrupt or empty). Starting fresh."
+        $state = $null
+    }
 }
 
 if (-not $state -or $startStep -eq 1) {
