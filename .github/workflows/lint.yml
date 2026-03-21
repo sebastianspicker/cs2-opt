@@ -21,7 +21,7 @@ jobs:
   psscriptanalyzer:
     name: PSScriptAnalyzer
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       # Pinned to actions/checkout v6.0.2 (2026-01-09) full SHA.
       # Prevents supply-chain attacks via compromised action tags.
@@ -29,10 +29,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Cache PSScriptAnalyzer module
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/Documents/PowerShell/Modules/PSScriptAnalyzer
+          key: psscriptanalyzer-${{ runner.os }}
+
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+            Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          }
           $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
           if ($results) {
             $results | Format-Table -AutoSize Severity, ScriptName, Line, RuleName, Message
@@ -73,10 +81,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Cache Pester module
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/Documents/PowerShell/Modules/Pester
+          key: pester-${{ runner.os }}
+
       - name: Install Pester 5.x
         shell: pwsh
         run: |
-          Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0
+          if (-not (Get-Module -ListAvailable Pester -ErrorAction SilentlyContinue | Where-Object Version -ge '5.0')) {
+            Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0
+          }
 
       - name: Run Pester tests
         shell: pwsh
