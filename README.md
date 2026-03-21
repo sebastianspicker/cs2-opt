@@ -140,6 +140,7 @@ CS2-Optimize-Suite/
 │   ├── benchmark-history.ps1  Before/after benchmark tracking
 │   ├── debloat.ps1            Native system debloat
 │   ├── gpu-driver-clean.ps1   Native GPU driver removal (replaces DDU)
+│   ├── gui-panels.ps1         WPF panel builders for GUI dashboard
 │   ├── hardware-detect.ps1    RAM, CPU, GPU detection
 │   ├── logging.ps1            Output formatting
 │   ├── msi-interrupts.ps1     MSI interrupt configuration
@@ -190,8 +191,8 @@ All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Back
 | 2 | XMP/EXPO check | T1 | SAFE | Warns if RAM at JEDEC default instead of rated speed |
 | 3 | CS2 + GPU shader cache wipe | T1 | SAFE | Finds Steam path via registry; clears stale compiled shaders |
 | 4 | Fullscreen Optimizations off | T1 | SAFE | `AppCompatFlags\Layers` = `~ DISABLEDXMAXIMIZEDWINDOWEDMODE` for cs2.exe |
-| 5 | NVIDIA driver version check | T2 | SAFE | R570+ regression warning (566.36 stable fallback) |
-| 6 | CS2 Optimized Power Plan | T1 | MODERATE | Tiered `powercfg` calls: T1 (9 settings), T2 (+17 vendor-aware), T3 (+5 C-states). 4 bugs fixed from FPSHeaven original |
+| 5 | NVIDIA driver version check | T2 | AGGRESSIVE | R570+ regression warning (566.36 stable fallback) |
+| 6 | CS2 Optimized Power Plan | T1 | MODERATE | Tiered `powercfg` calls: T1 (9 settings), T2 (+15–16 vendor-aware), T3 (+5 C-states). 4 bugs fixed from FPSHeaven original |
 | 7 | HAGS toggle | T2 | MODERATE | HwSchMode registry; results vary by GPU gen — test both |
 | 8 | Pagefile fixed size | T2 | MODERATE | Auto-skipped if ≥32 GB RAM |
 | 9 | Resizable BAR / SAM | T2 | SAFE | BIOS guide only — no PowerShell changes |
@@ -230,8 +231,8 @@ All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Back
 Runs automatically from `RunOnce`. No manual start needed.
 
 1. Remove Safe Mode boot flag (`bcdedit /deletevalue safeboot`)
-2. Register Phase 3 via RunOnce
-3. Native GPU driver removal — stops services, `pnputil /delete-driver`, registry cleanup, shader cache wipe (equivalent to DDU, fully auditable)
+2. Native GPU driver removal — stops services, `pnputil /delete-driver`, registry cleanup, shader cache wipe (equivalent to DDU, fully auditable)
+3. Register Phase 3 via RunOnce
 
 ### Phase 3 — Final Setup (13 Steps)
 
@@ -239,7 +240,7 @@ Runs automatically on the first normal boot after driver removal.
 
 | Step | Action | Tier | Risk | What It Does |
 |------|--------|------|------|-------------|
-| 1 | NVIDIA driver install (clean) | T1 | SAFE | Extracted .exe, 14 bloat components removed, silent `setup.exe -s` |
+| 1 | NVIDIA driver install (clean) | T1 | SAFE | Extracted .exe, 15 bloat components removed, silent `setup.exe -s` |
 | 2 | MSI Interrupts | T2 | MODERATE | `MSISupported=1` for GPU, NIC, Audio — line-based → Message Signaled |
 | 3 | NIC interrupt affinity | T3 | MODERATE | `DevicePolicy=4` + `AssignmentSetOverride` — moves NIC DPCs off Core 0 |
 | 4 | NVIDIA CS2 Profile | T3 | SAFE | 52 DWORD settings via `nvapi64.dll` DRS direct write (not registry — see Key Decisions) |
@@ -274,7 +275,7 @@ The FPSHeaven 2026 power plan shipped with four bugs we identified and corrected
 3. **Duty cycling enabled** — inserts mandatory 5ms frequency reduction pauses near thermal limits, creating frametime spikes. Fixed to Off.
 4. **`PERFAUTONOMOUS=0`** — disables hardware P-state feedback on AMD CPPC2, making the OS guess frequencies instead of the CPU firmware. Left at default.
 
-Settings are tiered: T1 (9 settings, always), T2 (+17 vendor-aware, RECOMMENDED+), T3 (+5 C-states/ramp, COMPETITIVE+). → [`docs/power-plan.md`](docs/power-plan.md)
+Settings are tiered: T1 (9 settings, always), T2 (+15–16 vendor-aware, RECOMMENDED+), T3 (+5 C-states/ramp, COMPETITIVE+). → [`docs/power-plan.md`](docs/power-plan.md)
 
 ### NIC Interrupt Coalescing: Why Medium Beats Disabled
 
@@ -311,7 +312,7 @@ Every external tool was replaced with native PowerShell. Only the NVIDIA driver 
 | Previously | Replaced By | Module |
 |---|---|---|
 | DDU (Wagnardsoft) | 5-phase PowerShell driver removal (`pnputil`, registry, shader cache) | `gpu-driver-clean.ps1` |
-| NVCleanstall (TechPowerUp) | Native driver extract + 14-component bloat removal + silent install | `nvidia-driver.ps1` |
+| NVCleanstall (TechPowerUp) | Native driver extract + 15-component bloat removal + silent install | `nvidia-driver.ps1` |
 | NVIDIA Profile Inspector | C# P/Invoke to `nvapi64.dll` — 52 DRS DWORD writes to binary database | `nvidia-drs.ps1` + `nvidia-profile.ps1` |
 | MSI Utility v3 (Sathango) | Native `MSISupported=1` registry writes per device class | `msi-interrupts.ps1` |
 | GoInterruptPolicy (spddl) | Native `DevicePolicy=4` + `AssignmentSetOverride` registry writes | `msi-interrupts.ps1` |
