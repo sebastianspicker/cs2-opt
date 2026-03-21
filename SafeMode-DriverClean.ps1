@@ -101,5 +101,9 @@ if ($r -match "^[nN]$") {
 
 Write-Blank
 Write-Info "Restart to continue."
-$r2 = Read-Host "  Restart now? [Y/n]"
-if ($r2 -notmatch "^[nN]$") { Restart-Computer -Force }
+if ($SCRIPT:DryRun) {
+    Write-Host "  [DRY-RUN] Would prompt for restart" -ForegroundColor Magenta
+} else {
+    $r2 = Read-Host "  Restart now? [Y/n]"
+    if ($r2 -notmatch "^[nN]$") { Restart-Computer -Force }
+}
