@@ -452,12 +452,22 @@ if ($startStep -le 8) {
                         # NOTE: Uses Get-WmiObject (not CIM) because .Put() method is WMI-specific
                         $cs = Get-WmiObject Win32_ComputerSystem
                         $cs.AutomaticManagedPagefile = $false; $cs.Put() | Out-Null
+
+                        # Detect existing pagefiles on all drives
+                        $allPfs = @(Get-WmiObject -Class Win32_PageFileSetting -ErrorAction SilentlyContinue)
+                        $nonCPfs = $allPfs | Where-Object { $_.Name -and -not $_.Name.StartsWith("C:\") }
+                        if ($nonCPfs) {
+                            $drives = ($nonCPfs | ForEach-Object { $_.Name }) -join ", "
+                            Write-Warn "Existing pagefile(s) on other drives: $drives"
+                            Write-Info "These will remain unchanged. Remove via System Properties -> Advanced if not needed."
+                        }
+
                         $pf = Get-WmiObject -Class Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'"
                         if (-not $pf) { $pf = ([wmiclass]"Win32_PageFileSetting").CreateInstance() }
                         $pf.Name = "C:\pagefile.sys"
                         $pf.InitialSize = $pfMB; $pf.MaximumSize = $pfMB; $pf.Put() | Out-Null
                         Write-OK "Pagefile: C:\pagefile.sys | ${pfMB} MB fixed (takes effect after restart)"
-                    } catch { Write-Warn "Error: $_" }
+                    } catch { Write-Warn "Pagefile configuration failed: $_" }
                 } else {
                     Write-Host "  [DRY-RUN] Would set pagefile to ${pfMB} MB fixed on C:" -ForegroundColor Magenta
                 }
