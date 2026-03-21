@@ -22,7 +22,7 @@ function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Step $stepNum ($stepName) not recorded."; return }
     $prog = Load-Progress
     if (-not $prog) {
-        $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=@{} }
+        $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
     }
     $prog.phase             = $phase
     $prog.lastCompletedStep = $stepNum
@@ -30,6 +30,13 @@ function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     $stepKey = "P${phase}:${stepNum}"
     if ($stepKey -notin $prog.completedSteps) {
         $prog.completedSteps = @($prog.completedSteps) + $stepKey
+    }
+    # Ensure timestamps is a PSCustomObject for consistent Add-Member behavior.
+    # On first call, timestamps may be a hashtable (from the initial @{} literal);
+    # Add-Member on a hashtable creates a NoteProperty that is lost during JSON
+    # round-trip. Converting to PSCustomObject first ensures the property persists.
+    if ($prog.timestamps -is [hashtable]) {
+        $prog.timestamps = [PSCustomObject]$prog.timestamps
     }
     $prog.timestamps | Add-Member -NotePropertyName "$phase-$stepNum" `
         -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm:ss") -Force

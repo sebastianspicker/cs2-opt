@@ -156,100 +156,104 @@ Describe "Invoke-TieredStep" {
         Mock Flush-BackupBuffer {}
     }
 
+    # NOTE: Pester 5 runs each It block in its own scope. The $script: modifier
+    # inside an -Action scriptblock resolves to the helpers module scope, NOT the
+    # test scope.  Use a hashtable (reference type) to track execution state.
+
     Context "T1 steps auto-run in all profiles" {
         It "T1 auto-runs in SAFE profile" {
             $SCRIPT:Profile = "SAFE"
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 1 -Title "Test T1 Step" -Why "Testing" `
-                -Risk "SAFE" -Action { $script:executed = $true }
+                -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
 
         It "T1 auto-runs in RECOMMENDED profile" {
             $SCRIPT:Profile = "RECOMMENDED"
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 1 -Title "Test T1 Step" -Why "Testing" `
-                -Risk "SAFE" -Action { $script:executed = $true }
+                -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
     }
 
     Context "T2 behavior varies by profile" {
         It "T2 SAFE-risk auto-runs in SAFE profile" {
             $SCRIPT:Profile = "SAFE"
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 2 -Title "Test T2 Safe" -Why "Testing" `
-                -Risk "SAFE" -Action { $script:executed = $true }
+                -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
 
         It "T2 MODERATE-risk is skipped in SAFE profile" {
             $SCRIPT:Profile = "SAFE"
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 2 -Title "Test T2 Moderate" -Why "Testing" `
-                -Risk "MODERATE" -Action { $script:executed = $true }
+                -Risk "MODERATE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $false
-            $executed | Should -Be $false
+            $result          | Should -Be $false
+            $state.executed  | Should -Be $false
         }
 
         It "T2 MODERATE-risk is prompted in RECOMMENDED profile (user says yes)" {
             $SCRIPT:Profile = "RECOMMENDED"
-            $executed = $false
+            $state = @{ executed = $false }
             Mock Read-Host { "y" }
 
             $result = Invoke-TieredStep -Tier 2 -Title "Test T2 Moderate" -Why "Testing" `
-                -Risk "MODERATE" -Action { $script:executed = $true }
+                -Risk "MODERATE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
 
         It "T2 MODERATE-risk is prompted in RECOMMENDED profile (user says no)" {
             $SCRIPT:Profile = "RECOMMENDED"
-            $executed = $false
+            $state = @{ executed = $false }
             Mock Read-Host { "n" }
 
             $result = Invoke-TieredStep -Tier 2 -Title "Test T2 Moderate" -Why "Testing" `
-                -Risk "MODERATE" -Action { $script:executed = $true }
+                -Risk "MODERATE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $false
-            $executed | Should -Be $false
+            $result          | Should -Be $false
+            $state.executed  | Should -Be $false
         }
     }
 
     Context "T3 steps" {
         It "T3 is skipped in SAFE profile via risk filter" {
             $SCRIPT:Profile = "SAFE"
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 3 -Title "Test T3" -Why "Testing" `
-                -Risk "MODERATE" -Action { $script:executed = $true }
+                -Risk "MODERATE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $false
-            $executed | Should -Be $false
+            $result          | Should -Be $false
+            $state.executed  | Should -Be $false
         }
 
         It "T3 is prompted in COMPETITIVE profile (user says yes)" {
             $SCRIPT:Profile = "COMPETITIVE"
-            $executed = $false
+            $state = @{ executed = $false }
             Mock Read-Host { "y" }
 
             $result = Invoke-TieredStep -Tier 3 -Title "Test T3" -Why "Testing" `
-                -Risk "MODERATE" -Action { $script:executed = $true }
+                -Risk "MODERATE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
     }
 
@@ -257,13 +261,13 @@ Describe "Invoke-TieredStep" {
         It "DRY-RUN runs action but marks as dry run" {
             $SCRIPT:Profile = "RECOMMENDED"
             $SCRIPT:DryRun = $true
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 1 -Title "Test DryRun" -Why "Testing" `
-                -Risk "SAFE" -Action { $script:executed = $true }
+                -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
 
         It "DRY-RUN does not record EstimateKey" {
@@ -280,13 +284,13 @@ Describe "Invoke-TieredStep" {
         It "DRY-RUN skips steps filtered by SAFE profile" {
             $SCRIPT:Profile = "SAFE"
             $SCRIPT:DryRun = $true
-            $executed = $false
+            $state = @{ executed = $false }
 
             $result = Invoke-TieredStep -Tier 3 -Title "Test DryRun Skip" -Why "Testing" `
-                -Risk "MODERATE" -Action { $script:executed = $true }
+                -Risk "MODERATE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $false
-            $executed | Should -Be $false
+            $result          | Should -Be $false
+            $state.executed  | Should -Be $false
         }
     }
 
@@ -318,40 +322,40 @@ Describe "Invoke-TieredStep" {
     Context "CUSTOM profile" {
         It "prompts for T1 in CUSTOM profile (default yes, user presses enter)" {
             $SCRIPT:Profile = "CUSTOM"
-            $executed = $false
+            $state = @{ executed = $false }
             Mock Read-Host { "" }  # empty = default yes for T1
 
             $result = Invoke-TieredStep -Tier 1 -Title "Test Custom T1" -Why "Testing" `
-                -Risk "SAFE" -Action { $script:executed = $true }
+                -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $true
-            $executed | Should -Be $true
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
         }
 
         It "prompts for T1 in CUSTOM profile (user says no)" {
             $SCRIPT:Profile = "CUSTOM"
-            $executed = $false
+            $state = @{ executed = $false }
             Mock Read-Host { "n" }
 
             $result = Invoke-TieredStep -Tier 1 -Title "Test Custom T1" -Why "Testing" `
-                -Risk "SAFE" -Action { $script:executed = $true }
+                -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result   | Should -Be $false
-            $executed | Should -Be $false
+            $result          | Should -Be $false
+            $state.executed  | Should -Be $false
         }
     }
 
     Context "SkipAction callback" {
         It "calls SkipAction when step is skipped" {
             $SCRIPT:Profile = "SAFE"
-            $skipCalled = $false
+            $state = @{ skipCalled = $false }
 
             Invoke-TieredStep -Tier 2 -Title "Skipped Step" -Why "Testing" `
                 -Risk "MODERATE" `
                 -Action { } `
-                -SkipAction { $script:skipCalled = $true }
+                -SkipAction { $state.skipCalled = $true }
 
-            $skipCalled | Should -Be $true
+            $state.skipCalled | Should -Be $true
         }
     }
 }

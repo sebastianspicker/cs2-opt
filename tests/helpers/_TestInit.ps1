@@ -48,6 +48,60 @@ $SCRIPT:Mode     = "CONTROL"
 $SCRIPT:LogLevel = "MINIMAL"
 $SCRIPT:CurrentStepTitle = $null
 
+# ── Cross-platform stubs for Windows-only cmdlets ───────────────────────────
+# On macOS/Linux, cmdlets like Get-CimInstance, Get-Service, Get-ScheduledTask
+# do not exist. Define no-op stubs so that Pester Mock can intercept them.
+# These stubs are intentionally minimal — tests MUST mock them with real return values.
+if (-not $IsWindows) {
+    if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+        function global:Get-CimInstance { param($ClassName, $Filter) $null }
+    }
+    if (-not (Get-Command Get-Service -ErrorAction SilentlyContinue)) {
+        function global:Get-Service { param($Name) $null }
+    }
+    if (-not (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+        function global:Get-ScheduledTask { param($TaskName) $null }
+    }
+    if (-not (Get-Command Enable-ScheduledTask -ErrorAction SilentlyContinue)) {
+        function global:Enable-ScheduledTask { param($TaskName) $null }
+    }
+    if (-not (Get-Command Disable-ScheduledTask -ErrorAction SilentlyContinue)) {
+        function global:Disable-ScheduledTask { param($TaskName) $null }
+    }
+    if (-not (Get-Command Unregister-ScheduledTask -ErrorAction SilentlyContinue)) {
+        function global:Unregister-ScheduledTask { param($TaskName, [switch]$Confirm) $null }
+    }
+    if (-not (Get-Command Set-Service -ErrorAction SilentlyContinue)) {
+        function global:Set-Service { param($Name, $StartupType) $null }
+    }
+    if (-not (Get-Command Start-Service -ErrorAction SilentlyContinue)) {
+        function global:Start-Service { param($Name) $null }
+    }
+
+    # On macOS/Linux, Set-ItemProperty does not have the -Type parameter
+    # (it's a Windows registry provider feature). Wrap it so Pester can mock calls
+    # that pass -Type without a parameter validation error.
+    $originalSetItemProperty = Get-Command Set-ItemProperty -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if ($originalSetItemProperty -and -not $originalSetItemProperty.Parameters.ContainsKey('Type')) {
+        function global:Set-ItemProperty {
+            param($Path, $Name, $Value, $Type, $ErrorAction)
+            # No-op on non-Windows — tests will mock this
+        }
+    }
+    # Same for Remove-ItemProperty with -ErrorAction
+    $originalRemoveItemProperty = Get-Command Remove-ItemProperty -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if (-not $originalRemoveItemProperty) {
+        function global:Remove-ItemProperty {
+            param($Path, $Name, $ErrorAction)
+        }
+    }
+    # Same for New-Item if needed
+    $originalNewItem = Get-Command New-Item -CommandType Cmdlet -ErrorAction SilentlyContinue
+    if ($originalNewItem -and -not $originalNewItem.Parameters.ContainsKey('Force')) {
+        # New-Item should exist everywhere, no wrapping needed
+    }
+}
+
 # ── Load all helper modules ──────────────────────────────────────────────────
 # Load in the same order as helpers.ps1 to match production behavior.
 $_helpersDir = "$_projectRoot/helpers"

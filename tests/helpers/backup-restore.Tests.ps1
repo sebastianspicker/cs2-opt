@@ -50,11 +50,11 @@ Describe "Initialize-Backup" {
 
     It "warns when backup lock exists" {
         Mock Test-BackupLock { $true }
-        Mock Write-Warn {} -Verifiable
+        Mock Write-Warn {}
 
         Initialize-Backup
 
-        Should -Invoke Write-Warn -AtLeast 1
+        Should -Invoke Write-Warn -Times 1 -Exactly:$false
     }
 }
 

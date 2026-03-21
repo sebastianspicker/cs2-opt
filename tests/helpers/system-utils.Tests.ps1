@@ -81,7 +81,7 @@ Describe "Save-JsonAtomic" {
     }
 
     It "writes valid UTF-8 encoded content" {
-        $path = "$SCRIPT:TestTempRoot\test-encoding.json"
+        $path = Join-Path $SCRIPT:TestTempRoot "test-encoding.json"
         $data = @{ name = "test" }
 
         Save-JsonAtomic -Data $data -Path $path
