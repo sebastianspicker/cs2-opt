@@ -8,7 +8,7 @@ function Remove-GpuDriverClean {
                for Display Driver Uninstaller (DDU).
     .DESCRIPTION
         1. Stops and disables GPU-related services
-        2. Removes GPU driver packages via pnputil
+        2. Removes GPU driver packages via pnputil (with CIM fallback for non-English Windows)
         3. Cleans GPU registry entries
         4. Removes DriverStore orphans
         5. Cleans shader caches and temp folders
@@ -73,44 +73,87 @@ function Remove-GpuDriverClean {
     Write-Step "Enumerating GPU driver packages..."
 
     $vendorMatch = switch ($GpuVendor) {
-        "NVIDIA" { "nvidia|nv_dispi|nvd" }
+        "NVIDIA" { "nvidia" }
         "AMD"    { "amd|ati|radeon" }
-        "Intel"  { "igfx|iigd|intel.*graphics" }
+        "Intel"  { "intel" }
     }
 
-    # Parse pnputil output to find display driver packages
-    $pnpOutput = pnputil /enum-drivers 2>$null
     $driverPackages = @()
-    $currentInf = $null
-    $currentClass = $null
-    $currentProvider = $null
 
-    foreach ($line in $pnpOutput) {
-        if ($line -match "Published Name\s*:\s*(oem\d+\.inf)") {
-            $currentInf = $Matches[1]
+    # Primary method: CIM/WMI query — locale-independent, works on all Windows editions
+    # Get-CimInstance requires PS 3.0+ (Windows 10/11 always have it)
+    try {
+        $cimDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop |
+            Where-Object { $_.DeviceClass -eq "DISPLAY" -and $_.DriverProviderName -match $vendorMatch }
+
+        foreach ($drv in $cimDrivers) {
+            if ($drv.InfName -match "^oem\d+\.inf$") {
+                $driverPackages += $drv.InfName
+            }
         }
-        if ($line -match "Class Name\s*:\s*(.+)") {
-            $currentClass = $Matches[1].Trim()
+
+        if ($driverPackages.Count -gt 0) {
+            Write-OK "CIM enumeration found $($driverPackages.Count) $GpuVendor display driver(s)."
+        } else {
+            Write-Debug "CIM query returned no matching display drivers."
         }
-        if ($line -match "Driver Package Provider\s*:\s*(.+)") {
-            $currentProvider = $Matches[1].Trim()
+    } catch {
+        Write-Debug "CIM enumeration failed: $_ — falling back to pnputil parsing"
+    }
+
+    # Fallback: parse pnputil text output. Field labels are English-only
+    # ("Published Name", "Class Name", "Driver Package Provider") so this method
+    # will not find drivers on non-English Windows installations. The CIM method
+    # above is locale-independent and should be preferred.
+    if ($driverPackages.Count -eq 0) {
+        Write-Debug "Trying pnputil text parsing fallback..."
+        $pnpOutput = pnputil /enum-drivers 2>$null
+        $currentInf = $null
+        $currentClass = $null
+        $currentProvider = $null
+
+        foreach ($line in $pnpOutput) {
+            if ($line -match "Published Name\s*:\s*(oem\d+\.inf)") {
+                $currentInf = $Matches[1]
+            }
+            if ($line -match "Class Name\s*:\s*(.+)") {
+                $currentClass = $Matches[1].Trim()
+            }
+            if ($line -match "Driver Package Provider\s*:\s*(.+)") {
+                $currentProvider = $Matches[1].Trim()
+            }
+            if (($line.Trim() -eq "" -or $line -match "^$") -and $currentInf) {
+                if ($currentClass -match "Display" -and $currentProvider -match $vendorMatch) {
+                    if ($currentInf -notin $driverPackages) {
+                        $driverPackages += $currentInf
+                    }
+                }
+                $currentInf = $null
+                $currentClass = $null
+                $currentProvider = $null
+            }
         }
-        # When we hit an empty line or end, check if it's a display driver from our vendor
-        if (($line.Trim() -eq "" -or $line -match "^$") -and $currentInf) {
-            if ($currentClass -match "Display|display" -and $currentProvider -match $vendorMatch) {
+        # Check last entry (pnputil may not end with blank line)
+        if ($currentInf -and $currentClass -match "Display" -and $currentProvider -match $vendorMatch) {
+            if ($currentInf -notin $driverPackages) {
                 $driverPackages += $currentInf
             }
-            $currentInf = $null
-            $currentClass = $null
-            $currentProvider = $null
+        }
+
+        if ($driverPackages.Count -gt 0) {
+            Write-OK "pnputil fallback found $($driverPackages.Count) $GpuVendor display driver(s)."
+        } else {
+            Write-Debug "pnputil parsing found no matching drivers (expected on non-English Windows)."
         }
     }
-    # Check last entry
-    if ($currentInf -and $currentClass -match "Display|display" -and $currentProvider -match $vendorMatch) {
-        $driverPackages += $currentInf
+
+    if ($driverPackages.Count -eq 0) {
+        Write-Warn "No $GpuVendor display driver packages found. Driver may already be removed."
+        Write-Warn "Continuing with registry and cache cleanup."
     }
 
     $removedDrivers = 0
+    $failedDrivers = 0
     foreach ($inf in $driverPackages) {
         Write-Step "Removing driver package: $inf"
         try {
@@ -119,13 +162,19 @@ function Remove-GpuDriverClean {
                 Write-OK "Removed: $inf"
                 $removedDrivers++
             } else {
-                Write-Warn "Could not remove $inf (may be in use): $result"
+                Write-Warn "Could not remove $inf (exit $LASTEXITCODE): $result"
+                $failedDrivers++
             }
         } catch {
-            Write-Warn "Error removing $inf`: $_"
+            Write-Warn "Error removing ${inf}: $_"
+            $failedDrivers++
         }
     }
-    Write-Info "$removedDrivers driver package(s) removed."
+    Write-Info "$removedDrivers driver package(s) removed$(if($failedDrivers){", $failedDrivers failed"})."
+    if ($failedDrivers -gt 0) {
+        Write-Warn "Some drivers could not be removed. If in Normal Mode, try rebooting into Safe Mode."
+        Write-Warn "Locked driver files are the most common cause — Safe Mode unlocks them."
+    }
 
     # ── 3. Clean GPU Class Registry ──────────────────────────────────────────
     Write-Step "Cleaning GPU registry entries..."
@@ -193,6 +242,7 @@ function Remove-GpuDriverClean {
     }
 
     $cleanedFolders = 0
+    $lockedFolders = 0
     if (Test-Path $driverStore) {
         foreach ($p in $patterns) {
             $folders = Get-ChildItem $driverStore -Directory -Filter $p -ErrorAction SilentlyContinue
@@ -202,12 +252,13 @@ function Remove-GpuDriverClean {
                     Write-OK "DriverStore cleaned: $($f.Name)"
                     $cleanedFolders++
                 } catch {
-                    Write-Debug "Could not remove $($f.Name) (locked): $_"
+                    Write-Warn "Could not remove $($f.Name) (locked): $_"
+                    $lockedFolders++
                 }
             }
         }
     }
-    Write-Info "$cleanedFolders DriverStore folders cleaned."
+    Write-Info "$cleanedFolders DriverStore folders cleaned$(if($lockedFolders){", $lockedFolders locked (will be removed on next reboot)"})."
 
     # ── 5. Clean Shader Caches ───────────────────────────────────────────────
     Write-Step "Cleaning shader caches..."
@@ -235,7 +286,7 @@ function Remove-GpuDriverClean {
     foreach ($cp in $cachePaths) {
         if (Test-Path $cp) {
             $items = Get-ChildItem $cp -Recurse -ErrorAction SilentlyContinue
-            $count = $items.Count
+            $count = if ($items) { $items.Count } else { 0 }
             Remove-Item $cp -Recurse -Force -ErrorAction SilentlyContinue
             Write-OK "Cache cleaned: $cp ($count items)"
         }

@@ -109,9 +109,21 @@ function Set-RunOnce($name, $scriptPath) {
         Write-Host "  [DRY-RUN] Would set RunOnce: $name -> $scriptPath" -ForegroundColor Magenta
         return
     }
+    # Validate target script exists before registering — a RunOnce pointing to a missing
+    # file would silently fail on next boot, leaving Phase 3 unexecuted with no error.
+    if (-not (Test-Path $scriptPath)) {
+        Write-Warn "RunOnce target does not exist: $scriptPath"
+        Write-Warn "Phase 3 will NOT auto-start on next boot. Re-run Phase 1 Step 38 or launch manually."
+        return
+    }
     $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$scriptPath`""
-    Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -Name $name -Value $cmd
-    Write-OK "RunOnce: $name"
+    try {
+        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -Name $name -Value $cmd -ErrorAction Stop
+        Write-OK "RunOnce: $name -> $scriptPath"
+    } catch {
+        Write-Err "Failed to set RunOnce '$name': $_"
+        Write-Err "Phase 3 will NOT auto-start. Run manually: $scriptPath"
+    }
 }
 
 function Set-BootConfig($key, $val, $why) {

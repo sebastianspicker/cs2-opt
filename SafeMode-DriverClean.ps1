@@ -1,6 +1,7 @@
 #Requires -RunAsAdministrator
 <# CS2 Optimization Suite — Safe Mode · GPU Driver Clean Removal #>
 
+$ErrorActionPreference = "SilentlyContinue"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -9,7 +10,11 @@ try {
     $state = Load-State $CFG_StateFile
 } catch {
     Write-Host "  ERROR: state.json missing or corrupted: $_" -ForegroundColor Red
-    Write-Host "  To exit Safe Mode: run 'bcdedit /deletevalue safeboot' then restart." -ForegroundColor Yellow
+    Write-Host "" -ForegroundColor Yellow
+    Write-Host "  MANUAL SAFE MODE EXIT (run in elevated cmd.exe if needed):" -ForegroundColor Yellow
+    Write-Host "    bcdedit /deletevalue safeboot" -ForegroundColor White
+    Write-Host "    shutdown /r /t 0" -ForegroundColor White
+    Write-Host "" -ForegroundColor Yellow
     Write-Host "  To continue anyway with defaults, press [Y]." -ForegroundColor Yellow
     $r = Read-Host "  Continue with defaults? [y/N]"
     if ($r -notmatch "^[jJyY]$") { exit 1 }
@@ -24,9 +29,13 @@ Write-Info "Safe Mode active. GPU driver files are unlocked."
 $PHASE = 2
 
 # Validate we're actually in Safe Mode
+# $env:SAFEBOOT_OPTION is set by winload.exe on Safe Mode boot ("MINIMAL" or "NETWORK").
+# Reliable on all Windows 10/11 editions. If absent, we're in normal boot.
 if (-not $env:SAFEBOOT_OPTION) {
     Write-Warn "WARNING: This script is designed for Safe Mode but normal boot was detected."
-    Write-Warn "GPU driver removal in normal mode may cause instability."
+    Write-Warn "GPU driver removal in normal mode may fail — driver files may be locked by"
+    Write-Warn "running services (NVDisplay, AMD External Events, etc.)."
+    Write-Warn "Partially removed drivers can cause black screen or BSOD on next boot."
     $confirm = Read-Host "  Continue anyway? [y/N]"
     if ($confirm -notmatch "^[jJyY]$") {
         Write-Info "Aborted. Boot into Safe Mode first (START.bat -> [1])."
@@ -41,10 +50,21 @@ if ($SCRIPT:DryRun) {
 } else {
     $smOutput = bcdedit /deletevalue safeboot 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
-        Write-Err "System may boot into Safe Mode again! Run: bcdedit /deletevalue safeboot"
-        $smConfirm = Read-Host "  Continue anyway? [y/N]"
-        if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+        # bcdedit returns non-zero if the value doesn't exist — this is expected on re-run
+        # (safeboot was already cleared by a previous execution) or if not in Safe Mode.
+        $alreadyCleared = "$smOutput" -match "not found|not valid|element not found"
+        if ($alreadyCleared) {
+            Write-OK "Safe Mode already disabled (safeboot value not present). OK to continue."
+        } else {
+            Write-Err "CRITICAL: Failed to disable Safe Mode (exit $LASTEXITCODE): $smOutput"
+            Write-Err "System may boot into Safe Mode again on next restart!"
+            Write-Err ""
+            Write-Err "MANUAL FIX (run in elevated cmd.exe):"
+            Write-Err "  bcdedit /deletevalue safeboot"
+            Write-Err "  shutdown /r /t 0"
+            $smConfirm = Read-Host "  Continue anyway? [y/N]"
+            if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
+        }
     } else {
         Write-OK "Safe Mode disabled (next boot = normal)."
     }
