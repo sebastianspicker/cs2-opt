@@ -11,12 +11,13 @@ Second pass after Round 1 fixed ~51 bugs, added ~170 tests, and corrected 8 doc 
 - [x] EstimateKey wiring (Steps 23/27) — values correct? — both keys exist, values reasonable
 - [x] Config cross-check round 2 (any new orphans from B-loop changes?) — 5 orphaned config entries are intentional (GUI catalog / merged step sub-components)
 
-### A2 — Backup/Restore & State (Round 2)
-- [ ] Backup buffering correctness (Flush-BackupBuffer timing, edge cases)
-- [ ] Lockfile system (stale PID detection, cross-process race)
-- [ ] Binary restore [0,255] validation + MultiString cast
-- [ ] Legacy step-key removal — any callers still using bare numbers?
-- [ ] wasEnabled scheduled task field — all consumers updated?
+### A2 — Backup/Restore & State (Round 2) — COMPLETE
+- [x] Backup buffering correctness — Flush-BackupBuffer timing correct: entries buffer in memory during step, flush at step boundary via Invoke-TieredStep. If Save-BackupData throws, entries stay in memory for retry (Clear() is after Save). Get-BackupData flushes first; if flush fails, exception propagates and stale data is never returned. Zero-write step: Flush no-ops cleanly (count=0 early return). Thread-safety: single-threaded PS, not an issue. Crash between Backup-RegistryValue calls: entries lost (by-design tradeoff documented in header comment).
+- [x] Lockfile system — FIXED 2 issues: (1) Remove-BackupLock was never called in any entry point (lock acquired but never released on normal exit). Added Remove-BackupLock to Run-Optimize.ps1, PostReboot-Setup.ps1, SafeMode-DriverClean.ps1. Stale lock auto-cleans on crash (process dead). (2) PID reuse: added PowerShell process name check to Test-BackupLock — recycled PIDs from non-PowerShell processes are treated as stale. Race condition: advisory lock only (documented), Save-JsonAtomic protects actual data. Lock path: Ensure-Dir $CFG_WorkDir called before Initialize-Backup in all entry points.
+- [x] Binary restore [0,255] validation — Validation correctly skips (with warning + restoreFail++) rather than throwing. Negative ints from JSON: check `$_ -lt 0` catches them. FIXED: MultiString single-string case — PS 5.1 ConvertFrom-Json unwraps single-element arrays to scalars; added scalar-to-array coercion. ExpandString: Set-ItemProperty -Type ExpandString is valid PS, no special handling needed.
+- [x] Legacy step-key removal — All Test-StepDone calls use composite keys (phase + stepNum params). GUI panels use "P{phase}:{step}" format. Dashboard uses regex ^P1:/^P3: matching. Pre-update progress.json with bare numbers: Test-StepDone returns $false (documented: "user re-runs from step 1"). No bare-number callers found.
+- [x] wasEnabled scheduled task field — Restore reads it (line 541): $shouldBeEnabled defaults to $true if field is $null (handles pre-Round-1 backups). Boolean preserved through JSON round-trip (ConvertTo-Json serializes $true/$false correctly). $null -ne check works for both $true and $false values.
+- [x] BONUS: Fixed Pester 5.7.1 root-level BeforeEach incompatibility in all 4 test files (backup-restore, step-state, system-utils, tier-system). Moved Reset-TestState into per-Describe BeforeEach blocks.
 
 ### A3 — DRY-RUN Correctness (Round 2) — COMPLETE
 - [x] Verify Round 1 DRY-RUN guards (shader cache, bcdedit, Restart-Computer, Invoke-Download) — all 5 guards correct and producing messages

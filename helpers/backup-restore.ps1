@@ -41,13 +41,24 @@ function Initialize-Backup {
 function Test-BackupLock {
     <#  Checks if another process is actively modifying backup.json.
         Returns $true if the lock is held (and the holding process is still alive).
-        Stale locks (from crashed processes) are automatically cleaned up.  #>
+        Stale locks (from crashed processes) are automatically cleaned up.
+        Mitigates PID reuse: verifies the process is PowerShell, not an unrelated
+        process that inherited the recycled PID.  #>
     if (-not (Test-Path $CFG_BackupLockFile)) { return $false }
     try {
         $lockData = Get-Content $CFG_BackupLockFile -Raw -ErrorAction Stop | ConvertFrom-Json
         # Check if the locking process is still alive
         $proc = Get-Process -Id $lockData.pid -ErrorAction SilentlyContinue
-        if ($proc) { return $true }
+        if ($proc) {
+            # Mitigate PID reuse: Windows recycles PIDs, so a live process with the
+            # same PID may be entirely unrelated. Verify it's a PowerShell instance.
+            $isPowerShell = $proc.ProcessName -match '^(?:powershell|pwsh)$'
+            if ($isPowerShell) { return $true }
+            # PID was reused by a non-PowerShell process — stale lock
+            Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+            Write-Debug "Removed stale backup lock (PID $($lockData.pid) reused by '$($proc.ProcessName)')."
+            return $false
+        }
         # Process is dead — stale lock; remove it
         Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
         Write-Debug "Removed stale backup lock (PID $($lockData.pid) no longer running)."
@@ -447,10 +458,18 @@ function Restore-StepChanges {
                             }
                             $restoreValue = [byte[]]@($restoreValue | ForEach-Object { [byte]$_ })
                         }
-                        # MultiString values are deserialized as Object[] from JSON; ensure string[]
-                        if ($restoreType -eq "MultiString" -and $restoreValue -is [array]) {
-                            $restoreValue = [string[]]@($restoreValue)
+                        # MultiString values are deserialized as Object[] from JSON; ensure string[].
+                        # PS 5.1 ConvertFrom-Json unwraps single-element arrays to scalars, so
+                        # a MultiString backup with one entry arrives as a plain string — wrap it.
+                        if ($restoreType -eq "MultiString") {
+                            if ($restoreValue -is [array]) {
+                                $restoreValue = [string[]]@($restoreValue)
+                            } elseif ($restoreValue -is [string]) {
+                                $restoreValue = [string[]]@($restoreValue)
+                            }
                         }
+                        # ExpandString: Set-ItemProperty -Type ExpandString is valid in PowerShell;
+                        # no special handling needed — the value passes through as-is.
                         if (-not (Test-Path $e.path)) {
                             New-Item -Path $e.path -Force -ErrorAction Stop | Out-Null
                         }

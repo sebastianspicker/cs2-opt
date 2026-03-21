@@ -77,6 +77,12 @@ Write-Host "  ║  -> Normal boot -> Phase 3 starts automatically     ║" -Fore
 Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Info "Log: $CFG_LogFile"
 
+# Release backup lock — acquired by Initialize-Backup in Setup-Profile.ps1.
+# On restart, the lock file will be stale (process dead) and auto-cleaned by
+# Test-BackupLock on next boot. Release here for clean exit paths (DRY-RUN, user
+# declines restart, or script completes without restart).
+Remove-BackupLock
+
 if (Confirm-Risk "Restart now?" "Save all files!") {
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would restart computer for Phase 2 Safe Mode." -ForegroundColor Magenta

@@ -119,6 +119,9 @@ if ($r -match "^[nN]$") {
     Complete-Step $PHASE 3 "RunOnce Phase3"
 }
 
+# Release backup lock — acquired by Initialize-Backup at the top of this script.
+Remove-BackupLock
+
 Write-Blank
 Write-Info "Restart to continue."
 if ($SCRIPT:DryRun) {

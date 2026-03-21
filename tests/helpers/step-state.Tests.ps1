@@ -6,10 +6,6 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 }
 
-BeforeEach {
-    Reset-TestState
-}
-
 AfterAll {
     if ($SCRIPT:TestTempRoot -and (Test-Path $SCRIPT:TestTempRoot)) {
         Remove-Item $SCRIPT:TestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -18,6 +14,8 @@ AfterAll {
 
 # ── Complete-Step / Test-StepDone round-trip ──────────────────────────────────
 Describe "Complete-Step / Test-StepDone round-trip" {
+
+    BeforeEach { Reset-TestState }
 
     It "marks a step as done and Test-StepDone confirms it" {
         Complete-Step -phase 1 -stepNum 5 -stepName "Test Step 5"
@@ -83,6 +81,8 @@ Describe "Complete-Step / Test-StepDone round-trip" {
 # ── Phase key format collision avoidance ─────────────────────────────────────
 Describe "Phase key format (P{phase}:{step})" {
 
+    BeforeEach { Reset-TestState }
+
     It "Phase 1 Step 5 and Phase 3 Step 5 do not collide" {
         Complete-Step -phase 1 -stepNum 5 -stepName "Phase 1 Step 5"
         Complete-Step -phase 3 -stepNum 5 -stepName "Phase 3 Step 5"
@@ -116,6 +116,8 @@ Describe "Phase key format (P{phase}:{step})" {
 
 # ── Skip-Step ────────────────────────────────────────────────────────────────
 Describe "Skip-Step" {
+
+    BeforeEach { Reset-TestState }
 
     It "records step as skipped" {
         Skip-Step -phase 1 -stepNum 4 -stepName "Skipped Step 4"
@@ -166,6 +168,8 @@ Describe "Skip-Step" {
 # ── Clear-Progress ───────────────────────────────────────────────────────────
 Describe "Clear-Progress" {
 
+    BeforeEach { Reset-TestState }
+
     It "resets progress for matching phase" {
         Complete-Step -phase 1 -stepNum 5 -stepName "Step 5"
         Complete-Step -phase 1 -stepNum 10 -stepName "Step 10"
@@ -211,6 +215,8 @@ Describe "Clear-Progress" {
 # ── Load-Progress with corrupted JSON ────────────────────────────────────────
 Describe "Load-Progress with corrupted JSON" {
 
+    BeforeEach { Reset-TestState }
+
     It "returns null for corrupted JSON" {
         "this is {{{ not valid json !!!" | Set-Content $CFG_ProgressFile -Encoding UTF8
 
@@ -250,6 +256,8 @@ Describe "Load-Progress with corrupted JSON" {
 
 # ── Integration: Complete + Skip + Resume ────────────────────────────────────
 Describe "Integration: mixed complete and skip steps" {
+
+    BeforeEach { Reset-TestState }
 
     It "both completed and skipped steps are 'done' for resume" {
         Complete-Step -phase 1 -stepNum 1 -stepName "Done 1"

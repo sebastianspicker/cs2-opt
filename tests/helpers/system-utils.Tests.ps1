@@ -6,10 +6,6 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 }
 
-BeforeEach {
-    Reset-TestState
-}
-
 AfterAll {
     if ($SCRIPT:TestTempRoot -and (Test-Path $SCRIPT:TestTempRoot)) {
         Remove-Item $SCRIPT:TestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -18,6 +14,8 @@ AfterAll {
 
 # ── Save-JsonAtomic ──────────────────────────────────────────────────────────
 Describe "Save-JsonAtomic" {
+
+    BeforeEach { Reset-TestState }
 
     It "writes valid JSON to a new file" {
         $path = "$SCRIPT:TestTempRoot\test-atomic.json"
@@ -98,6 +96,7 @@ Describe "Save-JsonAtomic" {
 Describe "Set-RegistryValue DRY-RUN" {
 
     BeforeEach {
+        Reset-TestState
         $SCRIPT:DryRun = $true
         $SCRIPT:CurrentStepTitle = "Test Step"
         # Mock all functions that Set-RegistryValue might call
@@ -136,6 +135,7 @@ Describe "Set-RegistryValue DRY-RUN" {
 Describe "Set-BootConfig DRY-RUN" {
 
     BeforeEach {
+        Reset-TestState
         $SCRIPT:DryRun = $true
         $SCRIPT:CurrentStepTitle = "Test Step"
         Mock Write-Host {}
@@ -171,6 +171,8 @@ Describe "Set-BootConfig DRY-RUN" {
 # ── Initialize-VerifyCounters / Get-VerifyCounters ───────────────────────────
 Describe "Initialize-VerifyCounters / Get-VerifyCounters" {
 
+    BeforeEach { Reset-TestState }
+
     It "initializes all counters to zero" {
         Initialize-VerifyCounters
 
@@ -205,6 +207,7 @@ Describe "Initialize-VerifyCounters / Get-VerifyCounters" {
 Describe "Test-RegistryCheck" {
 
     BeforeEach {
+        Reset-TestState
         Initialize-VerifyCounters
         Mock Write-Host {}
     }
@@ -294,6 +297,8 @@ Describe "Test-RegistryCheck" {
 # ── Load-State / Save-State ──────────────────────────────────────────────────
 Describe "Load-State / Save-State" {
 
+    BeforeEach { Reset-TestState }
+
     It "round-trips state through file" {
         $state = [PSCustomObject]@{
             mode     = "DRY-RUN"
@@ -332,6 +337,8 @@ Describe "Load-State / Save-State" {
 
 # ── Initialize-ScriptDefaults ────────────────────────────────────────────────
 Describe "Initialize-ScriptDefaults" {
+
+    BeforeEach { Reset-TestState }
 
     It "loads from state file when present" {
         $state = [PSCustomObject]@{

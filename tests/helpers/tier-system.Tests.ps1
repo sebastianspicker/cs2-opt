@@ -6,10 +6,6 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 }
 
-BeforeEach {
-    Reset-TestState
-}
-
 AfterAll {
     if ($SCRIPT:TestTempRoot -and (Test-Path $SCRIPT:TestTempRoot)) {
         Remove-Item $SCRIPT:TestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -18,6 +14,8 @@ AfterAll {
 
 # ── Test-RiskAllowed ──────────────────────────────────────────────────────────
 Describe "Test-RiskAllowed" {
+
+    BeforeEach { Reset-TestState }
 
     Context "SAFE profile (max risk = SAFE)" {
         BeforeEach { $SCRIPT:Profile = "SAFE" }
@@ -110,6 +108,8 @@ Describe "Test-RiskAllowed" {
 # ── Get-ProfileMaxRisk ────────────────────────────────────────────────────────
 Describe "Get-ProfileMaxRisk" {
 
+    BeforeEach { Reset-TestState }
+
     It "SAFE -> SAFE" {
         $SCRIPT:Profile = "SAFE"
         Get-ProfileMaxRisk | Should -Be "SAFE"
@@ -145,6 +145,7 @@ Describe "Get-ProfileMaxRisk" {
 Describe "Invoke-TieredStep" {
 
     BeforeEach {
+        Reset-TestState
         # Mock all console output functions to keep test output clean
         Mock Write-Blank {}
         Mock Write-TierBadge {}
@@ -359,7 +360,7 @@ Describe "Invoke-TieredStep" {
 Describe "Get-ImprovementEstimate" {
 
     BeforeEach {
-        $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
+        Reset-TestState
     }
 
     It "returns zeros with no applied steps" {
@@ -398,6 +399,8 @@ Describe "Get-ImprovementEstimate" {
 
 # ── Save-AppliedSteps / Load-AppliedSteps round-trip ─────────────────────────
 Describe "Save-AppliedSteps / Load-AppliedSteps" {
+
+    BeforeEach { Reset-TestState }
 
     It "round-trips applied steps through state.json" {
         # Create a state file first (Save-AppliedSteps requires it to exist)

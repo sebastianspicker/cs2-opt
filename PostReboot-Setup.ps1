@@ -621,6 +621,9 @@ if ($startStep -le 13) {
     Complete-Step $PHASE 13 "FinalBenchmark"
 }
 
+# Release backup lock — acquired by Initialize-Backup at the top of this script.
+Remove-BackupLock
+
 Write-Blank
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "  ║  ALL 3 PHASES COMPLETE — GOOD LUCK!                 ║" -ForegroundColor Green

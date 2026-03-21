@@ -6,10 +6,6 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 }
 
-BeforeEach {
-    Reset-TestState
-}
-
 AfterAll {
     if ($SCRIPT:TestTempRoot -and (Test-Path $SCRIPT:TestTempRoot)) {
         Remove-Item $SCRIPT:TestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -20,6 +16,7 @@ AfterAll {
 Describe "Initialize-Backup" {
 
     BeforeEach {
+        Reset-TestState
         Mock Test-BackupLock { $false }
         Mock Set-BackupLock {}
     }
@@ -65,7 +62,7 @@ Describe "Initialize-Backup" {
 Describe "Backup-RegistryValue" {
 
     BeforeEach {
-        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+        Reset-TestState
     }
 
     It "adds entry to in-memory buffer (not disk)" {
@@ -102,6 +99,8 @@ Describe "Backup-RegistryValue" {
 # ── Flush-BackupBuffer ───────────────────────────────────────────────────────
 Describe "Flush-BackupBuffer" {
 
+    BeforeEach { Reset-TestState }
+
     It "writes buffered entries to backup.json" {
         # Initialize backup file
         New-TestBackupFile
@@ -134,6 +133,8 @@ Describe "Flush-BackupBuffer" {
 
 # ── Get-BackupData ────────────────────────────────────────────────────────────
 Describe "Get-BackupData" {
+
+    BeforeEach { Reset-TestState }
 
     It "returns entries from disk" {
         $entries = @(
@@ -191,6 +192,8 @@ Describe "Get-BackupData" {
 # ── Backup accumulation ─────────────────────────────────────────────────────
 Describe "Backup accumulation" {
 
+    BeforeEach { Reset-TestState }
+
     It "accumulates multiple entries for the same step" {
         New-TestBackupFile
 
@@ -238,6 +241,7 @@ Describe "Backup accumulation" {
 Describe "Restore-StepChanges" {
 
     BeforeEach {
+        Reset-TestState
         Mock Write-Host {}
         Mock Write-Step {}
         Mock Write-OK {}
@@ -342,13 +346,54 @@ Describe "Restore-StepChanges" {
         @($data.entries).Count | Should -Be 1
         $data.entries[0].step | Should -Be "Step B"
     }
+
+    It "restores MultiString with single string value (PS 5.1 unwrap)" {
+        # PS 5.1 ConvertFrom-Json unwraps ["single"] to "single" (scalar)
+        $entries = @(
+            [ordered]@{
+                type = "registry"; path = "HKLM:\SOFTWARE\Test"; name = "MultiVal";
+                originalValue = "OnlyOneString"; originalType = "MultiString"; existed = $true;
+                step = "Multi Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Test-Path { $true } -ParameterFilter { $Path -match "HKLM:" }
+        Mock Set-ItemProperty {}
+
+        $result = Restore-StepChanges -StepTitle "Multi Step"
+
+        $result | Should -Be $true
+        Should -Invoke Set-ItemProperty -Exactly 1 -ParameterFilter {
+            $Type -eq "MultiString" -and $Value -is [string[]]
+        }
+    }
+
+    It "skips binary restore when values are outside [0,255]" {
+        $entries = @(
+            [ordered]@{
+                type = "registry"; path = "HKLM:\SOFTWARE\Test"; name = "BadBin";
+                originalValue = @(0, 255, 300); originalType = "Binary"; existed = $true;
+                step = "Binary Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Test-Path { $true } -ParameterFilter { $Path -match "HKLM:" }
+        Mock Set-ItemProperty {}
+
+        $result = Restore-StepChanges -StepTitle "Binary Step"
+
+        $result | Should -Be $false
+        Should -Invoke Set-ItemProperty -Exactly 0
+    }
 }
 
 # ── Backup-ServiceState ─────────────────────────────────────────────────────
 Describe "Backup-ServiceState" {
 
     BeforeEach {
-        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+        Reset-TestState
     }
 
     It "captures service start type and status" {
@@ -385,6 +430,8 @@ Describe "Backup-ServiceState" {
 # ── Backup lock system ───────────────────────────────────────────────────────
 Describe "Backup lock system" {
 
+    BeforeEach { Reset-TestState }
+
     It "Set-BackupLock creates lock file with PID" {
         Set-BackupLock
 
@@ -419,6 +466,20 @@ Describe "Backup lock system" {
 
         # Mock Get-Process to return null (process doesn't exist)
         Mock Get-Process { $null } -ParameterFilter { $Id -eq 99999999 }
+
+        Test-BackupLock | Should -Be $false
+        Test-Path $CFG_BackupLockFile | Should -Be $false
+    }
+
+    It "Test-BackupLock detects PID reuse by non-PowerShell process" {
+        # Lock with a PID that is alive but NOT PowerShell (simulates PID reuse)
+        $fakeLock = @{ pid = 88888888; started = "2026-01-01 00:00:00" }
+        $fakeLock | ConvertTo-Json | Set-Content $CFG_BackupLockFile -Encoding UTF8
+
+        # Mock Get-Process to return a non-PowerShell process
+        Mock Get-Process {
+            [PSCustomObject]@{ ProcessName = "notepad"; Id = 88888888 }
+        } -ParameterFilter { $Id -eq 88888888 }
 
         Test-BackupLock | Should -Be $false
         Test-Path $CFG_BackupLockFile | Should -Be $false
