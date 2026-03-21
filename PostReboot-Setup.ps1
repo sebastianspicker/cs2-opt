@@ -450,7 +450,8 @@ if ($startStep -le 9) {
                             }
                         }
                     } else {
-                        Write-Warn "No active network adapter found."
+                        Write-Warn "No active network adapter found after filtering virtual/VPN adapters."
+                        Write-Info "Check your network cable or WiFi. DNS can be set manually in Network Settings."
                     }
                 } catch { Write-Warn "DNS change failed: $_" }
             } else {
