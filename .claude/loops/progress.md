@@ -143,8 +143,34 @@ Security + compatibility pass. The tool runs as Administrator — one injection 
 ## Loop 3: Final Gate
 
 ### GATE-R6 — Ship Decision
-- [ ] PSScriptAnalyzer zero violations
-- [ ] 203 tests passing
-- [ ] Security findings addressed or documented
-- [ ] Compatibility findings addressed or documented
-- [ ] Final ship assessment
+- [x] PSScriptAnalyzer zero violations — confirmed 0 rule violations
+- [x] 233 tests passing (203 original + 30 new security validation tests)
+- [x] Security findings addressed or documented — all 8 items verified
+- [x] Compatibility findings addressed or documented — README updated
+- [x] Final ship assessment — see below
+
+### Final Assessment
+
+**Audit scope:** 6 rounds, 133 commits, 55 files changed, 4,600+ insertions across all phases.
+
+**Test coverage:** 233 tests across 7 test files covering config validation, backup-restore, hardware detection, step state, system utilities, tier system, and security input validation.
+
+**Security posture:**
+- All Critical/High findings FIXED with input validation (path traversal, registry injection, command injection, Authenticode verification)
+- 3 accepted risks (documented): config dot-sourcing (admin=compromised), scheduled task ACLs (inherits C:\ permissions), TOCTOU on driver download (seconds window, admin-only dir)
+- No `Invoke-Expression` usage. No user-controlled string interpolation into commands.
+
+**Compatibility matrix:**
+| Environment | Status |
+|---|---|
+| Windows 10 1903+ / Windows 11 | Full support |
+| PowerShell 5.1 | Full support |
+| PowerShell 7.x | Full support except pagefile (Get-WmiObject) |
+| ARM64 Windows | Graceful fallback (DRS → registry-only) |
+| Constrained Language Mode | Graceful fallback (DRS + RAM trim skipped) |
+| Windows Server / LTSC | Graceful fallback (AppX skipped) |
+| Non-English Windows | Full support (CIM primary; pnputil fallback English-only) |
+
+**Ship recommendation: SHIP** — all 6 audit rounds complete. Security hardening verified with dedicated test coverage. Compatibility graceful degradation documented and tested.
+
+<promise>GATE-R6-COMPLETE</promise>

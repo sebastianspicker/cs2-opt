@@ -88,11 +88,13 @@ CS2 has structurally poor frame pacing in Valve's Source 2 engine. Games with si
 
 ## Requirements
 
-- Windows 11 (tested on 22H2, 23H2, 24H2)
-- PowerShell 5.1+ (included in Windows 11)
-- Administrator rights
+- Windows 10 1903+ or Windows 11 (tested on Win11 22H2, 23H2, 24H2)
+- PowerShell 5.1+ (shipped with Windows 10/11)
+- Administrator rights (x64 desktop edition)
 - NVIDIA GPU for full feature set (AMD/Intel Arc supported with reduced steps)
 - Active internet for NVIDIA driver download only
+
+**Graceful degradation:** ARM64, Constrained Language Mode, Windows Server/LTSC, and PowerShell 7 are detected at startup with automatic fallbacks. See `Test-SystemCompatibility` in `helpers/system-utils.ps1`.
 
 > **Recommended:** Create a System Restore Point before running Phase 1.
 
