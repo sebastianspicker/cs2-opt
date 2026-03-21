@@ -96,7 +96,10 @@ function Remove-BackupLock {
 
 function Flush-BackupBuffer {
     <#  Writes any pending in-memory backup entries to backup.json in a single I/O pass.
-        Safe to call multiple times — no-op when the buffer is empty.  #>
+        Safe to call multiple times — no-op when the buffer is empty.
+        On failure: entries stay in memory (Clear runs AFTER Save) for the next flush attempt.
+        If the process crashes before any flush, that step's backups are lost — acceptable
+        tradeoff vs. O(n^2) I/O from flushing on every Set-RegistryValue call.  #>
     if ($SCRIPT:_backupPending.Count -eq 0) { return }
     $backup = Get-BackupDataRaw
     $entries = [System.Collections.ArrayList]@($backup.entries)
