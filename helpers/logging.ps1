@@ -83,6 +83,16 @@ function Write-Section($title) {
     Write-Host "`n  ╔$pad╗" -ForegroundColor DarkCyan
     Write-Host "  ║  $title  ║" -ForegroundColor Cyan
     Write-Host "  ╚$pad╝" -ForegroundColor DarkCyan
+    # Show step progress when $SCRIPT:PhaseTotal is set and title contains "Step N"
+    if ($SCRIPT:PhaseTotal -and $title -match '^Step\s+(\d+)') {
+        $stepNum = [int]$Matches[1]
+        $pct = [math]::Round($stepNum / $SCRIPT:PhaseTotal * 100)
+        $barLen = 20
+        $filled = [math]::Round($pct / 100 * $barLen)
+        $empty  = $barLen - $filled
+        $bar = "$([char]0x2588)" * $filled + "$([char]0x2591)" * $empty
+        Write-Host "  $bar  $stepNum / $($SCRIPT:PhaseTotal)  ($pct%)" -ForegroundColor DarkGray
+    }
     Write-Log "SECTION" "=== $title ==="
 }
 

@@ -20,8 +20,10 @@ if ($startStep -le 23) {
         -Action {
             Set-RegistryValue "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" `
                 "HiberbootEnabled" 0 "DWord" "Disable Fast Startup (hybrid boot)"
-            Write-OK "Fast Startup disabled. Changes take effect on next shutdown + cold boot."
-            Write-Info "Note: Hibernate / Sleep mode is NOT affected — only 'Shut Down' behavior."
+            if (-not $SCRIPT:DryRun) {
+                Write-OK "Fast Startup disabled. Changes take effect on next shutdown + cold boot."
+                Write-Info "Note: Hibernate / Sleep mode is NOT affected — only 'Shut Down' behavior."
+            }
             Complete-Step $PHASE 23 "HiberbootEnabled"
         } `
         -SkipAction { Skip-Step $PHASE 23 "HiberbootEnabled" }
@@ -86,7 +88,7 @@ if ($startStep -le 25) {
                 $regBase = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$nicGuid"
                 Set-RegistryValue $regBase "TcpNoDelay" 1 "DWord" "Disable Nagle's Algorithm"
                 Set-RegistryValue $regBase "TcpAckFrequency" 1 "DWord" "Send TCP ACK immediately"
-                Write-OK "Nagle disabled for NIC: $nicGuid"
+                if (-not $SCRIPT:DryRun) { Write-OK "Nagle disabled for NIC: $nicGuid" }
             } else {
                 Write-Warn "Active network adapter not found — set manually in regedit."
                 Write-Info "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{NIC-GUID}"
@@ -116,7 +118,7 @@ if ($startStep -le 26) {
             Set-RegistryValue $gcsPath "GameDVR_FSEBehavior"                   2 "DWord" "FSE behavior"
             Set-RegistryValue $gcsPath "GameDVR_FSEBehaviorMode"               2 "DWord" "FSE mode"
             Set-RegistryValue $gcsPath "GameDVR_HonorUserFSEBehaviorMode"      1 "DWord" "Respect user FSE mode"
-            Write-OK "GameConfigStore FSE keys set."
+            if (-not $SCRIPT:DryRun) { Write-OK "GameConfigStore FSE keys set." }
             Complete-Step $PHASE 26 "GameConfigStore"
         } `
         -SkipAction { Skip-Step $PHASE 26 "GameConfigStore" }
@@ -165,7 +167,7 @@ if ($startStep -le 27) {
                 $ptPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
                 # Set-RegistryValue creates the key path if missing — no need for standalone New-Item
                 Set-RegistryValue $ptPath "PowerThrottlingOff" 1 "DWord" "Disable Intel Power Throttling (E-core mismatch)"
-                Write-OK "Intel hybrid CPU ($intelHybridName) — Power Throttling disabled."
+                if (-not $SCRIPT:DryRun) { Write-OK "Intel hybrid CPU ($intelHybridName) — Power Throttling disabled." }
             } else {
                 Write-Sub "Power Throttling: not applicable (non-Intel-hybrid CPU)"
             }
@@ -208,8 +210,10 @@ if ($startStep -le 27) {
             Set-RegistryValue $fsPath "NtfsDisable8dot3NameCreation" 1 "DWord" `
                 "NTFS: disable 8.3 legacy filename alias generation"
 
-            Write-OK "SystemProfile gaming priority set."
-            Write-OK "System latency tweaks applied (FTH, Maintenance, NTFS, co-installers)."
+            if (-not $SCRIPT:DryRun) {
+                Write-OK "SystemProfile gaming priority set."
+                Write-OK "System latency tweaks applied (FTH, Maintenance, NTFS, co-installers)."
+            }
             Complete-Step $PHASE 27 "SystemResponsiveness"
         } `
         -SkipAction { Skip-Step $PHASE 27 "SystemResponsiveness" }
@@ -233,7 +237,7 @@ if ($startStep -le 28) {
             if ($build -ge 19041) {
                 Set-RegistryValue "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" `
                     "GlobalTimerResolutionRequests" 1 "DWord" "Timer resolution: allow highest request"
-                Write-OK "Timer resolution enabled (Build $build >= 19041)."
+                if (-not $SCRIPT:DryRun) { Write-OK "Timer resolution enabled (Build $build >= 19041)." }
             } else {
                 Write-Warn "Windows build $build < 19041 — feature not available."
                 Write-Info "Requires Windows 10 version 2004 or newer."
@@ -289,7 +293,9 @@ if ($startStep -le 29) {
             } else {
                 Write-Host "  [DRY-RUN] Would set flat mouse curves (SmoothMouseX/YCurve)" -ForegroundColor Magenta
             }
-            Write-OK "Mouse acceleration disabled. Takes effect after re-login."
+            if (-not $SCRIPT:DryRun) {
+                Write-OK "Mouse acceleration disabled. Takes effect after re-login."
+            }
 
             # ── mouclass kernel input queue depth ────────────────────────────────────
             # Default queue of 100 events allows Windows to buffer up to ~100ms of mouse
@@ -302,8 +308,10 @@ if ($startStep -le 29) {
             $mouPath = "HKLM:\SYSTEM\CurrentControlSet\Services\mouclass\Parameters"
             Set-RegistryValue $mouPath "MouseDataQueueSize" 50 "DWord" `
                 "mouclass kernel queue depth (50 events, down from default 100)"
-            Write-OK "mouclass: kernel mouse event queue = 50 (default: 100). Reboot required."
-            Write-Sub "Conservative reduction — values below 30 can cause skipping on some hardware."
+            if (-not $SCRIPT:DryRun) {
+                Write-OK "mouclass: kernel mouse event queue = 50 (default: 100). Reboot required."
+                Write-Sub "Conservative reduction — values below 30 can cause skipping on some hardware."
+            }
 
             Complete-Step $PHASE 29 "MouseAccel"
         } `
@@ -329,7 +337,7 @@ if ($startStep -le 30) {
                 $cs2Exe = "$cs2Path\game\bin\win64\cs2.exe"
                 $regPath = "HKCU:\SOFTWARE\Microsoft\DirectX\UserGpuPreferences"
                 Set-RegistryValue $regPath $cs2Exe "GpuPreference=2;" "String" "CS2 GPU preference: High Performance"
-                Write-OK "GPU Preference = High Performance for: $cs2Exe"
+                if (-not $SCRIPT:DryRun) { Write-OK "GPU Preference = High Performance for: $cs2Exe" }
             } else {
                 Write-Warn "CS2 not found — manual: Windows Settings -> System -> Display -> Graphics settings"
                 Write-Info "Add cs2.exe -> Options -> High performance"
@@ -357,7 +365,7 @@ if ($startStep -le 31) {
             Set-RegistryValue "HKCU:\SOFTWARE\Microsoft\GameBar" "UseNexusForGameBarEnabled" 0 "DWord" "Game Bar Nexus off"
             Set-RegistryValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" "AllowGameDVR" 0 "DWord" "Game DVR Policy off"
             Set-RegistryValue "HKCU:\System\GameConfigStore" "GameDVR_Enabled" 0 "DWord" "Game DVR master switch off"
-            Write-OK "Game Bar + Game DVR disabled (master switch + policy + app capture)."
+            if (-not $SCRIPT:DryRun) { Write-OK "Game Bar + Game DVR disabled (master switch + policy + app capture)." }
             Complete-Step $PHASE 31 "GameDVR"
         } `
         -SkipAction { Skip-Step $PHASE 31 "GameDVR" }
@@ -378,7 +386,7 @@ if ($startStep -le 32) {
         -Undo "Steam -> Settings -> In-Game -> Enable Steam Overlay" `
         -Action {
             Set-RegistryValue "HKCU:\Software\Valve\Steam" "GameOverlayDisabled" 1 "DWord" "Steam Overlay globally off"
-            Write-OK "Steam Overlay globally disabled."
+            if (-not $SCRIPT:DryRun) { Write-OK "Steam Overlay globally disabled." }
             Write-Blank
             Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
             Write-Host "  │  DISABLE MANUALLY (no registry access possible):             │" -ForegroundColor Yellow
@@ -413,7 +421,7 @@ if ($startStep -le 33) {
             # Disable audio ducking (Windows auto-reduces other app volumes when VoIP is active)
             Set-RegistryValue "HKCU:\Software\Microsoft\Multimedia\Audio" `
                 "UserDuckingPreference" 3 "DWord" "Audio ducking: Do Nothing (0=Default, 3=Never reduce)"
-            Write-OK "Audio ducking disabled (will not auto-reduce game volume during VoIP)."
+            if (-not $SCRIPT:DryRun) { Write-OK "Audio ducking disabled (will not auto-reduce game volume during VoIP)." }
 
             try {
                 $audioDevs = Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }

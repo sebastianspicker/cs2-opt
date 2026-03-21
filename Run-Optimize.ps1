@@ -59,6 +59,7 @@ Ensure-Dir $CFG_LogDir
 
 $TOTAL_STEPS = 38
 $PHASE = 1
+$SCRIPT:PhaseTotal = $TOTAL_STEPS
 
 try {
     . "$ScriptRoot\Setup-Profile.ps1"

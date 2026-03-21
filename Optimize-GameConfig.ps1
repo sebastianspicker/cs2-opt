@@ -399,7 +399,7 @@ if ($startStep -le 36) {
             Set-RegistryValue $upmPath "UserPreferencesMask" ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) "Binary" "Best Performance + ClearType preserved"
             # FontSmoothing=2 is the string value that enables ClearType at the GDI level
             Set-RegistryValue $upmPath "FontSmoothing" "2" "String" "ClearType font smoothing enabled"
-            Write-OK "Visual effects: Best Performance (ClearType font smoothing preserved)."
+            if (-not $SCRIPT:DryRun) { Write-OK "Visual effects: Best Performance (ClearType font smoothing preserved)." }
 
             # ── Windows Defender CS2 Exclusions ───────────────────────────────
             # Exclude CS2 executable and shader cache directories from real-time scanning.
@@ -449,7 +449,7 @@ if ($startStep -le 36) {
             # Only relevant on Win11 + HDR-capable display. Harmless write on non-HDR/Win10 systems.
             $videoSettings = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\VideoSettings"
             Set-RegistryValue $videoSettings "AutoHDREnabled" 0 "DWord" "Win11 Auto HDR disabled"
-            Write-OK "Win11 Auto HDR: disabled (prevents tone-mapping overhead in CS2)."
+            if (-not $SCRIPT:DryRun) { Write-OK "Win11 Auto HDR: disabled (prevents tone-mapping overhead in CS2)." }
 
             Write-Info "Undo: Remove-MpPreference to remove exclusions; restore VisualFXSetting=0 for 'Let Windows decide'."
             Complete-Step $PHASE 36 "VisualEffects"

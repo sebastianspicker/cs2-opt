@@ -41,6 +41,7 @@ $SCRIPT:fpsCap = $fpsCap
 $avgFps   = $state.avgFps
 $gpuInput = $state.gpuInput
 $PHASE    = 3
+$SCRIPT:PhaseTotal = 13
 
 # Guard: if Phase 1 was run in DRY-RUN, warn and confirm before Phase 3 applies real changes
 if ($SCRIPT:DryRun) {

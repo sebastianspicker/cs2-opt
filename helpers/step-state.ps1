@@ -75,8 +75,8 @@ function Show-ResumePrompt($phase, $totalSteps) {
         if ($r -match "^[jJyY]$") { Clear-Progress $phase; return 1 }
         return ($totalSteps + 1)  # Sentinel: callers use `for ($step = $startStep; $step -le $totalSteps; ...)` — this skips the loop
     }
-    if ($SCRIPT:Mode -eq "AUTO") {
-        Write-Info "Auto-resume from step $nextStep."
+    if ($SCRIPT:Profile -eq "SAFE") {
+        Write-Info "SAFE profile: auto-resume from step $nextStep (of $totalSteps)."
         return $nextStep
     }
     Write-Blank
