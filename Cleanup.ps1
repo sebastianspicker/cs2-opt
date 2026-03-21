@@ -101,6 +101,12 @@ if (-not $SCRIPT:DryRun) {
 Write-TierBadge 3 "Trim RAM working set"
 if (-not $SCRIPT:DryRun) {
     try {
+        # Add-Type is blocked under Constrained Language Mode (AppLocker/WDAC).
+        if ($ExecutionContext.SessionState.LanguageMode -eq 'ConstrainedLanguage') {
+            Write-Info "Working set trim skipped (Constrained Language Mode — Add-Type blocked)."
+            # Fall through to the catch handler for consistent flow
+            throw "CLM"
+        }
         Add-Type @"
 using System; using System.Runtime.InteropServices;
 public class MemHelper {

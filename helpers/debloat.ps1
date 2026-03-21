@@ -10,6 +10,13 @@ function Invoke-GamingDebloat {
 
     Write-Step "Removing bloatware AppX packages..."
 
+    # Windows Server Core / LTSC may not have the Appx module at all.
+    # Guard against CommandNotFoundException to avoid a hard failure.
+    if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
+        Write-Info "AppX cmdlets not available (Windows Server Core or LTSC). Skipping package removal."
+        # Fall through to telemetry services and consumer features below
+    } else {
+
     $bloatPackages = @(
         "Microsoft.BingNews",
         "Microsoft.BingWeather",
@@ -62,6 +69,8 @@ function Invoke-GamingDebloat {
         $verb = if ($SCRIPT:DryRun) { "would be removed" } else { "removed" }
         Write-OK "$removedCount bloatware packages $verb."
     }
+
+    } # end: AppX cmdlets available guard
 
     # ── Disable Telemetry Services ───────────────────────────────────────────
     Write-Step "Disabling telemetry services..."

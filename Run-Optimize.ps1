@@ -2,6 +2,23 @@
 <#
 .SYNOPSIS  CS2 Optimization Suite — Full Optimization Run (38 steps)
 
+  MINIMUM REQUIREMENTS:
+    - Windows 10 (1903+) or Windows 11 (any build) — x64 desktop edition
+    - PowerShell 5.1 (shipped with Windows 10/11; PS 7 has partial WMI gaps)
+    - Administrator privileges (enforced by #Requires above)
+
+  KNOWN LIMITATIONS:
+    - ARM64 Windows: NVIDIA DRS writes are unavailable (nvapi64.dll is x64-only).
+      Falls back to registry-only NVIDIA profile method automatically.
+    - Windows Server / LTSC: AppX debloat is skipped (cmdlets unavailable).
+      Xbox services may not exist. All handled gracefully.
+    - Constrained Language Mode (AppLocker/WDAC): DRS writes and RAM trim
+      are skipped (Add-Type is blocked). Registry-only paths are used instead.
+    - PowerShell 7: Pagefile step uses Get-WmiObject (removed in PS 7).
+      Use Windows PowerShell 5.1 for full functionality.
+    - Non-English Windows: GPU driver clean uses CIM (locale-independent).
+      pnputil text-parsing fallback only works on English installations.
+
   TIER SYSTEM:
     T1  Proven measurable effect -> always runs automatically
     T2  Setup-dependent -> always prompted (even AUTO mode)

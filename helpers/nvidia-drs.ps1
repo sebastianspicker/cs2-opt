@@ -386,14 +386,28 @@ function Initialize-NvApiDrs {
     if ($SCRIPT:NvApiAvailable -eq $true) { return $true }
     if ($SCRIPT:NvApiAvailable -eq $false) { return $false }  # Don't re-attempt after a failure
 
-    # Only attempt on 64-bit PowerShell (nvapi64.dll is 64-bit only)
+    # Only attempt on x64 PowerShell — nvapi64.dll is a native x64 binary.
+    # ARM64 PowerShell has [IntPtr]::Size == 8 but cannot load x64 DLLs via Add-Type P/Invoke.
     if ([IntPtr]::Size -ne 8) {
         Write-Debug "NvApiDrs: 32-bit PowerShell — nvapi64.dll requires 64-bit"
         $SCRIPT:NvApiAvailable = $false
         return $false
     }
+    if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+        Write-Debug "NvApiDrs: ARM64 Windows detected — nvapi64.dll requires native x64"
+        $SCRIPT:NvApiAvailable = $false
+        return $false
+    }
 
     try {
+        # Constrained Language Mode (CLM) blocks Add-Type — occurs under AppLocker, WDAC,
+        # or DeviceGuard UMCI policies. Fall back to registry-only NVIDIA profile path.
+        if ($ExecutionContext.SessionState.LanguageMode -eq 'ConstrainedLanguage') {
+            Write-Debug "NvApiDrs: Constrained Language Mode — Add-Type blocked"
+            $SCRIPT:NvApiAvailable = $false
+            return $false
+        }
+
         # Compile C# class (only once per session)
         if (-not ([System.Management.Automation.PSTypeName]'NvApiDrs').Type) {
             Add-Type -TypeDefinition $NvApiDrsCode -ErrorAction Stop

@@ -454,7 +454,10 @@ if ($startStep -le 8) {
                 }
                 if (-not $SCRIPT:DryRun) {
                     try {
-                        # NOTE: Uses Get-WmiObject (not CIM) because .Put() method is WMI-specific
+                        # NOTE: Uses Get-WmiObject (not CIM) because .Put() method is WMI-specific.
+                        # Get-WmiObject is removed in PowerShell 7+. The tool targets PS 5.1
+                        # (shipped with Windows 10/11). If running under PS 7, install the
+                        # Microsoft.PowerShell.Management compatibility module or use PS 5.1.
                         $cs = Get-WmiObject Win32_ComputerSystem
                         $cs.AutomaticManagedPagefile = $false; $cs.Put() | Out-Null
 

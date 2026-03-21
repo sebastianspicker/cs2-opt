@@ -105,6 +105,23 @@ function Initialize-ScriptDefaults {
 }
 
 function Set-RunOnce($name, $scriptPath) {
+    # SECURITY: Validate RunOnce name — alphanumeric + underscore only.
+    # Prevents injection into the HKLM RunOnce key namespace.
+    if ($name -notmatch '^[a-zA-Z0-9_]+$') {
+        Write-Warn "Set-RunOnce: invalid name '$name' — rejected (security: registry injection prevention)"
+        return
+    }
+    # SECURITY: Validate script path — must be under C:\CS2_OPTIMIZE\ and end in .ps1.
+    # RunOnce executes at boot as the logged-on user with admin elevation (HKLM).
+    # If an attacker could set $scriptPath to an arbitrary location, they get code execution.
+    $resolvedPath = try { [System.IO.Path]::GetFullPath($scriptPath) } catch { $null }
+    if (-not $resolvedPath -or
+        $resolvedPath -notmatch '^C:\\CS2_OPTIMIZE\\' -or
+        $resolvedPath -notmatch '\.ps1$') {
+        Write-Warn "Set-RunOnce: script path must be under C:\CS2_OPTIMIZE\ and end in .ps1 — rejected: $scriptPath"
+        return
+    }
+
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would set RunOnce: $name -> $scriptPath" -ForegroundColor Magenta
         return
@@ -127,6 +144,18 @@ function Set-RunOnce($name, $scriptPath) {
 }
 
 function Set-BootConfig($key, $val, $why) {
+    # SECURITY: Validate bcdedit key/value — these are passed as command-line arguments.
+    # An attacker who controls state.json or backup.json could inject arbitrary bcdedit args.
+    # bcdedit keys are alphanumeric identifiers; values are alphanumeric, hex, or simple tokens.
+    if ($key -notmatch '^[a-zA-Z][a-zA-Z0-9_]*$') {
+        Write-Warn "Set-BootConfig: invalid key format '$key' — rejected (security: command injection prevention)"
+        return
+    }
+    if ($val -notmatch '^[a-zA-Z0-9_.{}\-]+$') {
+        Write-Warn "Set-BootConfig: invalid value format '$val' — rejected (security: command injection prevention)"
+        return
+    }
+
     # Auto-backup before modification
     if ($SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
         Backup-BootConfig -Key $key -StepTitle $SCRIPT:CurrentStepTitle
@@ -142,6 +171,19 @@ function Set-BootConfig($key, $val, $why) {
 }
 
 function Set-RegistryValue($path, $name, $value, $type, $why) {
+    # SECURITY: Validate registry path — must start with a known hive prefix.
+    # An attacker who controls backup.json or state.json could inject arbitrary paths
+    # to write to sensitive registry locations outside the expected scope.
+    if ($path -notmatch '^(HKLM:|HKCU:|HKCR:|HKU:|HKCC:|Microsoft\.PowerShell\.Core\\Registry::HK)') {
+        Write-Warn "Set-RegistryValue: path does not start with a valid registry hive — rejected: $path"
+        return
+    }
+    # SECURITY: Registry value name must not contain path separators or null bytes.
+    if ($name -match '[\\/\x00]') {
+        Write-Warn "Set-RegistryValue: name contains invalid characters — rejected: $name"
+        return
+    }
+
     # Auto-backup before modification
     if ($SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
         Backup-RegistryValue -Path $path -Name $name -StepTitle $SCRIPT:CurrentStepTitle
@@ -176,6 +218,60 @@ function Clear-Dir($path, $label) {
     Write-OK "${label}: $del deleted$(if($remaining){" ($remaining locked — normal)"})"
     Write-Debug "${label}: del=$del locked=$remaining path=$path"
     return $del
+}
+
+# ── System Compatibility Checks ──────────────────────────────────────────────
+# Runs once at startup to detect and warn about edge-case environments.
+# All issues are non-fatal — the suite degrades gracefully.
+
+function Test-SystemCompatibility {
+    <#
+    .SYNOPSIS  Detects environment limitations and logs warnings.
+    .DESCRIPTION
+        Checks for: ARM64, Constrained Language Mode, Windows Server/LTSC,
+        PowerShell 7 (missing Get-WmiObject), missing AppX cmdlets.
+        Does not block execution — all limitations have graceful fallbacks.
+    #>
+    $warnings = 0
+
+    # ARM64 Windows — nvapi64.dll and some x64 P/Invoke won't work
+    if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+        Write-Warn "ARM64 Windows detected. NVIDIA DRS writes will fall back to registry-only method."
+        $warnings++
+    }
+
+    # Constrained Language Mode — Add-Type blocked (AppLocker, WDAC, DeviceGuard)
+    if ($ExecutionContext.SessionState.LanguageMode -eq 'ConstrainedLanguage') {
+        Write-Warn "Constrained Language Mode active. NVIDIA DRS and RAM trim will be skipped."
+        Write-Warn "Registry-only paths will be used where available."
+        $warnings++
+    }
+
+    # Windows Server / LTSC — missing AppX, Xbox services, some consumer features
+    $productType = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).ProductType
+    # ProductType: 1=Workstation, 2=DomainController, 3=Server
+    if ($productType -and $productType -ne 1) {
+        Write-Warn "Windows Server/DC edition detected (ProductType=$productType)."
+        Write-Warn "AppX debloat, Xbox services, and some consumer features may not exist."
+        $warnings++
+    }
+
+    # PowerShell 7+ — Get-WmiObject removed (pagefile step affected)
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        Write-Warn "PowerShell $($PSVersionTable.PSVersion) detected. Pagefile configuration"
+        Write-Warn "requires Get-WmiObject (PS 5.1 only). Run with Windows PowerShell for full support."
+        $warnings++
+    }
+
+    # Missing AppX cmdlets (Server Core, minimal installs)
+    if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
+        Write-Debug "AppX cmdlets not available — debloat package removal will be skipped."
+        $warnings++
+    }
+
+    if ($warnings -gt 0) {
+        Write-Info "Detected $warnings compatibility note(s) — suite will adapt automatically."
+    }
 }
 
 # ── Verification counter infrastructure ─────────────────────────────────────
@@ -232,6 +328,10 @@ function Test-RegistryCheck {
         "CHANGED" {
             Write-Host "  ✗  CHANGED   $Label  (is: $result, expected: $Expected)" -ForegroundColor Yellow
             Write-Host "               $Path\$Name" -ForegroundColor DarkGray
+            # Warn if the key lives under a Policies path — Group Policy may override user writes
+            if ($Path -match '\\Policies\\') {
+                Write-Host "               NOTE: This key is under a Policies path — may be managed by Group Policy" -ForegroundColor DarkYellow
+            }
             $global:_verifyChangedCount++
         }
     }

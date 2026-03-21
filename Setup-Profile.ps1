@@ -115,6 +115,9 @@ if ($startStep -gt $TOTAL_STEPS) { Write-Info "Phase 1 already completed."; exit
 # Initialize backup system
 Initialize-Backup
 
+# Detect and warn about compatibility limitations (ARM64, CLM, Server, PS7)
+Test-SystemCompatibility
+
 # Restore Point
 if ($startStep -eq 1) {
     Write-Blank
