@@ -62,12 +62,12 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [x] Complete-Step/Skip-Step coverage — all 11 steps (23-33) have both Complete-Step $PHASE N "label" in Action and Skip-Step $PHASE N "label" in SkipAction. $PHASE=1 set in Run-Optimize.ps1 before sourcing. No missing Complete-Step on any code path (null NIC, old Windows build, missing CS2 all still call Complete-Step). Labels consistent.
 
 ### B4 — Game Config (Steps 34-38)
-- [ ] Step 34 autoexec merge
-- [ ] Step 37 services
-- [ ] Step 38 Safe Mode prep
-- [ ] File operation error handling
-- [ ] Step 35 chipset
-- [ ] Step 36 visual effects
+- [x] Step 34 autoexec merge — FIXED: skip comments/blank/command lines from CVar detection (inflated count); strip inline comments from values (false conflicts). DRY-RUN properly gated. Duplicate exec check works. Intel hybrid detection via Get-IntelHybridCpuName correct. Regex adequate for simple key-value CVars.
+- [x] Step 37 services — FIXED: SysMain/WSearch now check service existence before disable (matching qWave/Xbox pattern); changed -ErrorAction SilentlyContinue to Stop on Set-Service so try/catch catches failures. Backup called before disable. qWave after Step 16 DSCP (correct). All 4 Xbox services present via $CFG_XboxServices.
+- [x] Step 38 Safe Mode prep — FIXED: -ErrorAction Stop on all Copy-Item calls; helpers/ directory missing now throws (was silent). Script copy list complete: SafeMode-DriverClean.ps1, PostReboot-Setup.ps1, Guide-VideoSettings.ps1, helpers.ps1, config.env.ps1 + helpers/ recursed. RunOnce uses $CFG_WorkDir path (correct). bcdedit via Set-BootConfig (DRY-RUN intercepted).
+- [x] File operation error handling — FIXED: Copy-Item -ErrorAction Stop in Step 38; Ensure-Dir called before cfg writes (Step 34 line 42). Step 34 Set-Content gated by DRY-RUN. Step 38 helpers/ missing is now a hard error.
+- [x] Step 35 chipset — CORRECT: informational only (no modifications). Detects AMD/Intel via Win32_Processor Manufacturer. URLs from config vars ($CFG_URL_AMD_Chipset, $CFG_URL_Intel_Chipset). Unknown vendor handled gracefully.
+- [x] Step 36 visual effects — FIXED: added UserPreferencesMask binary write (0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00) for immediate effect + ClearType preservation (byte 2 = 0x03 keeps font smoothing ON). Added FontSmoothing="2" string value for GDI-level ClearType. Added FontSmoothing check to Verify-Settings.ps1. VisualFXSetting=2 is correct value for "Best Performance".
 
 ### B5 — Phase 2 Safe Mode
 - [ ] Safe Mode boot validation
@@ -101,11 +101,11 @@ Central audit trail for the Ralph Loop system. Each loop records completed items
 - [ ] Backup integration
 
 ### C2 — Network & Hardware
-- [ ] MSI interrupts
-- [ ] Power plan
-- [ ] Process priority (X3D)
-- [ ] Debloat
-- [ ] Benchmark history
+- [x] MSI interrupts — FIXED: added -ErrorAction Stop to all Set-ItemProperty calls in Enable-DeviceMSI (MSISupported, MessageNumberLimit) and Set-NicInterruptAffinity (DevicePolicy, AssignmentSetOverride). Under global SilentlyContinue, failures were silently swallowed and try/catch never triggered. PCI filter correct (^PCI\\ prefix). MessageNumberLimit=16 correct (hardware caps if unsupported). Multi-NIC: Enable-DeviceMSI enables all PCI NICs (correct), affinity targets only active NIC (correct). DRY-RUN: all writes inside guards, no leaks.
+- [x] Power plan — VERIFIED CORRECT: HP plan missing handled (falls back to Balanced). Vendor detection correct (AMD=0, Intel=100 for PROCTHROTTLEMIN; Unknown defaults to Intel). All powercfg calls DRY-RUN gated via Set-PowerPlanValue wrapper. GUID constants verified against Microsoft docs. DISKPOWERMGMT T1->T2 (1->0) intentional tier progression. Existing plan detected and removed before creation (idempotent). duplicatescheme failure throws with descriptive message.
+- [x] Process priority (X3D) — VERIFIED CORRECT: Affinity mask calculation verified for 7900X3D (0x3F03F), 7950X3D (0xFF00FF), 9900X3D, 9950X3D. SMT detection uses totalLP>totalCores. PT2M trigger correctly formed in XML schema. Generated cs2_affinity.ps1 valid PowerShell (proper backtick escaping, [long] cast). cs2 not running = graceful no-op (Get-Process SilentlyContinue + if guard). DRY-RUN: Register-ScheduledTask gated by early return, IFEO via Set-RegistryValue self-gates.
+- [x] Debloat — FIXED: pre-fetch provisioned packages once before loop (was calling Get-AppxProvisionedPackage -Online per package = N redundant queries). AppX -AllUsers requires admin (handled by START.bat elevation). Provisioned removal correct for preventing feature update reinstall. Services backed up via Backup-ServiceState before modification. Tasks backed up via Backup-ScheduledTask before disabling. All operations DRY-RUN gated. LTSC: missing packages return $null from Get-AppxPackage, handled gracefully.
+- [x] Benchmark history — FIXED: (1) Get-BenchmarkHistory null guard for PS 5.1 empty array deserialization (ConvertFrom-Json returns $null for "[]", @($null) created spurious entry). (2) Added history cap ($CFG_BenchmarkMaxEntries=200) with FIFO trim to prevent unbounded JSON growth. VProf parse handles multi-match averaging correctly. Write uses Save-JsonAtomic (temp+rename). Regression detection correct (p1Diff < 0 = red). Corruption recovery: try/catch returns @() on any error.
 
 ---
 
