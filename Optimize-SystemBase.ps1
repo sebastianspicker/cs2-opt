@@ -319,7 +319,7 @@ if ($startStep -le 6) {
                 Write-Warn "Power plan creation failed: $_"
                 Write-Info "Fallback: activating Windows High Performance..."
                 if (-not $SCRIPT:DryRun) {
-                    $hpResult = powercfg /setactive SCHEME_MIN 2>&1
+                    powercfg /setactive SCHEME_MIN 2>&1 | Out-Null
                     if ($LASTEXITCODE -ne 0) {
                         Write-Warn "High Performance not available — falling back to Balanced."
                         powercfg /setactive SCHEME_BALANCED 2>&1 | Out-Null
