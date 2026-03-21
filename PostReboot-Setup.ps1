@@ -388,16 +388,20 @@ if ($startStep -le 9) {
                 $dnsAddrs = if ($dnsChoice -eq "1") { $CFG_DNS_Cloudflare } else { $CFG_DNS_Google }
                 $dnsName  = if ($dnsChoice -eq "1") { "Cloudflare" } else { "Google" }
                 try {
-                    $nic = Get-NetAdapter | Where-Object {
+                    # Set DNS on ALL active adapters (wired + WiFi) — DNS is protocol-layer,
+                    # unlike NIC hardware tweaks which are wired-only
+                    $nics = @(Get-NetAdapter | Where-Object {
                         $_.Status -eq "Up" -and
                         $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth"
-                    } | Sort-Object LinkSpeed -Descending | Select-Object -First 1
-                    if ($nic) {
-                        if ($SCRIPT:DryRun) {
-                            Write-Host "  [DRY-RUN] Would set DNS to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))" -ForegroundColor Magenta
-                        } else {
-                            Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $dnsAddrs
-                            Write-OK "DNS set to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))"
+                    })
+                    if ($nics.Count -gt 0) {
+                        foreach ($nic in $nics) {
+                            if ($SCRIPT:DryRun) {
+                                Write-Host "  [DRY-RUN] Would set DNS to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))" -ForegroundColor Magenta
+                            } else {
+                                Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $dnsAddrs
+                                Write-OK "DNS set to ${dnsName}: $($dnsAddrs -join ', ') (Adapter: $($nic.Name))"
+                            }
                         }
                     } else {
                         Write-Warn "No active network adapter found."
