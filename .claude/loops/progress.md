@@ -89,10 +89,39 @@ Third pass after R1 (~51 fixes) + R2 (~47 fixes) = ~98 total. Consolidated from 
 ## Phase E: Quality (consolidated)
 
 ### E-R3 — Tests + Docs + CI
-- [ ] R2 fixes: Pester Exit=true, version bound, EstimateKey scope, security lookback, test bugs, CHANGELOG count
-- [ ] Run full Pester suite mentally — any remaining failures?
-- [ ] CI workflow dry-run (trace each job step-by-step)
-- [ ] Doc accuracy final spot-check (5 random claims → verify in code)
+- [x] R2 CI fixes validation (Item 1)
+  - **Pester Exit=true**: `$cfg.Run.Exit = $true` at lint.yml:102, before `Invoke-Pester` at line 107. `$cfg` constructed via `New-PesterConfiguration` (line 100). PASS.
+  - **Pester version bound**: `-MaximumVersion 5.99.99` is valid `Install-Module` syntax (line 94). Prevents Pester 6.x breaking changes. PASS.
+  - **EstimateKey scope**: block-scoped parser (lint.yml:159-173) starts at `CFG_ImprovementEstimates`, stops at `^\s*\}`. Inner `@{...}` values are single-line, so no false stop. Commented keys (line 235 in config) start with `#` after whitespace — `^\s+"` regex correctly skips them. PASS.
+  - **Security 50-line lookback**: 4 Restart-Computer -Force locations checked:
+    - Cleanup.ps1:267 — DryRun guard at line 221 (46 lines). PASS.
+    - PostReboot-Setup.ps1:681 — DryRun guard at line 678 (3 lines) + Read-Host at 676. PASS.
+    - Run-Optimize.ps1:85 — DryRun guard at line 82 (3 lines) + Confirm-Risk at 81. PASS.
+    - SafeMode-DriverClean.ps1:183 — DryRun guard at line 179 (4 lines) + Read-Host at 182. PASS.
+- [x] Pester suite final check (Item 2)
+  - **3 R2 bug fixes verified**:
+    - Initialize-Backup assertion: tests `entries` property exists + count >= 0. Matches code output `@{ entries = @(); created = ... }`. PASS.
+    - Get-SteamPath mock: `-ParameterFilter { $Path -like "*Valve\Steam*" }` matches actual `HKCU:\SOFTWARE\Valve\Steam`. PASS.
+    - Config path regex: `[^:]/"` correctly flags forward slashes in Windows paths while ignoring drive-letter colons. PASS.
+  - **7 new tests verified**:
+    - Binary restore (3 tests): [0,255,300] triggers >255 guard; [10,-1,128] triggers <0 guard; [0,128,255] passes and casts to [byte[]]. All match code lines 450-459. PASS.
+    - Flush retry (1 test): Mocks Save-JsonAtomic to throw; buffer retains entries because Clear() is after Save-BackupData call. PASS.
+    - wasEnabled (4 tests): wasEnabled=true -> Enable; wasEnabled=false -> Disable; wasEnabled=null -> defaults to true; existed=false -> Unregister. All match code lines 544-578. PASS.
+  - **Exact test count: 203** (config:28, system-utils:29, hardware-detect:39, step-state:24, backup-restore:35, tier-system:48)
+  - No test relies on real registry, services, or external tools. All mocked. Would pass on clean Windows + Pester 5.x.
+- [x] CI workflow dry-run (Item 3)
+  - **psscriptanalyzer**: checkout → cache check (key: `psscriptanalyzer-1-Windows`) → install if missing → run with settings file → throw on violations. Cache staleness: module stays at first-installed version; bump key `-1-` to `-2-` to force update. Acceptable since PSScriptAnalyzer is backward-compatible.
+  - **syntax-check**: checkout → parse all .ps1 via `[Parser]::ParseFile` → count errors → throw on >0. No dependencies beyond PowerShell. PASS.
+  - **pester**: checkout → cache check (key: `pester5-1-Windows`) → install Pester 5.x if missing (bounded 5.0–5.99.99) → configure with Exit=true → run → upload NUnit XML. Cache staleness: same approach as psscriptanalyzer. `$cfg.Run.Exit = $true` ensures non-zero exit on failures. PASS.
+  - **estimate-keys**: checkout (ubuntu-latest) → grep `-EstimateKey` from 5 phase scripts → grep keys from `CFG_ImprovementEstimates` block → cross-reference → fail on missing. Runs on Linux (no PS needed — pure bash). PASS.
+  - **security.yml**: 3 jobs (secret-scan, script-safety, workflow-integrity). All bash on ubuntu-latest. Shell scripts syntactically valid (YAML validates). LINENO_HIT variable doesn't conflict with LINENO builtin. PASS.
+- [x] Doc accuracy spot-check (Item 4)
+  - **evidence.md Step 16 InterruptModeration**: table says "NIC Tweaks | 0–3 | 0". Config has `P1LowMin=0; P1LowMax=3; AvgMin=0; AvgMax=0`. MATCH.
+  - **power-plan.md PROCTHROTTLEMIN AMD=0**: doc says "0% (AMD only)". Code line 215: `$minState = if ($isAMD) { 0 } else { 100 }`. MATCH.
+  - **nvidia-drs-settings.md ShaderCache 10240**: doc says "10240 MB (10 GB)". Code: `@{ Id=11306135; Value=10240; Name="Shader disk cache max: 10240 MB (10 GB)" }`. MATCH.
+  - **README "18 helper modules"**: README file tree lists 18 files in helpers/. Glob confirms 18 .ps1 files. helpers.ps1 loads 15, GUI loads 3 separately. MATCH.
+  - **backup-restore.md 6 backup types**: Doc lists registry, service, bootconfig, powerplan, drs, scheduledtask. Code has all 6 `type = "..."` assignments. MATCH.
+  - FIXED: helpers.ps1 GUI-only comment was missing gui-panels.ps1 (listed 2 of 3 GUI modules). Added.
 
 ## Phase F: Final
 

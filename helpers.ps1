@@ -21,5 +21,6 @@ $helpersRoot = if ($PSScriptRoot) { "$PSScriptRoot\helpers" } elseif ($ScriptRoo
 . "$helpersRoot\power-plan.ps1"
 . "$helpersRoot\process-priority.ps1"
 # ── GUI-only modules (loaded separately by CS2-Optimize-GUI.ps1) ──────────
+# gui-panels.ps1      — WPF panel builders and event handlers
 # step-catalog.ps1    — Step metadata table for Optimize panel display
 # system-analysis.ps1 — Non-destructive health checks for Analyze panel
