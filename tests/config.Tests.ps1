@@ -64,7 +64,7 @@ Describe "EstimateKey cross-reference" {
     It "P1LowMin <= P1LowMax for all estimates" {
         foreach ($key in $CFG_ImprovementEstimates.Keys) {
             $est = $CFG_ImprovementEstimates[$key]
-            $est.P1LowMin | Should -BeLessOrEqual $est.P1LowMax -Because "$key: P1LowMin ($($est.P1LowMin)) should be <= P1LowMax ($($est.P1LowMax))"
+            $est.P1LowMin | Should -BeLessOrEqual $est.P1LowMax -Because "${key}: P1LowMin ($($est.P1LowMin)) should be <= P1LowMax ($($est.P1LowMax))"
         }
     }
 
@@ -188,7 +188,7 @@ Describe "NVIDIA Profile Estimates configuration" {
     It "P1LowMin <= P1LowMax for all NVIDIA estimates" {
         foreach ($key in $CFG_NvidiaProfileEstimates.Keys) {
             $est = $CFG_NvidiaProfileEstimates[$key]
-            $est.P1LowMin | Should -BeLessOrEqual $est.P1LowMax -Because "$key: P1LowMin should be <= P1LowMax"
+            $est.P1LowMin | Should -BeLessOrEqual $est.P1LowMax -Because "${key}: P1LowMin should be <= P1LowMax"
         }
     }
 }
