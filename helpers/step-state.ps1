@@ -57,11 +57,12 @@ function Skip-Step([int]$phase, [int]$stepNum, [string]$stepName) {
 function Test-StepDone([int]$phase, [int]$stepNum) {
     $prog = Load-Progress
     if (-not $prog) { return $false }
-    # A step is "done" for resume purposes if it was either completed or skipped
-    # Support both composite key "P{phase}:{step}" (new) and bare step number (legacy)
+    # A step is "done" for resume purposes if it was either completed or skipped.
+    # Uses composite key "P{phase}:{step}" only — bare step numbers are NOT checked
+    # because they would collide across phases (e.g., Phase 1 step 5 vs Phase 3 step 5).
+    # Legacy progress files with bare numbers are treated as empty (user re-runs from step 1).
     $stepKey = "P${phase}:${stepNum}"
-    return ($stepKey -in $prog.completedSteps -or $stepNum -in $prog.completedSteps -or
-            $stepKey -in $prog.skippedSteps   -or $stepNum -in $prog.skippedSteps)
+    return ($stepKey -in $prog.completedSteps -or $stepKey -in $prog.skippedSteps)
 }
 
 function Show-ResumePrompt($phase, $totalSteps) {
