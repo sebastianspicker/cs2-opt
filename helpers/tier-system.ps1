@@ -227,7 +227,7 @@ function Invoke-TieredStep {
         if ($Improvement) { Write-Host "  [DRY-RUN] Expected: $Improvement" -ForegroundColor Magenta }
         Write-Debug "DRY-RUN: '$Title' — preview only, no changes applied"
         # Run the action but Set-RegistryValue/Set-BootConfig intercept writes
-        & $Action
+        try { & $Action } catch { Write-Warn "Step '$Title' failed (DRY-RUN): $_" }
         $SCRIPT:CurrentStepTitle = $null
         return $true
     }

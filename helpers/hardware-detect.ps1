@@ -11,12 +11,29 @@ function Get-RamInfo {
         $totalGB = [math]::Round(($sticks | Measure-Object Capacity -Sum).Sum / 1GB, 0)
         $speedMhz = ($sticks | Select-Object -First 1).Speed
         $configMhz = ($sticks | Select-Object -First 1).ConfiguredClockSpeed
+        # DDR5 note: Win32_PhysicalMemory.Speed reports the module's rated MT/s (e.g., 5600)
+        # and ConfiguredClockSpeed reports the actual clock speed in MHz (e.g., 2800 for DDR5-5600).
+        # DDR5 is double-data-rate, so ConfiguredClockSpeed = Speed / 2 when XMP is active.
+        # Detect DDR type from SMBIOSMemoryType: 34 = DDR5, 26 = DDR4, 24 = DDR3.
+        $memType = ($sticks | Select-Object -First 1).SMBIOSMemoryType
+        $isDDR5 = ($memType -eq 34)
+        # For DDR5: ConfiguredClockSpeed is the actual clock (half of transfer rate).
+        # XMP is active if ConfiguredClockSpeed >= 90% of (Speed / 2).
+        # For DDR4/DDR3: ConfiguredClockSpeed and Speed are both in MHz, use direct comparison.
+        $xmpActive = if ($configMhz -gt 0 -and $speedMhz -gt 0) {
+            if ($isDDR5) {
+                $configMhz -ge ([math]::Floor($speedMhz / 2) * 0.9)
+            } else {
+                $configMhz -ge ($speedMhz * 0.9)
+            }
+        } else { $false }
         return @{
             TotalGB    = $totalGB
-            SpeedMhz   = $speedMhz        # Rated module frequency
-            ActiveMhz  = $configMhz       # Actually active frequency
+            SpeedMhz   = $speedMhz        # Rated module frequency (MT/s for DDR5)
+            ActiveMhz  = $configMhz       # Actually active frequency (clock MHz)
             Sticks     = $sticks.Count
-            XmpActive  = ($configMhz -gt 0 -and $speedMhz -gt 0 -and $configMhz -ge ($speedMhz * 0.9))  # active if >= 90% of rated; may false-positive on DDR5 JEDEC sticks
+            IsDDR5     = $isDDR5
+            XmpActive  = $xmpActive
         }
     } catch {
         Write-Debug "RAM info error: $_"
@@ -35,11 +52,19 @@ function Test-XmpActive {
 function Get-NvidiaDriverVersion {
     try {
         $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
-        if (-not $gpu) { return $null }
+        if (-not $gpu -or -not $gpu.DriverVersion) { return $null }
         # DriverVersion "31.0.15.5762" → NVIDIA 557.62
         # Decode: concatenate last two segments, drop leading char, split major/minor
         $parts = $gpu.DriverVersion.Split('.')
+        if ($parts.Count -lt 2) {
+            Write-Debug "NVIDIA DriverVersion has unexpected format: $($gpu.DriverVersion)"
+            return $null
+        }
         $combined = "$($parts[-2])$($parts[-1])"
+        if ($combined.Length -lt 2) {
+            Write-Debug "NVIDIA DriverVersion combined segment too short: $combined"
+            return $null
+        }
         $nvStr = $combined.Substring(1)  # Remove Windows prefix digit
         if ($nvStr.Length -ge 3) {
             $major = [int]$nvStr.Substring(0, $nvStr.Length - 2)
@@ -98,8 +123,10 @@ function Get-CS2InstallPath {
 
     $vdf = "$steamPath\steamapps\libraryfolders.vdf"
     if (Test-Path $vdf) {
-        $content = Get-Content $vdf -Raw
-        $paths = [regex]::Matches($content, '"path"\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value -replace '/', '\' }
+        # Read as UTF-8 explicitly — PS 5.1 defaults to ANSI codepage, which
+        # mangles Unicode library paths (e.g., non-ASCII usernames or drive labels).
+        $content = Get-Content $vdf -Raw -Encoding UTF8
+        $paths = [regex]::Matches($content, '"path"\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value -replace '\\\\', '\' -replace '/', '\' }
         foreach ($lp in $paths) {
             $cs2Path = "$lp\steamapps\common\Counter-Strike Global Offensive"
             if (Test-Path "$cs2Path\game\bin\win64\cs2.exe") { return $cs2Path }

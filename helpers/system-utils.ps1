@@ -52,6 +52,12 @@ function Save-JsonAtomic {
         [Parameter(Mandatory)][string]$Path,
         [int]$Depth = 10
     )
+    # Ensure parent directory exists — callers usually call Ensure-Dir early,
+    # but defensive creation here prevents silent failures from edge-case paths.
+    $parentDir = Split-Path $Path -Parent
+    if ($parentDir -and -not (Test-Path $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force -ErrorAction Stop | Out-Null
+    }
     $tmp = "$Path.tmp"
     try {
         $Data | ConvertTo-Json -Depth $Depth | Set-Content $tmp -Encoding UTF8 -ErrorAction Stop
