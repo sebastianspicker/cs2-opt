@@ -398,7 +398,7 @@ if ($startStep -le 17) {
                 $result = Invoke-BenchmarkCapture -Label "Baseline (before optimizations)"
                 if ($result) {
                     try {
-                        $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+                        $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
                         $st | Add-Member -NotePropertyName "baselineAvg" -NotePropertyValue $result.Avg -Force
                         $st | Add-Member -NotePropertyName "baselineP1" -NotePropertyValue $result.P1 -Force
                         Save-JsonAtomic -Data $st -Path $CFG_StateFile
@@ -458,11 +458,11 @@ if ($startStep -le 19) {
                         $driverDest = "$CFG_WorkDir\nvidia_driver.exe"
                         if (Invoke-Download $driverInfo.Url $driverDest "NVIDIA Driver $($driverInfo.Version)") {
                             try {
-                                $st = Get-Content $CFG_StateFile | ConvertFrom-Json
+                                $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
                                 $st | Add-Member -NotePropertyName "nvidiaDriverPath" -NotePropertyValue $driverDest -Force
                                 $st | Add-Member -NotePropertyName "nvidiaDriverVersion" -NotePropertyValue $driverInfo.Version -Force
                                 Save-JsonAtomic -Data $st -Path $CFG_StateFile
-                            } catch { Write-Debug "Could not persist driver info: $_" }
+                            } catch { Write-Warn "Could not persist driver path to state: $_" }
                             Write-OK "Driver ready: $driverDest"
                         }
                     } else {

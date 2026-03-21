@@ -31,6 +31,12 @@ function Invoke-GamingDebloat {
         "Microsoft.WindowsCommunicationsApps"  # Mail & Calendar
     )
 
+    # Pre-fetch provisioned packages once (avoid querying per-package in the loop)
+    $provisionedPkgs = $null
+    if (-not $SCRIPT:DryRun) {
+        $provisionedPkgs = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+    }
+
     $removedCount = 0
     foreach ($pkg in $bloatPackages) {
         $apps = Get-AppxPackage -Name $pkg -AllUsers -ErrorAction SilentlyContinue
@@ -38,9 +44,11 @@ function Invoke-GamingDebloat {
             if (-not $SCRIPT:DryRun) {
                 $apps | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
                 # Also remove provisioned package to prevent reinstall on Windows feature updates
-                Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-                    Where-Object { $_.DisplayName -eq $pkg } |
-                    Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Out-Null
+                if ($provisionedPkgs) {
+                    $provisionedPkgs |
+                        Where-Object { $_.DisplayName -eq $pkg } |
+                        Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Out-Null
+                }
                 Write-OK "Removed: $pkg"
             } else {
                 Write-Host "  [DRY-RUN] Would remove AppX: $pkg" -ForegroundColor Magenta
@@ -111,24 +119,6 @@ function Invoke-GamingDebloat {
     Set-RegistryValue $adPath "Enabled" 0 "DWord" "Disable advertising ID"
     if (-not $SCRIPT:DryRun) { Write-OK "Advertising ID disabled." }
 
-    # ── Clean Autostart Entries ──────────────────────────────────────────────
-    if ($CFG_Autostart_Remove -and $CFG_Autostart_Remove.Count -gt 0) {
-        Write-Step "Cleaning autostart entries..."
-        $asRemoved = 0
-        foreach ($app in $CFG_Autostart_Remove) {
-            foreach ($rp in @("HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
-                              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run")) {
-                if (Get-ItemProperty $rp -Name $app -ErrorAction SilentlyContinue) {
-                    if (-not $SCRIPT:DryRun) {
-                        Backup-RegistryValue -Path $rp -Name $app -StepTitle $SCRIPT:CurrentStepTitle
-                        Remove-ItemProperty $rp -Name $app -ErrorAction SilentlyContinue
-                    } else {
-                        Write-Host "  [DRY-RUN] Would remove autostart: $app from $rp" -ForegroundColor Magenta
-                    }
-                    $asRemoved++
-                }
-            }
-        }
-        if ($asRemoved -eq 0) { Write-Info "No autostart entries found to remove." }
-    }
+    # NOTE: Autostart cleanup is handled separately by Step 14 (Optimize-Hardware.ps1).
+    # Keeping it out of debloat ensures the user's choice to skip Step 14 is honored.
 }
