@@ -49,6 +49,13 @@ $CFG_Autostart_Remove = @(
 # wireless controllers — re-enable if using Xbox wireless peripherals.
 $CFG_XboxServices = @("XblAuthManager", "XblGameSave", "XboxNetApiSvc", "XboxGipSvc")
 
+# ── Virtual/VPN Adapter Filter ─────────────────────────────────────────────────
+# Regex for -notmatch on InterfaceDescription. Filters virtual switches, VPN
+# tunnels, and Bluetooth PAN from DNS and NIC operations. Each VPN product is
+# listed explicitly — no bare "VPN" pattern (could false-match e.g. "Killer VPN-capable").
+# Add your VPN adapter name here if it's not already listed.
+$CFG_VirtualAdapterFilter = "Loopback|Virtual|Hyper-V|Bluetooth|TAP-Windows|WireGuard|Tailscale|OpenVPN|Cisco AnyConnect|Juniper|Fortinet|vEthernet|Docker|Mullvad|NordLynx|ProtonVPN|SoftEther|GlobalProtect|Pulse Secure"
+
 # ── NIC Tweaks ─────────────────────────────────────────────────────────────────
 # InterruptModeration: "Medium" not "Disabled".
 #   djdallmann empirical test (Intel Gigabit CT): Medium produced the lowest DPC latency

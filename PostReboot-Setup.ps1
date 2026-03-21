@@ -392,12 +392,9 @@ if ($startStep -le 9) {
                 try {
                     # Set DNS on active physical adapters (wired + WiFi) — DNS is protocol-layer,
                     # unlike NIC hardware tweaks which are wired-only.
-                    # Filter out: virtual switches (Hyper-V/WSL2 vEthernet), VPN tunnels, Docker,
-                    # Bluetooth PAN, loopback. Each VPN product is listed explicitly — no bare "VPN"
-                    # pattern that could false-match legitimate NICs (e.g., "Killer VPN-capable").
                     $nics = @(Get-NetAdapter | Where-Object {
                         $_.Status -eq "Up" -and
-                        $_.InterfaceDescription -notmatch "Loopback|Virtual|Hyper-V|Bluetooth|TAP-Windows|WireGuard|Tailscale|OpenVPN|Cisco AnyConnect|Juniper|Fortinet|vEthernet|Docker|Mullvad|NordLynx|ProtonVPN|SoftEther|GlobalProtect|Pulse Secure"
+                        $_.InterfaceDescription -notmatch $CFG_VirtualAdapterFilter
                     })
                     if ($nics.Count -gt 0) {
                         # Show numbered list so user can identify each adapter
