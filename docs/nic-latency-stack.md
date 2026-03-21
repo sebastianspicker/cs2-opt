@@ -215,7 +215,7 @@ Many common "network optimization" steps that appear in guides are omitted becau
 | Disable RSC (Receive Segment Coalescing) | Coalesces TCP *segments* — not UDP datagrams |
 | Disable LSO (Large Send Offload) | NIC-based TCP segmentation — irrelevant for 80-byte UDP |
 | Disable TCP/UDP Checksum Offload | UDP checksum for 80-byte datagrams takes nanoseconds in hardware; software is slower |
-| `*TransmitBuffers = 256` | Reducing the ring buffer below 512 risks overflows during background traffic bursts |
+| `*TransmitBuffers = 256` | Suite sets 512 (safe default); reducing below 512 risks overflows during background traffic bursts |
 | Disable ARPOffload / NSOffload | Active only during system sleep — zero effect during gameplay |
 | Disable WakeOnMagicPacket | Active only when system is powered off |
 
