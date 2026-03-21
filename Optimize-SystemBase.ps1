@@ -116,6 +116,13 @@ if ($startStep -le 3) {
         -SideEffects "First CS2 launch takes 30-60s longer (shader recompile)" `
         -Undo "Shaders rebuild automatically on next launch" `
         -Action {
+            # Warn if Steam or CS2 is running — locked files will silently fail to delete
+            $steamRunning = Get-Process -Name "steam","cs2" -ErrorAction SilentlyContinue
+            if ($steamRunning) {
+                $procs = ($steamRunning | Select-Object -ExpandProperty Name -Unique) -join ", "
+                Write-Warn "Running processes detected: $procs — some shader cache files may be locked."
+                Write-Info "For a complete cache clear, close Steam and CS2 first."
+            }
             $steamBase = Get-SteamPath
             $paths = [System.Collections.Generic.List[string]]$CFG_ShaderCache_Paths
             if ($steamBase) { $paths.Add("$steamBase\steamapps\shadercache\730") }
@@ -127,7 +134,12 @@ if ($startStep -le 3) {
                     if (-not $SCRIPT:DryRun) {
                         Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue |
                             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                        Write-OK "Cleared: $p"
+                        $remaining = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue).Count
+                        if ($remaining -gt 0) {
+                            Write-Warn "Partially cleared: $p ($remaining files locked — close Steam/CS2 to clear fully)"
+                        } else {
+                            Write-OK "Cleared: $p"
+                        }
                     } else {
                         Write-Host "  [DRY-RUN] Would clear: $p ($n files)" -ForegroundColor Magenta
                     }
@@ -141,7 +153,12 @@ if ($startStep -le 3) {
                     if (-not $SCRIPT:DryRun) {
                         Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue |
                             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                        Write-OK "Cleared: $c"
+                        $remaining = (Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue).Count
+                        if ($remaining -gt 0) {
+                            Write-Warn "Partially cleared: $c ($remaining files locked)"
+                        } else {
+                            Write-OK "Cleared: $c"
+                        }
                     } else {
                         Write-Host "  [DRY-RUN] Would clear: $c ($n files)" -ForegroundColor Magenta
                     }
