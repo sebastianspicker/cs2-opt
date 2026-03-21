@@ -63,3 +63,105 @@ jobs:
           }
           if ($errors -gt 0) { throw "$errors parse error(s) found" }
           Write-Host "Syntax check: all files parse cleanly" -ForegroundColor Green
+
+  pester:
+    name: Pester tests
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Pester 5.x
+        shell: pwsh
+        run: |
+          Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = "./tests"
+          $cfg.Output.Verbosity = "Detailed"
+          $cfg.TestResult.Enabled = $true
+          $cfg.TestResult.OutputFormat = "NUnitXml"
+          $cfg.TestResult.OutputPath = "./test-results.xml"
+          Invoke-Pester -Configuration $cfg
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pester-test-results
+          path: ./test-results.xml
+          retention-days: 14
+
+  estimate-keys:
+    name: EstimateKey cross-reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify EstimateKey references match config
+        shell: bash
+        run: |
+          echo "=== Checking EstimateKey cross-references ==="
+
+          # Extract all -EstimateKey "..." values from phase scripts
+          PHASE_SCRIPTS=(
+            Optimize-SystemBase.ps1
+            Optimize-RegistryTweaks.ps1
+            Optimize-Hardware.ps1
+            Optimize-GameConfig.ps1
+            PostReboot-Setup.ps1
+          )
+
+          USED_KEYS=()
+          for script in "${PHASE_SCRIPTS[@]}"; do
+            if [ -f "$script" ]; then
+              while IFS= read -r key; do
+                USED_KEYS+=("$key")
+              done < <(grep -oP '(?<=-EstimateKey\s")[^"]+' "$script")
+            fi
+          done
+
+          if [ ${#USED_KEYS[@]} -eq 0 ]; then
+            echo "::error::No EstimateKey values found in phase scripts — parsing may be broken"
+            exit 1
+          fi
+
+          echo "Found ${#USED_KEYS[@]} EstimateKey references in phase scripts"
+
+          # Extract all keys from $CFG_ImprovementEstimates in config.env.ps1
+          CONFIG_KEYS=()
+          while IFS= read -r key; do
+            CONFIG_KEYS+=("$key")
+          done < <(grep -oP '^\s+"([^"]+)"\s*=' config.env.ps1 | sed 's/^\s*"//;s/"\s*=$//' | grep -v '^#')
+
+          echo "Found ${#CONFIG_KEYS[@]} keys in CFG_ImprovementEstimates"
+
+          # Check each used key exists in config
+          MISSING=0
+          for key in "${USED_KEYS[@]}"; do
+            FOUND=0
+            for cfg_key in "${CONFIG_KEYS[@]}"; do
+              if [ "$key" = "$cfg_key" ]; then
+                FOUND=1
+                break
+              fi
+            done
+            if [ "$FOUND" -eq 0 ]; then
+              echo "::error::EstimateKey \"$key\" used in phase scripts but not found in \$CFG_ImprovementEstimates"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+
+          if [ "$MISSING" -gt 0 ]; then
+            echo "::error::$MISSING EstimateKey(s) missing from config.env.ps1"
+            exit 1
+          fi
+          echo "EstimateKey cross-reference: all ${#USED_KEYS[@]} keys verified"
