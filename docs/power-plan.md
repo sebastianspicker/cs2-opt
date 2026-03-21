@@ -93,17 +93,17 @@ These settings are either objectively better for any gaming system with no meani
 |---------|-------|----------------|
 | CPU max perf state | 100% | Never let the governor voluntarily cap below max clock |
 | Core parking max | 100% | All cores active at all times; eliminates park/unpark latency |
-| Core parking min | 100% (T2 does this more completely) | Belt-and-suspenders |
 | USB selective suspend | Disabled | Eliminates USB host controller wakeup latency (~2ms per event) |
 | Disk idle timeout | 0 (never) | No spindown latency; especially important on SATA SSD |
 | AHCI HIPM off (partial) | Host-initiated power management off | First layer of SATA power management disabled |
-| Standby/hibernate | 0 (never) | No accidental sleep during long warmup sessions |
+| Standby timeout | 0 (never) | No accidental sleep during long warmup sessions |
+| Hibernate timeout | 0 (never) | No accidental hibernation during long sessions |
 | System cooling policy | 1 (active) | Bug fix — passive cooling is wrong for gaming desktops |
 | PCIe ASPM | Off | Windows software ASPM can pull GPU/NIC/NVMe into lower link states between frames |
 
 **PCIe ASPM** deserves explanation: even with BIOS ASPM disabled, Windows maintains an independent software ASPM layer. Between frames (when the GPU briefly idles while waiting for the CPU to submit the next frame's draw calls), Windows can transition the PCIe link to L1 or L1.1. The link has a fixed re-entry latency (50–200µs). Setting PCIe ASPM to Off in the power plan prevents these software-initiated link state transitions, ensuring the PCIe bus is always at full speed when needed.
 
-### T2 — RECOMMENDED+ (16–17 settings)
+### T2 — RECOMMENDED+ (15–16 settings)
 
 Settings with hardware dependencies or mild thermal tradeoffs:
 
@@ -170,7 +170,7 @@ Should show "CS2 Optimized (FPSHeaven 2026)" with the plan's GUID.
 $guid = (powercfg /getactivescheme | Select-String -Pattern '(\{[0-9a-f-]+\})' | ForEach-Object { $_.Matches[0].Value })
 powercfg /query $guid SUB_PROCESSOR PROCTHROTTLEMAX   # Should be 100
 powercfg /query $guid SUB_PROCESSOR PROCTHROTTLEMIN   # Should be 0 (AMD) or 100 (Intel)
-powercfg /query $guid SUB_PROCESSOR IDLEDISABLE        # Should be 1 (T2 or T3 only)
+powercfg /query $guid SUB_PROCESSOR IDLEDISABLE        # Should be 1 (T3 only — COMPETITIVE+)
 ```
 
 ### Verify with HWiNFO64
