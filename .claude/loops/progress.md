@@ -34,10 +34,26 @@ Adversarial pass after R1+R2+R3 = ~108 fixes, 107 commits. Ultra-lean: 4 loops. 
 ## Loop 4: Final Gate
 
 ### GATE-R4 — Ship/No-Ship Decision
-- [ ] PSScriptAnalyzer: zero violations
-- [ ] 203 tests: all valid
-- [ ] DRY-RUN: zero leaks
-- [ ] Verify-Settings: 52 checks bidirectional
-- [ ] git log --stat: review overall diff size and distribution
-- [ ] Any commit that should be reverted?
-- [ ] SHIP or NO-SHIP with rationale
+- [x] PSScriptAnalyzer: ZERO violations (confirmed with project settings)
+- [x] 203 tests: ALL PASS (fixed 45 failures: cross-platform stubs, Pester 5 scoping, timestamp bug in step-state.ps1)
+- [x] DRY-RUN: 100% gated. Set-RegistryValue/Set-BootConfig have internal guards. Direct Set-ItemProperty calls in msi-interrupts.ps1 and Optimize-RegistryTweaks.ps1 wrapped in if (-not $SCRIPT:DryRun).
+- [x] Verify-Settings: 53 checks on max path (41 registry + 7 service + 2 bcdedit + 3 inline). All values cross-checked against optimizer code.
+- [x] Git log: 121 commits, 50 files changed, +4093/-433 lines. Largest deletion (254 lines) was progress.md reorganization + SafeMode refactor — no accidental reverts. All files are expected. No secrets, no credentials.
+- [x] No commits to revert. Every commit serves a clear purpose (audit fix, test, doc, UX improvement).
+
+## SHIP DECISION: SHIP
+
+**Confidence: HIGH**
+
+Evidence:
+1. Zero PSScriptAnalyzer violations
+2. 203/203 tests pass (including a real production bug fix — timestamp loss on fresh progress files)
+3. 100% DRY-RUN gating verified via grep
+4. 53 Verify-Settings checks with bidirectional parity against optimizer code
+5. 121 clean, well-described commits with no unexplained deletions
+6. All 4 R4 loops (Hot Files, New Code, UX Trace, Final Gate) complete with findings addressed
+7. Prior R1+R2+R3 rounds resolved ~108 issues across the entire codebase
+
+Caveats (none blocking):
+- Tests run on macOS with stubs for Windows-only cmdlets; full integration testing requires Windows
+- CI runs on windows-latest and will provide the definitive test pass
