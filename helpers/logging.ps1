@@ -75,12 +75,6 @@ function Write-TierBadge($tier, $label) {
     Write-Log "T$tier" "$label"
 }
 
-function Write-RiskBadge($risk) {
-    $color = switch ($risk) { "SAFE" {"Green"} "MODERATE" {"Yellow"} "AGGRESSIVE" {"DarkYellow"} "CRITICAL" {"Red"} default {"White"} }
-    $icon  = switch ($risk) { "SAFE" {"$([char]0x2714)"} "MODERATE" {"$([char]0x25B2)"} "AGGRESSIVE" {"$([char]0x25C6)"} "CRITICAL" {"$([char]0x2718)"} default {"?"} }
-    Write-Host "  $icon $risk" -ForegroundColor $color -NoNewline
-}
-
 function Write-Section($title) {
     $pad = "═" * ($title.Length + 4)
     Write-Host "`n  ╔$pad╗" -ForegroundColor DarkCyan
@@ -97,19 +91,6 @@ function Write-Section($title) {
         Write-Host "  $bar  $stepNum / $($SCRIPT:PhaseTotal)  ($pct%)" -ForegroundColor DarkGray
     }
     Write-Log "SECTION" "=== $title ==="
-}
-
-function Write-ToolInfo($name, $author, $purpose, $source, $trust) {
-    Write-Blank
-    Write-Host "  ┌─────────────────────────────────────────────────────" -ForegroundColor DarkGray
-    Write-Host "  │  Tool:     $name" -ForegroundColor White
-    Write-Host "  │  Author:   $author" -ForegroundColor DarkGray
-    Write-Host "  │  Purpose:  $purpose" -ForegroundColor DarkGray
-    Write-Host "  │  Source:   $source" -ForegroundColor DarkGray
-    Write-Host "  │  Trust:    $trust" -ForegroundColor DarkGray
-    Write-Host "  └─────────────────────────────────────────────────────" -ForegroundColor DarkGray
-    Write-Log "DEBUG" "Tool: $name | $source"
-    Write-Blank
 }
 
 function Write-LogoBanner($subtitle) {
