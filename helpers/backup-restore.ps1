@@ -453,6 +453,18 @@ function Restore-StepChanges {
         try {
             switch ($e.type) {
                 "registry" {
+                    # SECURITY: Validate registry path from backup.json — a tampered backup could
+                    # inject writes to arbitrary registry locations (e.g., Run keys for persistence).
+                    if ($e.path -notmatch '^(HKLM:|HKCU:|HKCR:|HKU:|HKCC:|Microsoft\.PowerShell\.Core\\Registry::HK)') {
+                        Write-Warn "Registry restore: invalid path — rejected: $($e.path)"
+                        $restoreFail++
+                        continue
+                    }
+                    if ($e.name -match '[\\/\x00]') {
+                        Write-Warn "Registry restore: name contains invalid characters — rejected: $($e.name)"
+                        $restoreFail++
+                        continue
+                    }
                     if ($e.existed) {
                         $restoreType = if ($e.originalType) { $e.originalType } else { "DWord" }
                         $restoreValue = $e.originalValue
@@ -520,7 +532,19 @@ function Restore-StepChanges {
                     }
                 }
                 "bootconfig" {
+                    # SECURITY: Validate bcdedit key/value from backup.json — a tampered backup
+                    # could inject arbitrary bcdedit arguments for code execution or boot corruption.
+                    if ($e.key -notmatch '^[a-zA-Z][a-zA-Z0-9_]*$') {
+                        Write-Warn "bcdedit restore: invalid key format '$($e.key)' — skipping (security)"
+                        $restoreFail++
+                        continue
+                    }
                     if ($e.existed) {
+                        if ($e.originalValue -notmatch '^[a-zA-Z0-9_.{}\-]+$') {
+                            Write-Warn "bcdedit restore: invalid value format '$($e.originalValue)' — skipping (security)"
+                            $restoreFail++
+                            continue
+                        }
                         $bcdOut = bcdedit /set $e.key $e.originalValue 2>&1
                         if ($LASTEXITCODE -ne 0) { Write-Warn "bcdedit restore failed for $($e.key): $bcdOut" }
                         else { Write-OK "Restored: bcdedit $($e.key) = $($e.originalValue)"; $restoreOk++ }
@@ -531,6 +555,13 @@ function Restore-StepChanges {
                     }
                 }
                 "powerplan" {
+                    # SECURITY: Validate GUID before passing to powercfg — backup.json is in
+                    # C:\CS2_OPTIMIZE\ and could be tampered to inject arbitrary powercfg args.
+                    if ($e.originalGuid -notmatch '^[a-fA-F0-9\-]{36}$') {
+                        Write-Warn "Power plan restore: invalid GUID format '$($e.originalGuid)' — skipping (security)"
+                        $restoreFail++
+                        continue
+                    }
                     # Restore original power plan and delete the imported one
                     powercfg /setactive $e.originalGuid 2>&1 | Out-Null
                     Write-OK "Restored power plan: $($e.originalName) ($($e.originalGuid))"

@@ -85,9 +85,22 @@ function Get-LatestNvidiaDriver {
         }
 
         if ($downloadUrl) {
-            # Ensure full URL
+            # Ensure full URL — SECURITY: force HTTPS to prevent MITM during driver download.
+            # NVIDIA serves all driver downloads over HTTPS; if API response contains http://,
+            # upgrade it. Reject non-NVIDIA domains to prevent redirection attacks.
             if ($downloadUrl -notmatch "^https?://") {
                 $downloadUrl = "https://www.nvidia.com$downloadUrl"
+            }
+            # Upgrade http:// to https://
+            if ($downloadUrl -match "^http://") {
+                $downloadUrl = $downloadUrl -replace "^http://", "https://"
+                Write-Debug "Upgraded driver URL to HTTPS"
+            }
+            # Validate the download domain is NVIDIA
+            if ($downloadUrl -notmatch '^https://([\w.-]+\.)?nvidia\.com/') {
+                Write-Warn "Driver download URL is not from nvidia.com: $downloadUrl"
+                Write-Warn "Falling back to manual download for safety."
+                return @{ ManualDownload = $true; Url = "https://www.nvidia.com/en-us/drivers/"; GpuName = $gpuName }
             }
             if (-not $version) { Write-Warn "Could not parse driver version from API response." }
             Write-OK "Found driver: Version $(if ($version) { $version } else { '(unknown)' })"
@@ -137,6 +150,37 @@ function Install-NvidiaDriverClean {
     if (-not (Test-Path $DriverExe)) {
         Write-Err "Driver file not found: $DriverExe"
         return $false
+    }
+
+    # SECURITY: Validate driver path — this file is passed to Start-Process.
+    # state.json nvidiaDriverPath or user input could point to malware.
+    # Verify: must be a real .exe file (not directory/symlink to non-file), no path traversal.
+    $driverItem = Get-Item $DriverExe -ErrorAction SilentlyContinue
+    if (-not $driverItem -or $driverItem.PSIsContainer) {
+        Write-Err "Driver path is not a file: $DriverExe"
+        return $false
+    }
+    if ($DriverExe -match '\.\.') {
+        Write-Err "Driver path contains path traversal: $DriverExe"
+        return $false
+    }
+    # Verify file has Authenticode signature (NVIDIA drivers are always signed)
+    $sig = Get-AuthenticodeSignature $DriverExe -ErrorAction SilentlyContinue
+    if ($sig -and $sig.Status -eq 'Valid') {
+        $sigSubject = $sig.SignerCertificate.Subject
+        if ($sigSubject -notmatch 'NVIDIA') {
+            Write-Warn "Driver .exe is signed but NOT by NVIDIA (signer: $sigSubject)"
+            Write-Warn "This may not be a genuine NVIDIA driver. Proceed with caution."
+            $sigConfirm = Read-Host "  Continue anyway? [y/N]"
+            if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
+        } else {
+            Write-Debug "Driver Authenticode signature valid: $sigSubject"
+        }
+    } else {
+        Write-Warn "Driver .exe has no valid Authenticode signature (status: $(if($sig){$sig.Status}else{'N/A'}))"
+        Write-Warn "NVIDIA drivers are always code-signed. This file may be tampered."
+        $sigConfirm = Read-Host "  Continue anyway? [y/N]"
+        if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
     }
 
     $tempDir = "$env:TEMP\NVDriver_Extract"

@@ -102,6 +102,22 @@ function Set-PowerPlanValue {
         [int]$Value,
         [string]$Label
     )
+    # SECURITY: Validate all GUIDs — these are passed as powercfg command-line arguments.
+    # A tampered backup.json or crafted GUID could inject arbitrary powercfg commands.
+    $guidPattern = '^[a-fA-F0-9\-]{36}$'
+    if ($PlanGuid -notmatch $guidPattern -and $PlanGuid -ne "DRY-RUN-GUID") {
+        Write-Warn "Set-PowerPlanValue: invalid PlanGuid '$PlanGuid' — rejected (security)"
+        return
+    }
+    if ($SubgroupGuid -notmatch $guidPattern) {
+        Write-Warn "Set-PowerPlanValue: invalid SubgroupGuid '$SubgroupGuid' — rejected (security)"
+        return
+    }
+    if ($SettingGuid -notmatch $guidPattern) {
+        Write-Warn "Set-PowerPlanValue: invalid SettingGuid '$SettingGuid' — rejected (security)"
+        return
+    }
+
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would set power plan: $Label = $Value" -ForegroundColor Magenta
         return

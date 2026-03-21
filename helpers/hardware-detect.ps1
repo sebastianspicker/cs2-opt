@@ -128,6 +128,17 @@ function Get-CS2InstallPath {
         $content = Get-Content $vdf -Raw -Encoding UTF8
         $paths = [regex]::Matches($content, '"path"\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value -replace '\\\\', '\' -replace '/', '\' }
         foreach ($lp in $paths) {
+            # SECURITY: VDF is a Valve text file in userspace — a tampered libraryfolders.vdf
+            # could contain paths with traversal sequences. Reject paths with .. components.
+            # The path is only used in Test-Path and Get-Content on autoexec.cfg / optimization.cfg.
+            # Symlink/junction attacks: if CS2 install path is a junction pointing to e.g. C:\Windows,
+            # Set-Content would write to that location. The cs2.exe existence check below mitigates
+            # this — a junction to C:\Windows would fail the cs2.exe check. Accepted residual risk:
+            # if an attacker creates a junction containing a fake cs2.exe, we'd write autoexec there.
+            if ($lp -match '\.\.') {
+                Write-Debug "VDF path rejected (path traversal): $lp"
+                continue
+            }
             $cs2Path = "$lp\steamapps\common\Counter-Strike Global Offensive"
             if (Test-Path "$cs2Path\game\bin\win64\cs2.exe") { return $cs2Path }
         }
@@ -160,9 +171,21 @@ function Get-ActiveNicAdapter {
 }
 
 function Get-ActiveNicGuid {
-    <#  Returns the GUID of the active (Up) wired network adapter for registry writes  #>
+    <#  Returns the GUID of the active (Up) wired network adapter for registry writes.
+        SECURITY: The GUID is used in registry paths (e.g., Tcpip\Parameters\Interfaces\{GUID}).
+        The value comes from Get-NetAdapter (system WMI), not user input. A malicious NIC driver
+        could theoretically report a GUID containing path injection characters, but Windows
+        enforces GUID format in the network stack. We validate the format as defense-in-depth.  #>
     $nic = Get-ActiveNicAdapter
-    if ($nic) { return $nic.InterfaceGuid }
+    if ($nic) {
+        $guid = $nic.InterfaceGuid
+        # Defense-in-depth: validate GUID format {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
+        if ($guid -and $guid -match '^\{[a-fA-F0-9\-]{36}\}$') {
+            return $guid
+        }
+        Write-Warn "NIC GUID failed format validation: $guid"
+        return $null
+    }
     return $null
 }
 

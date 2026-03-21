@@ -1,6 +1,19 @@
 # ==============================================================================
 #  config.env.ps1  —  Central Configuration · CS2 Optimization Suite
 # ==============================================================================
+#
+#  SECURITY: This file is dot-sourced by every entry point (Run-Optimize, PostReboot-Setup,
+#  SafeMode-DriverClean, Cleanup, FpsCap-Calculator, Verify-Settings, GUI). Dot-sourcing
+#  executes all code in the caller's scope — if this file is tampered, arbitrary code runs
+#  as Administrator. In Phase 2/3, this file is dot-sourced from C:\CS2_OPTIMIZE\config.env.ps1
+#  (copied by Step 38).
+#
+#  Mitigations:
+#    - C:\CS2_OPTIMIZE\ is created by an admin process, inheriting C:\ ACLs (Users: Read+Execute)
+#    - Source repo directory requires write access to modify (standard Git checkout)
+#    - No runtime integrity check is performed (accepted risk — if attacker has admin write
+#      access to C:\CS2_OPTIMIZE\, the system is already compromised at that privilege level)
+#
 
 $CFG_WorkDir        = "C:\CS2_OPTIMIZE"
 $CFG_LogDir         = "$CFG_WorkDir\Logs"

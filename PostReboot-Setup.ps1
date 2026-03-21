@@ -91,7 +91,17 @@ if ($startStep -le 1) {
 
     if ($gpuInput -in @("1","2")) {
         # Find driver .exe — check state first, then prompt
+        # SECURITY: state.json is in C:\CS2_OPTIMIZE\ — if tampered, nvidiaDriverPath could
+        # point to malware. Validate: must be an .exe file, must exist, must not contain
+        # path traversal sequences. The file is then passed to Start-Process in Install-NvidiaDriverClean.
         $driverExe = $state.nvidiaDriverPath
+        if ($driverExe) {
+            # Reject path traversal, non-.exe, and suspicious paths
+            if ($driverExe -match '\.\.' -or $driverExe -notmatch '\.exe$' -or $driverExe -match '[\x00]') {
+                Write-Warn "state.json nvidiaDriverPath failed validation — ignoring: $driverExe"
+                $driverExe = $null
+            }
+        }
         if (-not $driverExe -or -not (Test-Path $driverExe)) {
             Write-Info "NVIDIA driver .exe not found in expected location."
             Write-Info "If you downloaded the driver manually, provide the path now."

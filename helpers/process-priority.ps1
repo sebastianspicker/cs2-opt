@@ -171,6 +171,14 @@ function Install-CS2AffinityTask {
     # Backup task existence before creation
     Backup-ScheduledTask -TaskName $CS2_AffinityTaskName -StepTitle $SCRIPT:CurrentStepTitle -ScriptPath $CS2_AffinityScriptPath
 
+    # SECURITY: The affinity script is written to C:\CS2_OPTIMIZE\ and executed by a scheduled
+    # task with HighestAvailable privilege. If a non-admin user can modify this file, they achieve
+    # privilege escalation. C:\CS2_OPTIMIZE\ is created by an admin process, so default ACLs
+    # inherit from C:\ — Administrators: Full, SYSTEM: Full, Users: Read+Execute.
+    # Accepted risk: if a local admin has already compromised ACLs on C:\, the entire system is
+    # already compromised. The task runs as InteractiveToken (current user), NOT SYSTEM,
+    # limiting the blast radius to the logged-in user's privilege level.
+
     # Create the affinity setter script
     # Use [long] cast to prevent Int32 truncation on high-core-count CPUs (>32 logical processors)
     $scriptContent = @"

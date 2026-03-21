@@ -1,6 +1,8 @@
 # ==============================================================================
 #  helpers.ps1  —  Backward-compatible loader (dot-sources all helper modules)
 # ==============================================================================
+#  SECURITY: This file and all helpers/*.ps1 are dot-sourced — same trust boundary
+#  as config.env.ps1. See config.env.ps1 header for dot-sourcing security analysis.
 
 $helpersRoot = if ($PSScriptRoot) { "$PSScriptRoot\helpers" } elseif ($ScriptRoot) { "$ScriptRoot\helpers" } else { ".\helpers" }
 

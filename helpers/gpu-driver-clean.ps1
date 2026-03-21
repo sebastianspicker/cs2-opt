@@ -159,6 +159,15 @@ function Remove-GpuDriverClean {
     $removedDrivers = 0
     $failedDrivers = 0
     foreach ($inf in $driverPackages) {
+        # SECURITY: Validate inf filename format — must be oem<digits>.inf only.
+        # The $inf values come from CIM query or pnputil text parsing. If either source
+        # is compromised or the regex is tricked, an attacker could inject arbitrary
+        # pnputil arguments. Strict validation prevents command injection.
+        if ($inf -notmatch '^oem\d+\.inf$') {
+            Write-Warn "Skipping invalid driver package name: $inf (expected oem<N>.inf format)"
+            $failedDrivers++
+            continue
+        }
         Write-Step "Removing driver package: $inf"
         try {
             $result = pnputil /delete-driver $inf /uninstall /force 2>&1
