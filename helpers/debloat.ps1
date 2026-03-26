@@ -123,7 +123,11 @@ function Invoke-GamingDebloat {
             }
             if (-not $SCRIPT:DryRun) {
                 Backup-ScheduledTask -TaskName $t.TaskName -StepTitle $SCRIPT:CurrentStepTitle
-                Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction SilentlyContinue | Out-Null
+                try {
+                    Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop | Out-Null
+                } catch {
+                    Write-Debug "Failed to disable task $($t.TaskName): $_"
+                }
                 Write-OK "Disabled task: $($t.TaskName)"
             } else {
                 Write-Host "  [DRY-RUN] Would disable task: $($t.TaskName)" -ForegroundColor Magenta

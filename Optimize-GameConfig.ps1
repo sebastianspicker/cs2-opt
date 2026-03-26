@@ -469,7 +469,7 @@ if ($startStep -le 36) {
                     Backup-DefenderExclusions -ExclusionPaths $addedPaths `
                         -ExclusionProcesses $addedProcesses -StepTitle $SCRIPT:CurrentStepTitle
                 }
-                Write-OK "Defender: excluded cs2.exe + $($addedPaths.Count) game/cache paths from real-time scanning."
+                Write-ActionOK "Defender: excluded cs2.exe + $($addedPaths.Count) game/cache paths from real-time scanning."
             } catch {
                 Write-Warn "Windows Defender API not available — exclusions skipped. (This is normal on some debloated Windows builds.)"
             }
@@ -503,7 +503,8 @@ if ($startStep -le 37) {
         -Undo "Set-Service SysMain/WSearch/qWave/XblAuthManager/XblGameSave/XboxNetApiSvc/XboxGipSvc -StartupType Manual (or Automatic for SysMain/WSearch)" `
         -Action {
             if ($SCRIPT:DryRun) {
-                Write-Host "  [DRY-RUN] Would disable: SysMain, WSearch, qWave, XblAuthManager, XblGameSave, XboxNetApiSvc, XboxGipSvc" -ForegroundColor Magenta
+                $svcList = @("SysMain", "WSearch", "qWave") + $CFG_XboxServices
+                Write-Host "  [DRY-RUN] Would disable: $($svcList -join ', ')" -ForegroundColor Magenta
             } else {
                 # Backup service state before modification
                 Backup-ServiceState -ServiceName "SysMain"         -StepTitle "Disable SysMain + Search + QWAVE + Xbox"

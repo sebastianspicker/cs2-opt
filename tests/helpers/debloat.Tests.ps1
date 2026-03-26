@@ -107,6 +107,9 @@ Describe "Invoke-GamingDebloat" {
             Mock Get-AppxPackage { $null }
             Mock Get-AppxProvisionedPackage { $null }
             Mock Get-ScheduledTask { $null }
+            Mock Get-Service {
+                [PSCustomObject]@{ Name = $Name; StartType = "Automatic"; Status = "Running" }
+            }
             Mock Backup-ServiceState {}
             Mock Stop-Service {}
             Mock Set-Service {}
@@ -128,6 +131,9 @@ Describe "Invoke-GamingDebloat" {
             Mock Get-AppxPackage { $null }
             Mock Get-AppxProvisionedPackage { $null }
             Mock Get-ScheduledTask { $null }
+            Mock Get-Service {
+                [PSCustomObject]@{ Name = $Name; StartType = "Automatic"; Status = "Running" }
+            }
             Mock Backup-ServiceState {}
             Mock Stop-Service {}
             Mock Set-Service {}

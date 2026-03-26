@@ -103,9 +103,8 @@ Describe "Set-PowerPlanValue" {
         It "calls powercfg with correct arguments" {
             $SCRIPT:DryRun = $false
             $planGuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-            Mock powercfg { $global:LASTEXITCODE = 0 } -ParameterFilter {
-                $args -contains '/setacvalueindex'
-            }
+            Mock powercfg { $global:LASTEXITCODE = 0 }
+            Mock Write-Debug {}
             Set-PowerPlanValue $planGuid $PP_SUB_PROCESSOR $PP_PROCTHROTTLEMAX 100 "CPU max"
             Should -Invoke powercfg -Times 1
         }

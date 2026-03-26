@@ -161,7 +161,6 @@ Describe "Add-BenchmarkResult" {
         $entry.avgFps | Should -Be 300
         $entry.p1Fps | Should -Be 200
         $entry.label | Should -Be "baseline"
-        $entry.index | Should -Be 1
     }
 
     It "persists result to JSON file" {

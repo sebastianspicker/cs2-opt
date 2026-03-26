@@ -250,13 +250,19 @@ $CFG_ImprovementEstimates = @{
     "Game DVR / Game Bar Off"    = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=2;  Confidence="MEDIUM"; Note="Background recording can steal GPU time" }
     "Mouse Acceleration Off"     = @{ P1LowMin=0;  P1LowMax=0;  AvgMin=0; AvgMax=0;  Confidence="HIGH";   Note="Input consistency, not FPS" }
     "Disable Overlays"           = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=2;  Confidence="MEDIUM"; Note="Overlay rendering overhead" }
+    # The following entry is referenced by step-catalog.ps1 for GUI display
+    # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "FPS Cap"                    = @{ P1LowMin=5;  P1LowMax=20; AvgMin=-9;AvgMax=-9; Confidence="HIGH";   Note="Stabilizes frametimes. Avg drops by cap." }
     "Timer Resolution"           = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="More precise system timer" }
     "HAGS Toggle"                = @{ P1LowMin=-3; P1LowMax=5;  AvgMin=-2;AvgMax=3;  Confidence="LOW";    Note="Setup-dependent, benchmark both" }
     "NIC Tweaks"                 = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=0;  Confidence="LOW";    Note="Only if LatencyMon shows NIC DPC" }
     "MSI Interrupts"             = @{ P1LowMin=0;  P1LowMax=5;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Reduces DPC latency" }
+    # The following entry is referenced by step-catalog.ps1 for GUI display
+    # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "Clean Driver Install"       = @{ P1LowMin=2;  P1LowMax=10; AvgMin=0; AvgMax=5;  Confidence="HIGH";   Note="Bloat-free driver" }
     "Autoexec CVars"             = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="74 CVars: network, engine latency sleep, mouse raw input, audio spatial+HRTF, music mute, video, gameplay" }
+    # The following entry is referenced by step-catalog.ps1 for GUI display
+    # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "Defender Exclusions"        = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Eliminates scan-time intercept on CS2 shader cache I/O" }
     "SysMain Disable"            = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Only on HDD or low RAM" }
     "Debloat"                    = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Fewer background processes" }
@@ -266,11 +272,16 @@ $CFG_ImprovementEstimates = @{
     # "NetworkThrottlingIndex"   = @{ ... } — deliberately omitted; default value 10 is correct.
     "Win32PrioritySeparation"    = @{ P1LowMin=1;  P1LowMax=4;  AvgMin=0; AvgMax=1;  Confidence="HIGH";   Note="0x2A: fixed quantum, max foreground boost — 2025 Blur Busters + Overclock.net showed better 1% lows vs 0x26 variable" }
     "HiberbootEnabled=0"         = @{ P1LowMin=0;  P1LowMax=0;  AvgMin=0; AvgMax=0;  Confidence="HIGH";   Note="Not FPS — enables MSI interrupt registry changes to persist across shutdown/restart" }
+    # The following entry is referenced by step-catalog.ps1 for GUI display
+    # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "DisablePagingExecutive"     = @{ P1LowMin=0;  P1LowMax=1;  AvgMin=0; AvgMax=0;  Confidence="LOW";    Note="Keeps kernel in RAM — minimal on NVMe with 16+ GB" }
+    # The following entry is referenced by step-catalog.ps1 for GUI display
+    # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "PowerThrottlingOff"         = @{ P1LowMin=1;  P1LowMax=5;  AvgMin=1; AvgMax=3;  Confidence="MEDIUM"; Note="Intel 12th gen+ only — prevents E-core mismatch frametime spikes" }
 }
 
 # ── NVIDIA Profile Estimated Improvement Ranges ─────────────────────────────
+# Reference-only: used in step-catalog.ps1 for GUI display, not aggregated in improvement estimates
 # Estimates for individual DRS setting clusters in nvidia-profile.ps1
 # Applied as a group in Phase 3 Step 4 (T3, COMPETITIVE+ only)
 # Source: NvApiDriverSettings.h enum decode + Orbmu2k/nvidiaProfileInspector

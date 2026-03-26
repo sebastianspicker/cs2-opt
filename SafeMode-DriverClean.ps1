@@ -51,7 +51,14 @@ try {
     Write-Host ""
     $r = Read-Host "  Continue with defaults? [y/N]"
     if ($r -notmatch "^[jJyY]$") { exit 1 }
-    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; rollbackDriver=$null; nvidiaDriverPath=$null }
+    $detectedGpu = "2"  # Default to NVIDIA RTX 4000
+    try {
+        $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+               Where-Object { $_.Status -eq "OK" } | Select-Object -First 1
+        if ($gpu.Name -match "AMD|Radeon") { $detectedGpu = "4" }
+        elseif ($gpu.Name -match "Intel") { $detectedGpu = "5" }
+    } catch {}
+    $state = [PSCustomObject]@{ gpuInput=$detectedGpu; mode="CONTROL"; profile="RECOMMENDED"; rollbackDriver=$null; nvidiaDriverPath=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }
 Initialize-Log

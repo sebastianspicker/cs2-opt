@@ -193,8 +193,8 @@ function Apply-NvidiaCS2Profile {
 
     # ── DRS Success Summary ─────────────────────────────────────────────────
     $settingCount = $NV_DRS_SETTINGS.Count
-    $appliedCount = if ($SCRIPT:_drsApplied) { $SCRIPT:_drsApplied } else { $settingCount }
-    $errorCount   = if ($SCRIPT:_drsErrors)  { $SCRIPT:_drsErrors }  else { 0 }
+    $appliedCount = if ($null -ne $SCRIPT:_drsApplied) { $SCRIPT:_drsApplied } else { $settingCount }
+    $errorCount   = if ($null -ne $SCRIPT:_drsErrors)  { $SCRIPT:_drsErrors }  else { 0 }
     Write-Blank
     $statusColor = if ($errorCount -eq 0) { "Green" } else { "Yellow" }
     $drsLabel = if ($errorCount -eq 0) { "$appliedCount DRS" } else { "$appliedCount/$settingCount DRS ($errorCount failed)" }
@@ -274,10 +274,10 @@ function Apply-NvidiaCS2ProfileDrs {
                     # Bind applications to the new dedicated profile (AddApplication
                     # with -179 on Base Profile is expected — the exe will be re-bound)
                     try { [NvApiDrs]::AddApplication($session, $drsProfile, "cs2.exe") } catch {
-                        Write-Debug "DRS: AddApplication cs2.exe to dedicated profile — $_"
+                        Write-Warn "DRS: AddApplication cs2.exe to dedicated profile — $_"
                     }
                     try { [NvApiDrs]::AddApplication($session, $drsProfile, "csgos2.exe") } catch {
-                        Write-Debug "DRS: AddApplication csgos2.exe to dedicated profile — $_"
+                        Write-Warn "DRS: AddApplication csgos2.exe to dedicated profile — $_"
                     }
                 } else {
                     $drsProfile = $dedicatedProfile
@@ -303,10 +303,10 @@ function Apply-NvidiaCS2ProfileDrs {
 
                 # Bind applications
                 try { [NvApiDrs]::AddApplication($session, $drsProfile, "cs2.exe") } catch {
-                    Write-Debug "DRS: AddApplication cs2.exe — $_"
+                    Write-Warn "DRS: AddApplication cs2.exe — $_"
                 }
                 try { [NvApiDrs]::AddApplication($session, $drsProfile, "csgos2.exe") } catch {
-                    Write-Debug "DRS: AddApplication csgos2.exe — $_"
+                    Write-Warn "DRS: AddApplication csgos2.exe — $_"
                 }
             }
 
@@ -332,6 +332,7 @@ function Apply-NvidiaCS2ProfileDrs {
                 $writeValue = [uint32]$s.Value
 
                 # FRL override: if user has a FPS cap, use it instead of 500
+                # 277041162 = FRL NVCPL (frame rate limiter, not legacy FRL 277041154)
                 if ($s.Id -eq 277041162 -and $FrlValue -ne 500) {
                     $writeValue = [uint32]$FrlValue
                 }

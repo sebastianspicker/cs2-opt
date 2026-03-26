@@ -70,7 +70,7 @@ foreach ($p in ($cachePaths | Select-Object -Unique)) {
         if (-not $SCRIPT:DryRun) {
             $total += Clear-Dir $p "CS2 Shader Cache"
         } else {
-            $n = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
+            $n = @(Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
             Write-Host "  [DRY-RUN] Would clear: $p ($n files)" -ForegroundColor Magenta
         }
         $cs2Found = $true
@@ -120,7 +120,11 @@ public class MemHelper {
         [MemHelper]::SetSystemFileCacheSize([UIntPtr]::Zero, [UIntPtr]::Zero, 4) | Out-Null
         $after  = [math]::Round((Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).FreePhysicalMemory / 1KB, 0)
         Write-OK "RAM: ${after} MB free (before: ${before} MB)"
-    } catch { Write-Info "Working set trim skipped." }
+    } catch {
+        if ($_.Exception.Message -ne "CLM") {
+            Write-Info "Working set trim skipped."
+        }
+    }
 } else {
     Write-Host "  [DRY-RUN] Would trim RAM working set" -ForegroundColor Magenta
 }
@@ -151,7 +155,7 @@ if ($doFull) {
     Write-TierBadge 3 "Prefetch  (no 1%-low effect — system hygiene)"
     $pfPath = "$env:SystemRoot\Prefetch"
     if (Test-Path $pfPath) {
-        $n = (Get-ChildItem $pfPath -Filter "*.pf" -ErrorAction SilentlyContinue).Count
+        $n = @(Get-ChildItem $pfPath -Filter "*.pf" -ErrorAction SilentlyContinue).Count
         if (-not $SCRIPT:DryRun) {
             Get-ChildItem $pfPath -Filter "*.pf" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
             Write-OK "Prefetch: $n .pf files deleted"
@@ -201,9 +205,10 @@ if ($doFull) {
             if (-not $SCRIPT:DryRun) {
                 $steamExe = @(
                     "${env:ProgramFiles(x86)}\Steam\steam.exe",
-                    "$env:ProgramFiles\Steam\steam.exe",
-                    "$(if($steamBase){"$steamBase\steam.exe"})"
-                ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+                    "$env:ProgramFiles\Steam\steam.exe"
+                )
+                if ($steamBase) { $steamExe += "$steamBase\steam.exe" }
+                $steamExe = $steamExe | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
                 if ($steamExe) {
                     Write-Step "Starting CS2 verification..."
                     Start-Process "steam://validate/730" -ErrorAction SilentlyContinue
@@ -251,13 +256,17 @@ if ($doDriver) {
         Write-Host "  [4]  Intel" -ForegroundColor White
         do { $gpuChoice = Read-Host "  [1/2/3/4]" } while ($gpuChoice -notin @("1","2","3","4"))
         # Persist to state for SafeMode-DriverClean.ps1
-        if (Test-Path $CFG_StateFile) {
-            try {
+        try {
+            if (Test-Path $CFG_StateFile) {
                 $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
-                $st | Add-Member -NotePropertyName "gpuInput" -NotePropertyValue $gpuChoice -Force
-                Save-JsonAtomic -Data $st -Path $CFG_StateFile
-            } catch { Write-Debug "Could not persist GPU choice: $_" }
-        }
+            } else {
+                # State file doesn't exist yet — create minimal state so SafeMode-DriverClean
+                # can read gpuInput after reboot. Without this, the GPU choice is lost.
+                $st = [PSCustomObject]@{ mode = $SCRIPT:Mode; profile = $SCRIPT:Profile }
+            }
+            $st | Add-Member -NotePropertyName "gpuInput" -NotePropertyValue $gpuChoice -Force
+            Save-JsonAtomic -Data $st -Path $CFG_StateFile
+        } catch { Write-Debug "Could not persist GPU choice: $_" }
     }
 
     Write-Warn "Requires restart into Safe Mode."
@@ -315,13 +324,15 @@ if ($doDriver) {
 # ── Summary ──────────────────────────────────────────────────────────────────
 $elapsed = [math]::Round(((Get-Date) - $start).TotalSeconds, 0)
 Write-Log "SECTION" "=== CLEANUP DONE: $logTag | ${elapsed}s | $total entries ==="
+$summaryTitle = if ($SCRIPT:DryRun) { "CLEANUP PREVIEW (DRY-RUN)" } else { "CLEANUP COMPLETE" }
+$summaryColor = if ($SCRIPT:DryRun) { "Magenta" } else { "Green" }
 Write-Blank
-Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║  CLEANUP COMPLETE                                    ║" -ForegroundColor Green
-Write-Host "  ║  Mode:     $logTag$((' ' * [math]::Max(0, 43 - $logTag.Length)))║" -ForegroundColor Green
-Write-Host "  ║  Duration: ${elapsed}s$((' ' * [math]::Max(0, 44 - "$elapsed".Length)))║" -ForegroundColor Green
-Write-Host "  ║  Deleted:  $total entries$((' ' * [math]::Max(0, 39 - "$total".Length)))║" -ForegroundColor Green
-Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor $summaryColor
+Write-Host "  ║  $($summaryTitle.PadRight(52))║" -ForegroundColor $summaryColor
+Write-Host "  ║  $("Mode:     $logTag".PadRight(52))║" -ForegroundColor $summaryColor
+Write-Host "  ║  $("Duration: ${elapsed}s".PadRight(52))║" -ForegroundColor $summaryColor
+Write-Host "  ║  $("Deleted:  $total entries".PadRight(52))║" -ForegroundColor $summaryColor
+Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor $summaryColor
 Write-Blank
 Write-Sub "Launch CS2 -> 'Compiling Shaders' briefly visible -> normal"
 Write-Sub "Run benchmark -> update FPS cap"

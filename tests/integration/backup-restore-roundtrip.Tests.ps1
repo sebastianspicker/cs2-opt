@@ -92,6 +92,7 @@ Describe "Registry backup and restore roundtrip" {
 
         # Restore should call Remove-ItemProperty for non-existent originals
         Mock Test-Path { $true } -ParameterFilter { $Path -eq "HKLM:\SOFTWARE\NewKey" }
+        Mock Get-ItemProperty { [PSCustomObject]@{ NewProp = "some_value" } } -ParameterFilter { $Path -eq "HKLM:\SOFTWARE\NewKey" }
         Mock Remove-ItemProperty {} -Verifiable
 
         Restore-StepChanges -StepTitle "Registry Test Step"
@@ -225,11 +226,13 @@ Describe "BootConfig backup and restore roundtrip" {
     }
 
     It "Backup-BootConfig captures existing bcdedit value" {
+        # Backup-BootConfig uses bcdedit /enum /v which outputs hex element IDs.
+        # "disabledynamictick" maps to 0x26000060 in the bcdElementMap.
         Mock bcdedit {
             return @(
                 "Windows Boot Loader",
                 "identifier              {current}",
-                "disabledynamictick      Yes"
+                "0x26000060              Yes"
             )
         }
 

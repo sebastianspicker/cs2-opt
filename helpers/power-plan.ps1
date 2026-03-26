@@ -104,7 +104,7 @@ function Set-PowerPlanValue {
     )
     # SECURITY: Validate all GUIDs — these are passed as powercfg command-line arguments.
     # A tampered backup.json or crafted GUID could inject arbitrary powercfg commands.
-    $guidPattern = '^[a-fA-F0-9\-]{36}$'
+    $guidPattern = '^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'
     if ($PlanGuid -notmatch $guidPattern -and $PlanGuid -ne "DRY-RUN-GUID") {
         Write-Warn "Set-PowerPlanValue: invalid PlanGuid '$PlanGuid' — rejected (security)"
         return
@@ -187,6 +187,8 @@ function Apply-PowerPlan {
     #>
     param([string]$PlanGuid)
 
+    if (-not $PlanGuid) { Write-Warn "Apply-PowerPlan: No plan GUID provided."; return }
+
     $isAMD   = (Get-ChipsetVendor) -eq "AMD"
     $vendor  = if ($isAMD) { "AMD" } else { "Intel" }
     $applyT2 = $SCRIPT:Profile -in @("RECOMMENDED", "COMPETITIVE", "CUSTOM")
@@ -194,35 +196,45 @@ function Apply-PowerPlan {
 
     # ── T1: Proven, always applied (SAFE+) ────────────────────────────────────
     Write-Step "T1: proven settings (always applied)..."
+    $t1Count = 0
 
     # CPU max perf state — hard ceiling: never throttle under load
     Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PROCTHROTTLEMAX 100 "CPU max perf state (100%)"
+    $t1Count++
 
     # Core parking max — use all cores; no parking penalty
     Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_CPMAXCORES 100 "Core parking max (100%)"
+    $t1Count++
 
     # USB selective suspend — 1=disabled: prevents mouse/audio glitches and DPC spikes
     Set-PowerPlanValue $PlanGuid $PP_SUB_USB $PP_USBSS 1 "USB selective suspend (disabled)"
+    $t1Count++
 
     # Disk idle — 0=never: prevents HDD/SSD spin-down mid-game stutter
     Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKIDLE 0 "Disk idle timeout (never)"
+    $t1Count++
 
     # AHCI HIPM only (T1 safe state) — T2 will set to 0 (fully off) for RECOMMENDED+
     Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKPOWERMGMT 1 "AHCI LPM (HIPM-only, T1 safe)"
+    $t1Count++
 
     # Sleep/hibernate — never sleep during long gaming sessions
     Set-PowerPlanValue $PlanGuid $PP_SUB_SLEEP $PP_STANDBYIDLE 0 "Standby timeout (never)"
+    $t1Count++
     Set-PowerPlanValue $PlanGuid $PP_SUB_SLEEP $PP_HIBERNATEIDLE 0 "Hibernate timeout (never)"
+    $t1Count++
 
     # Cooling policy — active (proactive fan), NOT passive. FPSHeaven used passive = thermal throttle bug.
     Set-PowerPlanValue $PlanGuid $PP_SUB_COOLING $PP_SYSCOOLPOL 1 "System cooling (active)"
+    $t1Count++
 
     # PCIe ASPM off — Windows has a software ASPM layer independent of BIOS ASPM setting.
     # Without this, Windows can still pull GPU/NIC/NVMe into lower PCIe link states between
     # frames even when BIOS ASPM is disabled, causing exit-latency spikes mid-frame.
     Set-PowerPlanValue $PlanGuid $PP_SUB_PCIE $PP_ASPM 0 "PCIe ASPM (off — prevents mid-frame link state exit)"
+    $t1Count++
 
-    Write-OK "T1: 9 settings applied."
+    Write-OK "T1: $t1Count settings applied."
 
     # ── T2: RECOMMENDED+ — setup-dependent, vendor-aware ──────────────────────
     if ($applyT2) {

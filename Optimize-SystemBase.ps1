@@ -45,7 +45,7 @@ if ($startStep -le 2) {
                     Write-Err "XMP/EXPO is NOT active!"
                     Write-Blank
                     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
-                    Write-Host "  │  RAM running at $($ram.ActiveMhz) MHz instead of $($ram.SpeedMhz) MHz$((' ' * [math]::Max(0, 34 - "$($ram.ActiveMhz) $($ram.SpeedMhz)".Length)))│" -ForegroundColor Yellow
+                    Write-Host "  │  $("RAM running at $($ram.ActiveMhz) MHz instead of $($ram.SpeedMhz) MHz".PadRight(60))│" -ForegroundColor Yellow
                     Write-Host "  │                                                              │" -ForegroundColor Yellow
                     Write-Host "  │  Note: CS2-specific 1%-low effect is not proven by           │" -ForegroundColor DarkGray
                     Write-Host "  │  isolated benchmarks. Generally recommended though —         │" -ForegroundColor DarkGray
@@ -57,7 +57,7 @@ if ($startStep -le 2) {
                     Write-Host "  │  3.  Enable Profile 1                                      │" -ForegroundColor White
                     Write-Host "  │  4.  Save + restart                                        │" -ForegroundColor White
                     Write-Host "  │  5.  Verify: Task Manager -> Performance -> Memory          │" -ForegroundColor White
-                    Write-Host "  │      -> Should show '$($ram.SpeedMhz) MHz'$((' ' * [math]::Max(0, 34 - "$($ram.SpeedMhz) MHz".Length)))│" -ForegroundColor White
+                    Write-Host "  │  $("    -> Should show '$($ram.SpeedMhz) MHz'".PadRight(60))│" -ForegroundColor White
                     Write-Host "  │                                                              │" -ForegroundColor Yellow
                     Write-Host "  │  AFTERWARDS: RAM stability test recommended                 │" -ForegroundColor DarkGray
                     Write-Host "  │  TM5 / HCI MemTest  (github.com/integrityhf/TM5)           │" -ForegroundColor DarkGray
@@ -129,12 +129,12 @@ if ($startStep -le 3) {
             $found = $false
             foreach ($p in ($paths | Select-Object -Unique)) {
                 if (Test-Path $p) {
-                    $n = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue).Count
+                    $n = @(Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue).Count
                     Write-Step "CS2 Cache: $p  ($n files)"
                     if (-not $SCRIPT:DryRun) {
                         Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue |
                             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                        $remaining = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue).Count
+                        $remaining = @(Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue).Count
                         if ($remaining -gt 0) {
                             Write-Warn "Partially cleared: $p ($remaining files locked — close Steam/CS2 to clear fully)"
                         } else {
@@ -148,12 +148,12 @@ if ($startStep -le 3) {
             }
             foreach ($c in @($CFG_NV_ShaderCache, $CFG_NV_GLCache, $CFG_DX_ShaderCache)) {
                 if (Test-Path $c) {
-                    $n = (Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue).Count
+                    $n = @(Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue).Count
                     Write-Step "GPU Cache: $c  ($n files)"
                     if (-not $SCRIPT:DryRun) {
                         Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue |
                             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                        $remaining = (Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue).Count
+                        $remaining = @(Get-ChildItem $c -Recurse -ErrorAction SilentlyContinue).Count
                         if ($remaining -gt 0) {
                             Write-Warn "Partially cleared: $c ($remaining files locked)"
                         } else {

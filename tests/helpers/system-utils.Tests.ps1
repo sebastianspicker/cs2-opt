@@ -120,7 +120,7 @@ Describe "Set-RegistryValue DRY-RUN" {
         Set-RegistryValue "HKLM:\SOFTWARE\Test" "TestValue" 42 "DWord" "Test reason"
 
         Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[DRY-RUN\]" -and $Object -match "TestValue" -and $Object -match "42"
+            $Object -match "DRY-RUN" -and $Object -match "TestValue" -and $Object -match "42"
         }
     }
 
@@ -157,7 +157,7 @@ Describe "Set-BootConfig DRY-RUN" {
         Set-BootConfig "disabledynamictick" "yes" "Disable dynamic tick"
 
         Should -Invoke Write-Host -ParameterFilter {
-            $Object -match "\[DRY-RUN\]" -and $Object -match "disabledynamictick" -and $Object -match "yes"
+            $Object -match "DRY-RUN" -and $Object -match "disabledynamictick" -and $Object -match "yes"
         }
     }
 
@@ -315,7 +315,7 @@ Describe "Load-State / Save-State" {
     }
 
     It "throws when state file is missing" {
-        { Load-State "$SCRIPT:TestTempRoot\nonexistent.json" } | Should -Throw "*state.json missing*"
+        { Load-State "$SCRIPT:TestTempRoot\nonexistent.json" } | Should -Throw "*Settings file not found*"
     }
 
     It "sets DryRun to false for non-DRY-RUN mode" {

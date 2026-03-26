@@ -41,7 +41,7 @@
 #  DRY-RUN is a modifier that can be combined with any profile.
 
 $SCRIPT:RiskOrder = @{ "SAFE"=1; "MODERATE"=2; "AGGRESSIVE"=3; "CRITICAL"=4 }
-$SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
+if (-not $SCRIPT:AppliedSteps) { $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new() }
 
 function Save-AppliedSteps {
     <#  Persists $SCRIPT:AppliedSteps to state.json so Phase 3 can read Phase 1 estimates.  #>

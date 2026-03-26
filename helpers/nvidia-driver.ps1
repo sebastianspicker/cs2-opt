@@ -225,7 +225,7 @@ function Install-NvidiaDriverClean {
         if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
     }
 
-    $tempDir = "$env:TEMP\NVDriver_Extract"
+    $tempDir = Join-Path $env:TEMP "NVDriver_$(New-Guid)"
     if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
 
     # ── 1. Extract driver package ────────────────────────────────────────────
@@ -324,58 +324,63 @@ function Apply-NvidiaPostInstallTweaks {
                "Expert Tweaks" would normally handle.
     #>
 
-    Write-Step "Applying post-install NVIDIA tweaks..."
+    $origTitle = $SCRIPT:CurrentStepTitle
+    try {
+        if (-not $SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle = "NVIDIA Post-Install Tweaks" }
 
-    # ── Disable NVIDIA Telemetry ─────────────────────────────────────────────
-    $telemetryPaths = @(
-        @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\NvControlPanel2\Client"; Name = "OptInOrOutPreference"; Value = 0 },
-        @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS"; Name = "EnableRID44231"; Value = 0 },
-        @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS"; Name = "EnableRID64640"; Value = 0 },
-        @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS"; Name = "EnableRID66610"; Value = 0 }
-    )
-    if (-not $SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle = "NVIDIA Post-Install Tweaks" }
-    foreach ($t in $telemetryPaths) {
-        Set-RegistryValue $t.Path $t.Name $t.Value "DWord" "NVIDIA telemetry disable"
-    }
-    Write-ActionOK "NVIDIA telemetry disabled."
+        Write-Step "Applying post-install NVIDIA tweaks..."
 
-    # ── Disable HDCP ─────────────────────────────────────────────────────────
-    $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$CFG_GUID_Display"
-    if (Test-Path $classPath) {
-        $subkeys = Get-ChildItem $classPath -ErrorAction SilentlyContinue |
-            Where-Object { $_.PSChildName -match "^\d{4}$" }
-        foreach ($key in $subkeys) {
-            $props = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
-            if ($props.ProviderName -match "NVIDIA" -or $props.DriverDesc -match "NVIDIA") {
-                Set-RegistryValue $key.PSPath "RMHdcpKeyglobZero" 1 "DWord" "HDCP disable for $($props.DriverDesc)"
+        # ── Disable NVIDIA Telemetry ─────────────────────────────────────────────
+        $telemetryPaths = @(
+            @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\NvControlPanel2\Client"; Name = "OptInOrOutPreference"; Value = 0 },
+            @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS"; Name = "EnableRID44231"; Value = 0 },
+            @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS"; Name = "EnableRID64640"; Value = 0 },
+            @{ Path = "HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS"; Name = "EnableRID66610"; Value = 0 }
+        )
+        foreach ($t in $telemetryPaths) {
+            Set-RegistryValue $t.Path $t.Name $t.Value "DWord" "NVIDIA telemetry disable"
+        }
+        Write-ActionOK "NVIDIA telemetry disabled."
+
+        # ── Disable HDCP ─────────────────────────────────────────────────────────
+        $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$CFG_GUID_Display"
+        if (Test-Path $classPath) {
+            $subkeys = Get-ChildItem $classPath -ErrorAction SilentlyContinue |
+                Where-Object { $_.PSChildName -match "^\d{4}$" }
+            foreach ($key in $subkeys) {
+                $props = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
+                if ($props.ProviderName -match "NVIDIA" -or $props.DriverDesc -match "NVIDIA") {
+                    Set-RegistryValue $key.PSPath "RMHdcpKeyglobZero" 1 "DWord" "HDCP disable for $($props.DriverDesc)"
+                }
             }
         }
+
+        # ── Enable Write Combining ───────────────────────────────────────────────
+        $gfxPath = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
+        Set-RegistryValue $gfxPath "EnableWriteCombining" 1 "DWord" "GPU write combining"
+        Write-ActionOK "Write Combining enabled."
+
+        # ── Disable MPO (Multiplane Overlay) ─────────────────────────────────────
+        Set-RegistryValue "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode" 5 "DWord" "MPO disable"
+        Write-ActionOK "MPO disabled."
+
+        # ── Disable NVIDIA telemetry services ────────────────────────────────────
+        $nvTelServices = @("NvTelemetryContainer", "NvContainerNetworkService")
+        foreach ($svc in $nvTelServices) {
+            try {
+                if (-not $SCRIPT:DryRun) {
+                    Backup-ServiceState -ServiceName $svc -StepTitle $SCRIPT:CurrentStepTitle
+                    Stop-Service $svc -Force -ErrorAction SilentlyContinue
+                    Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
+                } else {
+                    Write-Host "  [DRY-RUN] Would stop + disable: ${svc}" -ForegroundColor Magenta
+                }
+            } catch { Write-Debug "Telemetry service ${svc}: $_" }
+        }
+        Write-ActionOK "NVIDIA telemetry services disabled (if present)."
+
+        if (-not $SCRIPT:DryRun) { Write-Info "Post-install tweaks applied. Restart recommended." }
+    } finally {
+        $SCRIPT:CurrentStepTitle = $origTitle
     }
-
-    # ── Enable Write Combining ───────────────────────────────────────────────
-    $gfxPath = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
-    if (-not $SCRIPT:DryRun -and -not (Test-Path $gfxPath)) { New-Item -Path $gfxPath -Force -ErrorAction SilentlyContinue | Out-Null }
-    Set-RegistryValue $gfxPath "EnableWriteCombining" 1 "DWord" "GPU write combining"
-    Write-ActionOK "Write Combining enabled."
-
-    # ── Disable MPO (Multiplane Overlay) ─────────────────────────────────────
-    Set-RegistryValue "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode" 5 "DWord" "MPO disable"
-    Write-ActionOK "MPO disabled."
-
-    # ── Disable NVIDIA telemetry services ────────────────────────────────────
-    $nvTelServices = @("NvTelemetryContainer", "NvContainerNetworkService")
-    foreach ($svc in $nvTelServices) {
-        try {
-            if (-not $SCRIPT:DryRun) {
-                Backup-ServiceState -ServiceName $svc -StepTitle $SCRIPT:CurrentStepTitle
-                Stop-Service $svc -Force -ErrorAction SilentlyContinue
-                Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
-            } else {
-                Write-Host "  [DRY-RUN] Would stop + disable: ${svc}" -ForegroundColor Magenta
-            }
-        } catch { Write-Debug "Telemetry service ${svc}: $_" }
-    }
-    Write-ActionOK "NVIDIA telemetry services disabled."
-
-    if (-not $SCRIPT:DryRun) { Write-Info "Post-install tweaks applied. Restart recommended." }
 }

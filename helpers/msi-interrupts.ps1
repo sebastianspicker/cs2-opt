@@ -48,7 +48,7 @@ function Enable-DeviceMSI {
     if ($modified -eq 0) {
         Write-Warn "No PCI devices found to enable MSI."
     } else {
-        Write-OK "$modified device(s) configured for MSI mode."
+        Write-OK "$modified device(s) verified for MSI mode."
         if (-not $SCRIPT:DryRun) {
             Write-Info "Restart required for MSI changes to take effect."
         }
@@ -258,15 +258,11 @@ function Set-NicInterruptAffinity {
     # On non-hybrid CPUs, use the last physical core to avoid Core 0 (OS-heavy).
     # Clamp to 63 — processor group 0 supports max 64 logical processors;
     # systems with >64 LPs require GROUP_AFFINITY which needs a different API.
+    # Target last physical core to avoid Core 0 (OS-heavy); on hybrid CPUs this lands in the E-core region
     $hybridCpu = Get-IntelHybridCpuName
-    if ($hybridCpu) {
-        # Intel hybrid: target last core (E-core region)
-        $targetCore = [math]::Min($coreCount - 1, 63)
-        Write-Debug "Hybrid CPU detected ($hybridCpu) — targeting E-core region (Core $targetCore)"
-    } else {
-        # Non-hybrid: use last physical core to avoid Core 0
-        $targetCore = [math]::Min($coreCount - 1, 63)
-    }
+    if ($null -eq $hybridCpu) { Write-Debug "CPU hybrid detection returned null — defaulting to non-hybrid" }
+    $targetCore = [math]::Min($coreCount - 1, 63)
+    if ($hybridCpu) { Write-Debug "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity" }
     $mask = [uint64]1 -shl $targetCore
 
     # Convert mask to 8-byte array for registry (binary value)

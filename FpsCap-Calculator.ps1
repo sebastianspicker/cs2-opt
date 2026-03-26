@@ -77,7 +77,7 @@ if ($ManualAvg -gt 0) {
         "3" {
             do {
                 $v = Read-Host "  Avg FPS"; $fv = 0
-                $ok = [float]::TryParse($v,[ref]$fv) -and $fv -gt 0
+                $ok = [float]::TryParse($v, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$fv) -and $fv -gt 0
                 if (-not $ok) { Write-Warn "Enter positive number." }
             } while (-not $ok)
             $result = @{ Avg=$fv; P1=0; Runs=1; RawAvg=@($fv); RawP1=@(0) }
@@ -90,7 +90,7 @@ if (-not $result) {
     Write-Warn "No result detected — please enter manually."
     do {
         $v = Read-Host "  Avg FPS"; $fv = 0
-        $ok = [float]::TryParse($v,[ref]$fv) -and $fv -gt 0
+        $ok = [float]::TryParse($v, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$fv) -and $fv -gt 0
         if (-not $ok) { Write-Warn "Positive number." }
     } while (-not $ok)
     $result = @{ Avg=$fv; P1=0; Runs=1; RawAvg=@($fv); RawP1=@(0) }
@@ -107,19 +107,19 @@ Write-Blank
 Write-Host "  ┌──────────────────────────────────────────────────────────┐" -ForegroundColor Green
 Write-Host "  │  RESULT                                                  │" -ForegroundColor Green
 if ($result.Runs -gt 1) {
-    Write-Host "  │  Runs: $($result.Runs)$((' ' * (51 - "$($result.Runs)".Length)))│" -ForegroundColor DarkGreen
+    Write-Host "  │  $("Runs: $($result.Runs)".PadRight(56))│" -ForegroundColor DarkGreen
     for ($i = 0; $i -lt $result.Runs; $i++) {
         $l = "  Run $($i+1):  Avg=$($result.RawAvg[$i])  P1=$($result.RawP1[$i])"
-        Write-Host "  │$l$((' ' * (57 - $l.Length)))│" -ForegroundColor DarkGreen
+        Write-Host "  │$($l.PadRight(58))│" -ForegroundColor DarkGreen
     }
 }
-Write-Host "  │  Avg FPS:  $avg$((' ' * (45 - "$avg".Length)))│" -ForegroundColor Green
+Write-Host "  │  $("Avg FPS:  $avg".PadRight(56))│" -ForegroundColor Green
 if ($p1 -gt 0) {
-    Write-Host "  │  1% Lows:  $p1$((' ' * (45 - "$p1".Length)))│" -ForegroundColor Green
+    Write-Host "  │  $("1% Lows:  $p1".PadRight(56))│" -ForegroundColor Green
 }
-Write-Host "  │  - ${pct}%:     - $cut FPS$((' ' * (39 - "$cut FPS".Length)))│" -ForegroundColor Green
-Write-Host "  │  ─────────────────────────────────────────────────────  │" -ForegroundColor Green
-Write-Host "  │  FPS CAP:  ► $cap ◄$((' ' * (43 - "► $cap ◄".Length)))│" -ForegroundColor Cyan
+Write-Host "  │  $("- ${pct}%:     - $cut FPS".PadRight(56))│" -ForegroundColor Green
+Write-Host "  │  ──────────────────────────────────────────────────────  │" -ForegroundColor Green
+Write-Host "  │  $("FPS CAP:  ► $cap ◄".PadRight(56))│" -ForegroundColor Cyan
 Write-Host "  └──────────────────────────────────────────────────────────┘" -ForegroundColor Green
 
 # P1/Avg ratio

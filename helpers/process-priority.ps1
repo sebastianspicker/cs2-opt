@@ -251,6 +251,11 @@ function Remove-CS2ProcessPriority {
     .DESCRIPTION  Called during rollback via Restore-Interactive.
     #>
 
+    if ($SCRIPT:DryRun) {
+        Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Would remove CS2 process priority settings" -ForegroundColor Magenta
+        return
+    }
+
     # Remove IFEO PerfOptions
     $ifeoPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\cs2.exe\PerfOptions"
     if (Test-Path $ifeoPath) {

@@ -69,7 +69,7 @@ if (-not $IsWindows) {
         function global:Disable-ScheduledTask { param($TaskName) $null }
     }
     if (-not (Get-Command Unregister-ScheduledTask -ErrorAction SilentlyContinue)) {
-        function global:Unregister-ScheduledTask { param($TaskName, [switch]$Confirm) $null }
+        function global:Unregister-ScheduledTask { param($TaskName, [switch]$ConfirmAction) $null }
     }
     if (-not (Get-Command Set-Service -ErrorAction SilentlyContinue)) {
         function global:Set-Service { param($Name, $StartupType) $null }

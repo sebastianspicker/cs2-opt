@@ -303,7 +303,9 @@ if ($startStep -le 29) {
             } else {
                 Write-Host "  [DRY-RUN] Would set flat mouse curves (SmoothMouseX/YCurve)" -ForegroundColor Magenta
             }
-            Write-ActionOK "Mouse acceleration disabled. Takes effect after re-login."
+            if (-not $SCRIPT:DryRun) {
+                Write-ActionOK "Mouse acceleration disabled. Takes effect after re-login."
+            }
 
             # ── mouclass kernel input queue depth ────────────────────────────────────
             # Default queue of 100 events allows Windows to buffer up to ~100ms of mouse

@@ -6,6 +6,7 @@
 
 $SCRIPT:StepCatalog = @(
     # ── Phase 1 ───────────────────────────────────────────────────────────────
+    [PSCustomObject]@{ Phase=1; Step=1;  Category="System"; Title="Configuration";  Tier=1; Risk="SAFE"; Depth="SETUP"; EstKey=""; CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=1; Step=2;  Category="Hardware"; Title="XMP/EXPO Check";              Tier=1; Risk="SAFE";       Depth="CHECK";      EstKey="";                         CheckOnly=$true;  Reboot=$false }
     [PSCustomObject]@{ Phase=1; Step=3;  Category="GPU";      Title="Clear Shader Cache";           Tier=1; Risk="SAFE";       Depth="FILESYSTEM"; EstKey="Clear Shader Cache";        CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=1; Step=4;  Category="Display";  Title="Fullscreen Optimizations";     Tier=1; Risk="SAFE";       Depth="REGISTRY";   EstKey="Fullscreen Optimizations";  CheckOnly=$false; Reboot=$false }
@@ -13,7 +14,7 @@ $SCRIPT:StepCatalog = @(
     [PSCustomObject]@{ Phase=1; Step=6;  Category="System";   Title="CS2 Power Plan";               Tier=1; Risk="MODERATE";   Depth="REGISTRY";   EstKey="CS2 Optimized Power Plan";  CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=1; Step=7;  Category="GPU";      Title="HAGS";                         Tier=2; Risk="MODERATE";   Depth="REGISTRY";   EstKey="HAGS Toggle";               CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=8;  Category="System";   Title="Pagefile";                     Tier=2; Risk="MODERATE";   Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$true  }
-    [PSCustomObject]@{ Phase=1; Step=9;  Category="GPU";      Title="Resizable BAR";                Tier=2; Risk="SAFE";       Depth="CHECK";      EstKey="";      CheckOnly=$false; Reboot=$true  }
+    [PSCustomObject]@{ Phase=1; Step=9;  Category="GPU";      Title="Resizable BAR";                Tier=2; Risk="SAFE";       Depth="CHECK";      EstKey="";      CheckOnly=$true;  Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=10; Category="System";   Title="Dynamic Tick + Platform Clock";Tier=3; Risk="MODERATE";   Depth="BOOT";       EstKey="Timer Resolution";          CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=11; Category="Display";  Title="Disable MPO";                  Tier=3; Risk="SAFE";       Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=1; Step=12; Category="System";   Title="Game Mode";                    Tier=3; Risk="SAFE";       Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$false }
@@ -50,6 +51,7 @@ $SCRIPT:StepCatalog = @(
     [PSCustomObject]@{ Phase=3; Step=4;  Category="GPU";      Title="NVIDIA DRS Profile";           Tier=3; Risk="SAFE";       Depth="DRIVER";     EstKey="";   CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=5;  Category="CS2";      Title="FPS Cap Info";                  Tier=1; Risk="SAFE";       Depth="CHECK";      EstKey="FPS Cap";                   CheckOnly=$true;  Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=6;  Category="CS2";      Title="Launch Options + Video";        Tier=2; Risk="SAFE";       Depth="APP";        EstKey="";                         CheckOnly=$false; Reboot=$false }
+    [PSCustomObject]@{ Phase=3; Step=7;  Category="System";   Title="Reserved";                      Tier=1; Risk="SAFE";       Depth="CHECK";      EstKey="";                         CheckOnly=$true;  Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=8;  Category="GPU";      Title="AMD GPU Settings";              Tier=2; Risk="SAFE";       Depth="CHECK";      EstKey="";                         CheckOnly=$true;  Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=9;  Category="Network";  Title="DNS Configuration";             Tier=3; Risk="SAFE";       Depth="NETWORK";    EstKey="";                         CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=10; Category="CPU";      Title="Process Priority + X3D CCD";    Tier=3; Risk="SAFE";       Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$false }

@@ -56,7 +56,7 @@ function Show-CS2SettingsGuide {
     Write-Info "  Steam -> CS2 -> Right-click -> Properties -> General -> Launch Options"
     Write-Blank
     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Green
-    Write-Host "  │  $launchOpts$((' ' * (61 - $launchOpts.Length)))│" -ForegroundColor Green
+    Write-Host "  │  $($launchOpts.PadRight(60))│" -ForegroundColor Green
     Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Green
     $launchOpts | Set-ClipboardSafe
     Write-OK "Copied to clipboard."
@@ -90,7 +90,7 @@ function Show-CS2SettingsGuide {
         Write-Host "  │  Shader Cache Size   -> Unlimited              [T1 proven]  │" -ForegroundColor Green
         if ($fpsCap -gt 0) {
             $capStr = "Max Frame Rate         -> $fpsCap (avg $avgFps - 9%)"
-            Write-Host "  │  $capStr$((' ' * (59 - $capStr.Length)))│" -ForegroundColor Green
+            Write-Host "  │  $($capStr.PadRight(60))│" -ForegroundColor Green
             Write-Host "  │                                               [T1 proven]  │" -ForegroundColor Green
         } else {
             Write-Host "  │  Max Frame Rate       -> set after benchmark  [T1 proven]  │" -ForegroundColor Yellow
@@ -224,7 +224,7 @@ function Show-CS2SettingsGuide {
     Write-Host "  │ Setting                  │ Your Value     │ Reason                   │" -ForegroundColor Cyan
     Write-Host "  ├──────────────────────────┼────────────────┼──────────────────────────┤" -ForegroundColor Cyan
     Write-Host "  │ Resolution               │ $($resLabel.PadRight(14)) │ $(if($resChoice -eq '1'){'~80% pros. Wider models.'}elseif($resChoice -eq '2'){'More FOV. Clear image.'}elseif($resChoice -eq '3'){'Visual quality. GPU-heavy.'}else{'Your preference.'})$((' ' * [math]::Max(0,24 - $(if($resChoice -eq '1'){'~80% pros. Wider models.'}elseif($resChoice -eq '2'){'More FOV. Clear image.'}elseif($resChoice -eq '3'){'Visual quality. GPU-heavy.'}else{'Your preference.'}).Length)))  │" -ForegroundColor White
-    Write-Host "  │ MSAA                     │ $($msaa.PadRight(14)) │ $($msaaNote.Substring(0,[math]::Min($msaaNote.Length,24)).PadRight(24))  │" -ForegroundColor White
+    Write-Host "  │ MSAA                     │ $($msaa.PadRight(14)) │ $(if ($msaaNote.Length -gt 24) { $msaaNote.Substring(0, 21) + '...' } else { $msaaNote.PadRight(24) })  │" -ForegroundColor White
     Write-Host "  │ Global Shadow Quality    │ $($shadows.PadRight(14)) │ $(if($pcTier -eq 'LOW'){'Saves ~15 FPS.          '}else{'Low=disadvantage (Nuke).  '})│" -ForegroundColor White
     Write-Host "  │ Dynamic Shadows          │ $($dynShadows.PadRight(14)) │ $(if($pcTier -eq 'LOW'){'Sun Only saves FPS.      '}else{'Player shadows visible.   '})│" -ForegroundColor White
     Write-Host "  │ Shader Detail            │ $($shaderDet.PadRight(14)) │ $(if($pcTier -eq 'LOW'){'Saves FPS. Visual loss.  '}else{'Cleaner shadows. Low cost.'})│" -ForegroundColor White
@@ -352,10 +352,10 @@ function Show-CS2SettingsGuide {
     if ($currentHz) {
         Write-Info "Refresh rate from current video.txt: ${currentHz} Hz"
         $hzIn = Read-Host "  Keep ${currentHz} Hz? [Enter] or type new value (e.g. 144, 240, 360)"
-        if ($hzIn.Trim() -match '^\d+$') { $currentHz = $hzIn.Trim() }
+        if ($hzIn.Trim() -match '^\d+$' -and [int]$hzIn.Trim() -ge 30 -and [int]$hzIn.Trim() -le 500) { $currentHz = $hzIn.Trim() }
     } else {
         $hzIn = Read-Host "  Monitor refresh rate Hz? [Enter = 240, or type: 60, 144, 165, 240, 360]"
-        $currentHz = if ($hzIn.Trim() -match '^\d+$') { $hzIn.Trim() } else { "240" }
+        $currentHz = if ($hzIn.Trim() -match '^\d+$' -and [int]$hzIn.Trim() -ge 30 -and [int]$hzIn.Trim() -le 500) { $hzIn.Trim() } else { "240" }
     }
 
     # For "Other" resolution: preserve from existing file rather than writing blank values
@@ -505,7 +505,16 @@ function Show-CS2SettingsGuide {
                     New-Item -ItemType Directory -Path $videoTxtDir -Force -ErrorAction SilentlyContinue | Out-Null
                 }
                 # Use BOM-less UTF-8 — PS 5.1's -Encoding UTF8 adds BOM which Valve VDF parsers may reject
-                [System.IO.File]::WriteAllLines($videoTxtPath, $vLines, [System.Text.UTF8Encoding]::new($false))
+                try {
+                    [System.IO.File]::WriteAllLines($videoTxtPath, $vLines, [System.Text.UTF8Encoding]::new($false))
+                } catch {
+                    Write-Warn "Failed to write video.txt: $_"
+                    if (Test-Path $bakPath) {
+                        Move-Item $bakPath $videoTxtPath -Force
+                        Write-Info "Restored original video.txt from backup."
+                    }
+                    return
+                }
                 Write-OK "video.txt written: $videoTxtPath"
                 Write-Info "CS2 must be fully closed for the new file to take effect on next launch."
                 Write-Info "To revert: rename video.txt.bak back to video.txt (delete current video.txt first)."

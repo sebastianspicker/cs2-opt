@@ -69,53 +69,61 @@ Describe "Get-IntelHybridCpuName" {
         }
     }
 
-    Context "AMD CPUs (should return null)" {
-        It "returns null for AMD 7800X3D" {
+    Context "AMD CPUs (should return empty string, not null)" {
+        It "returns empty string for AMD 7800X3D" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "AMD Ryzen 7 7800X3D 8-Core Processor" }
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
-            Get-IntelHybridCpuName | Should -BeNullOrEmpty
+            $result = Get-IntelHybridCpuName
+            $result | Should -BeNullOrEmpty
+            $result | Should -Not -Be $null  # empty string, not $null
         }
 
-        It "returns null for AMD 5800X" {
+        It "returns empty string for AMD 5800X" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "AMD Ryzen 7 5800X 8-Core Processor" }
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
-            Get-IntelHybridCpuName | Should -BeNullOrEmpty
+            $result = Get-IntelHybridCpuName
+            $result | Should -BeNullOrEmpty
+            $result | Should -Not -Be $null
         }
     }
 
-    Context "Old Intel (pre-hybrid, should return null)" {
-        It "returns null for i9-11900K (Rocket Lake, no E-cores)" {
+    Context "Old Intel (pre-hybrid, should return empty string)" {
+        It "returns empty string for i9-11900K (Rocket Lake, no E-cores)" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "11th Gen Intel(R) Core(TM) i9-11900K" }
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
-            Get-IntelHybridCpuName | Should -BeNullOrEmpty
+            $result = Get-IntelHybridCpuName
+            $result | Should -BeNullOrEmpty
+            $result | Should -Not -Be $null
         }
 
-        It "returns null for i7-10700K (Comet Lake)" {
+        It "returns empty string for i7-10700K (Comet Lake)" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz" }
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
-            Get-IntelHybridCpuName | Should -BeNullOrEmpty
+            $result = Get-IntelHybridCpuName
+            $result | Should -BeNullOrEmpty
+            $result | Should -Not -Be $null
         }
     }
 
     Context "Edge cases" {
-        It "returns null when CimInstance throws" {
+        It "returns null when CimInstance throws (detection failed)" {
             Mock Get-CimInstance { throw "WMI unavailable" } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
-            Get-IntelHybridCpuName | Should -BeNullOrEmpty
+            Get-IntelHybridCpuName | Should -Be $null
         }
 
-        It "returns null when CimInstance returns empty" {
+        It "returns null when CimInstance returns empty (detection failed)" {
             Mock Get-CimInstance { $null } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
-            Get-IntelHybridCpuName | Should -BeNullOrEmpty
+            Get-IntelHybridCpuName | Should -Be $null
         }
     }
 }

@@ -46,6 +46,12 @@ function Invoke-Async {
             $timer.Stop()
             try { $capturedRs.EndInvoke($capturedHandle) } catch { $Script:UISync.AsyncError = $_.Exception.Message }
             finally { $capturedRs.Dispose() }
+            if ($Script:UISync.AsyncError) {
+                $Window.Dispatcher.Invoke({
+                    [System.Windows.MessageBox]::Show("Background task error: $($Script:UISync.AsyncError)", "Error", "OK", "Error")
+                })
+                $Script:UISync.AsyncError = $null
+            }
             & $capturedDone
         }
     }.GetNewClosure())
@@ -869,6 +875,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
 # ── Load window ───────────────────────────────────────────────────────────────
 $reader = [System.Xml.XmlNodeReader]::new($XAML)
 $Window = [Windows.Markup.XamlReader]::Load($reader)
+$reader.Dispose()
 
 # ── Named element shortcuts ───────────────────────────────────────────────────
 function El { $Window.FindName($args[0]) }
@@ -921,10 +928,18 @@ function Update-SidebarStatus {
     try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch {}
     $prof = if ($state) { $state.profile } else { "—" }
     $isDry = ($state -and $state.mode -eq "DRY-RUN")
+    $phaseText = "—"
+    if (Test-Path $CFG_ProgressFile) {
+        try {
+            $prog = Get-Content $CFG_ProgressFile -Raw | ConvertFrom-Json
+            if ($prog.phase) { $phaseText = "$($prog.phase)" }
+        } catch {}
+    }
     $Window.Dispatcher.Invoke({
         (El "SbProfile").Text = "Profile: $prof"
         (El "SbDryRun" ).Text = if ($isDry) { "DRY-RUN" } else { "" }
         (El "SbDryRunBadge").Visibility = if ($isDry) { "Visible" } else { "Collapsed" }
+        (El "SbPhase").Text = "Phase: $phaseText"
     })
 }
 

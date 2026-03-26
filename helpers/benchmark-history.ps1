@@ -26,12 +26,12 @@ function Add-BenchmarkResult {
     $history = Get-BenchmarkHistory
 
     $entry = @{
+        # Local time (timezone not tracked — acceptable for gaming benchmarks)
         timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         avgFps    = $AvgFps
         p1Fps     = $P1Fps
         label     = $Label
         runs      = $Runs
-        index     = $history.Count + 1
     }
 
     $history += $entry
@@ -91,8 +91,8 @@ function Show-BenchmarkComparison {
             $date = $ts.PadRight(10)
             $time = "??:??"
         }
-        $avg = $entry.avgFps.ToString("F1").PadLeft(7)
-        $p1  = $entry.p1Fps.ToString("F1").PadLeft(7)
+        $avg = if ($entry.avgFps) { $entry.avgFps.ToString("F1", [System.Globalization.CultureInfo]::InvariantCulture).PadLeft(7) } else { "    N/A" }
+        $p1  = if ($entry.p1Fps) { $entry.p1Fps.ToString("F1", [System.Globalization.CultureInfo]::InvariantCulture).PadLeft(7) } else { "    N/A" }
 
         $avgDiffStr = "   —  "
         $p1DiffStr  = "   —  "
@@ -102,8 +102,8 @@ function Show-BenchmarkComparison {
             $prev = $history[$i - 1]
             $avgDiff = [math]::Round($entry.avgFps - $prev.avgFps, 1)
             $p1Diff  = [math]::Round($entry.p1Fps - $prev.p1Fps, 1)
-            $avgDiffStr = "$(if($avgDiff -ge 0){'+'}else{''})$($avgDiff.ToString('F1'))".PadLeft(6)
-            $p1DiffStr  = "$(if($p1Diff -ge 0){'+'}else{''})$($p1Diff.ToString('F1'))".PadLeft(6)
+            $avgDiffStr = "$(if($avgDiff -ge 0){'+'}else{''})$($avgDiff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))".PadLeft(6)
+            $p1DiffStr  = "$(if($p1Diff -ge 0){'+'}else{''})$($p1Diff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))".PadLeft(6)
             $color = if ($p1Diff -gt 0) { "Green" } elseif ($p1Diff -lt 0) { "Red" } else { "Yellow" }
         }
 
@@ -195,8 +195,8 @@ function Invoke-BenchmarkCapture {
         Write-Blank
         Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor $pColor
         Write-Host "  │  COMPARISON WITH PREVIOUS:                                   │" -ForegroundColor $pColor
-        $avgLine = "Avg FPS: $($prev.avgFps.ToString('F1')) -> $($result.Avg.ToString('F1'))  ($(if($avgDiff -ge 0){'+'})$($avgDiff.ToString('F1')))"
-        $p1Line  = "1% Lows: $($prev.p1Fps.ToString('F1')) -> $($result.P1.ToString('F1'))  ($(if($p1Diff -ge 0){'+'})$($p1Diff.ToString('F1')))"
+        $avgLine = "Avg FPS: $($prev.avgFps.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture)) -> $($result.Avg.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))  ($(if($avgDiff -ge 0){'+'})$($avgDiff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture)))"
+        $p1Line  = "1% Lows: $($prev.p1Fps.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture)) -> $($result.P1.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))  ($(if($p1Diff -ge 0){'+'})$($p1Diff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture)))"
         Write-Host "  │  $avgLine$((' ' * [math]::Max(0, 60 - $avgLine.Length)))│" -ForegroundColor White
         Write-Host "  │  $p1Line$((' ' * [math]::Max(0, 60 - $p1Line.Length)))│" -ForegroundColor White
         Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor $pColor

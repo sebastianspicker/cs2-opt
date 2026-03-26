@@ -52,7 +52,7 @@ Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode" 5 "M
 # HAGS is setup-dependent (0 or 2), just show current value
 try {
     $hagsVal = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -ErrorAction Stop).HwSchMode
-    $hagsLabel = switch ($hagsVal) { 0 {"OFF"} 2 {"ON"} default {"Unknown ($hagsVal)"} }
+    $hagsLabel = switch ($hagsVal) { 0 {"OFF"} 1 {"ON (default)"} 2 {"ON"} default {"Unknown ($hagsVal)"} }
     Write-Host "  ✓  INFO      HAGS = $hagsLabel  (setup-dependent, no target value)" -ForegroundColor Cyan
     $global:_verifyOkCount++
 } catch {
@@ -206,14 +206,15 @@ try {
     # Without /v, "disabledynamictick" is localized (e.g., German: "Dynamischer Tick deaktiviert")
     # and English-only matching would fail on non-English Windows.
     $bcdOutput = bcdedit /enum "{current}" /v 2>&1 | Out-String
-    if ($bcdOutput -match "disabledynamictick\s+Yes") {
+    # Boolean values are localized (Yes/Ja/Oui/Sí/Sim) — match common forms.
+    if ($bcdOutput -match "disabledynamictick\s+(Yes|Ja|Oui|S[ií]|Sim)") {
         Write-Host "  ✓  OK        Dynamic Tick disabled" -ForegroundColor Green
         $global:_verifyOkCount++
     } else {
         Write-Host "  ✗  CHANGED   Dynamic Tick is ACTIVE (expected: disabled)" -ForegroundColor Yellow
         $global:_verifyChangedCount++
     }
-    if ($bcdOutput -match "useplatformtick\s+Yes") {
+    if ($bcdOutput -match "useplatformtick\s+(Yes|Ja|Oui|S[ií]|Sim)") {
         Write-Host "  ✓  OK        Platform Tick active" -ForegroundColor Green
         $global:_verifyOkCount++
     } else {

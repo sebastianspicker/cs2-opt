@@ -129,9 +129,9 @@ function Initialize-PhaseCounters {
     $global:_phaseFailed  = 0
 }
 
-function Add-PhaseApplied { $global:_phaseApplied++ }
-function Add-PhaseSkipped { $global:_phaseSkipped++ }
-function Add-PhaseFailed  { $global:_phaseFailed++ }
+function Add-PhaseApplied { if ($null -eq $global:_phaseApplied) { $global:_phaseApplied = 0 }; $global:_phaseApplied++ }
+function Add-PhaseSkipped { if ($null -eq $global:_phaseSkipped) { $global:_phaseSkipped = 0 }; $global:_phaseSkipped++ }
+function Add-PhaseFailed  { if ($null -eq $global:_phaseFailed) { $global:_phaseFailed = 0 }; $global:_phaseFailed++ }
 
 function Write-PhaseSummary {
     <#  Displays a summary box after a phase with applied/skipped/failed counts.  #>
