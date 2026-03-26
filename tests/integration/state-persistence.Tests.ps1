@@ -83,7 +83,7 @@ Describe "state.json persistence roundtrip" {
     It "Load-State throws when state.json is missing" {
         Remove-Item $CFG_StateFile -Force -ErrorAction SilentlyContinue
 
-        { Load-State $CFG_StateFile } | Should -Throw "*state.json missing*"
+        { Load-State $CFG_StateFile } | Should -Throw "*Settings file not found*"
     }
 
     It "state.json is valid JSON after save" {

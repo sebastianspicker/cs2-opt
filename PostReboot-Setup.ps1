@@ -84,7 +84,7 @@ Initialize-Log
 Write-Banner 3 3 "Normal Boot  ·  Driver · MSI · CS2"
 
 $startStep = Show-ResumePrompt $PHASE 13
-if ($startStep -gt 13) { Write-Info "Phase 3 already completed."; Read-Host "  [Enter]"; exit 0 }
+if ($startStep -gt 13) { Write-Info "Phase 3 already completed."; Remove-BackupLock; Read-Host "  [Enter]"; exit 0 }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 1 — INSTALL DRIVER  [T1]
@@ -328,7 +328,7 @@ if ($startStep -le 6) {
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 7 — RESERVED
 # ══════════════════════════════════════════════════════════════════════════════
-if ($startStep -le 7 -and -not (Test-StepDone $PHASE 7)) {
+if ($startStep -le 7) {
     Complete-Step $PHASE 7 "Reserved"
 }
 

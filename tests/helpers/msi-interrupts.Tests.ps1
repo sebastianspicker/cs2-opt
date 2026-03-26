@@ -112,7 +112,7 @@ Describe "Enable-DeviceMSI" {
             Enable-DeviceMSI
 
             # Only PCI device should be reported, not USB
-            $msiReports = $script:hostOutput | Where-Object { $_ -match "DRY-RUN.*Would enable MSI" }
+            $msiReports = $script:hostOutput | Where-Object { $_ -match "DRY-RUN.*MSISupported" }
             @($msiReports).Count | Should -Be 1
         }
     }

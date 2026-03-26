@@ -86,7 +86,9 @@ function Test-StepDone([int]$phase, [int]$stepNum) {
 
 function Show-ResumePrompt($phase, $totalSteps) {
     $prog = Load-Progress
-    if (-not $prog -or $prog.phase -ne $phase -or $prog.lastCompletedStep -eq 0) { return 1 }
+    if (-not $prog -or $prog.phase -ne $phase) { return 1 }
+    $hasSkipped = $prog.skippedSteps -and $prog.skippedSteps.Count -gt 0
+    if ($prog.lastCompletedStep -eq 0 -and -not $hasSkipped) { return 1 }
     # Consider both completed and skipped steps for resume position
     $lastProcessed = $prog.lastCompletedStep
     if ($prog.PSObject.Properties['lastSkippedStep'] -and $prog.lastSkippedStep -gt $lastProcessed) {
@@ -153,7 +155,7 @@ function Clear-Progress($phase = $null) {
     if ($null -eq $phase -or $prog.phase -eq $phase) {
         # Reset to empty progress rather than deleting the file — avoids race conditions
         # and makes intent clear (file exists but no steps are done)
-        $empty = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
+        $empty = [PSCustomObject]@{ phase=0; lastCompletedStep=0; lastSkippedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
         Save-Progress $empty
         Write-Debug "Progress reset$(if($phase){" (Phase $phase)"})"
     } else {

@@ -174,6 +174,7 @@ if (-not $state -or $startStep -eq 1) {
 } else {
     # Restore saved config but honor the fresh profile/DRY-RUN choice made above
     $SCRIPT:LogLevel = if ($state.logLevel) { $state.logLevel } else { "NORMAL" }
+    if ($SCRIPT:Profile -ne "CUSTOM") { $SCRIPT:LogLevel = "NORMAL" }
     # Profile and Mode were already set from user input at lines 86-103 — keep them
     # Only fall back to state values if user chose the same profile
     $fpsCap  = $state.fpsCap

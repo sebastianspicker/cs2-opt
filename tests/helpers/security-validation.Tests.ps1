@@ -137,7 +137,7 @@ Describe "Set-BootConfig security validation" {
         It "accepts valid key like disabledynamictick" {
             Set-BootConfig "disabledynamictick" "yes" "test"
 
-            Should -Invoke Write-Host -ParameterFilter { $Object -match "\[DRY-RUN\]" }
+            Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN" }
         }
     }
 
@@ -158,13 +158,13 @@ Describe "Set-BootConfig security validation" {
         It "accepts valid value like yes" {
             Set-BootConfig "testkey" "yes" "test"
 
-            Should -Invoke Write-Host -ParameterFilter { $Object -match "\[DRY-RUN\]" }
+            Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN" }
         }
 
         It "accepts braced value like {current}" {
             Set-BootConfig "testkey" "{current}" "test"
 
-            Should -Invoke Write-Host -ParameterFilter { $Object -match "\[DRY-RUN\]" }
+            Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN" }
         }
     }
 }

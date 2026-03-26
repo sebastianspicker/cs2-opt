@@ -300,8 +300,8 @@ function Remove-GpuDriverClean {
 
     foreach ($cp in $cachePaths) {
         if (Test-Path $cp) {
-            $items = Get-ChildItem $cp -Recurse -ErrorAction SilentlyContinue
-            $count = if ($items) { $items.Count } else { 0 }
+            $items = @(Get-ChildItem $cp -Recurse -File -ErrorAction SilentlyContinue)
+            $count = $items.Count
             Remove-Item $cp -Recurse -Force -ErrorAction SilentlyContinue
             Write-OK "Cache cleaned: $cp ($count items)"
         }

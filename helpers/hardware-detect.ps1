@@ -7,7 +7,7 @@
 function Get-RamInfo {
     <#  Returns actual RAM speed and capacity.  #>
     try {
-        $sticks = Get-CimInstance Win32_PhysicalMemory
+        $sticks = @(Get-CimInstance Win32_PhysicalMemory)
         $totalGB = [math]::Round(($sticks | Measure-Object Capacity -Sum).Sum / 1GB, 0)
         $speedMhz = ($sticks | Select-Object -First 1).Speed
         $configMhz = ($sticks | Select-Object -First 1).ConfiguredClockSpeed
@@ -78,7 +78,7 @@ function Get-NvidiaDriverVersion {
             $ver = "$major"
         }
         return @{ Version = $ver; Major = $major; Name = $gpu.Name }
-    } catch { return $null }
+    } catch { Write-Debug "NVIDIA driver detection error: $_"; return $null }
 }
 
 # Known problematic driver ranges (as of 2025/2026)
@@ -92,8 +92,8 @@ function Parse-BenchmarkOutput($text) {
     $pattern = '\[VProf\]\s*FPS:\s*Avg\s*=\s*([\d.]+)\s*,\s*P1\s*=\s*([\d.]+)'
     $m = [regex]::Matches($text, $pattern)
     if ($m.Count -eq 0) { return $null }
-    $avgs = @($m | ForEach-Object { [float]$_.Groups[1].Value })
-    $p1s  = @($m | ForEach-Object { [float]$_.Groups[2].Value })
+    $avgs = @($m | ForEach-Object { [float]::Parse($_.Groups[1].Value, [System.Globalization.CultureInfo]::InvariantCulture) })
+    $p1s  = @($m | ForEach-Object { [float]::Parse($_.Groups[2].Value, [System.Globalization.CultureInfo]::InvariantCulture) })
     return @{
         Avg    = [math]::Round(($avgs | Measure-Object -Average).Average, 1)
         P1     = [math]::Round(($p1s  | Measure-Object -Average).Average, 1)
@@ -190,7 +190,7 @@ function Get-ActiveNicGuid {
     if ($nic) {
         $guid = $nic.InterfaceGuid
         # Defense-in-depth: validate GUID format {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
-        if ($guid -and $guid -match '^\{[a-fA-F0-9\-]{36}\}$') {
+        if ($guid -and $guid -match '^\{[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\}$') {
             return $guid
         }
         Write-Warn "NIC GUID failed format validation: $guid"
@@ -203,21 +203,31 @@ function Get-ActiveNicGuid {
 
 function Get-IntelHybridCpuName {
     <#  Returns the CPU name string if this is an Intel 12th-gen-or-newer Core
-        (12xxx–19xxx series with suffix) or Intel Core Ultra CPU, or $null
-        otherwise. Used to gate Intel 12th-gen+ / Ultra-specific tweaks
-        (e.g., PowerThrottlingOff, thread_pool_option). Note: this is a coarse
-        heuristic and may include some non-hybrid (no E-core) SKUs.  #>
+        (12xxx–19xxx series with suffix) or Intel Core Ultra CPU, empty string ""
+        if the CPU was detected but is NOT an Intel hybrid, or $null if CPU
+        detection itself failed. Used to gate Intel 12th-gen+ / Ultra-specific
+        tweaks (e.g., PowerThrottlingOff, thread_pool_option). Note: this is a
+        coarse heuristic and may include some non-hybrid (no E-core) SKUs.
+
+        Return value semantics:
+          "Intel Core i9-12900K"  -> Intel hybrid detected (truthy)
+          ""                      -> CPU detected, not Intel hybrid (falsy, not $null)
+          $null                   -> detection failed (CIM error)
+    #>
     try {
         $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction Stop |
             Select-Object -First 1
         $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
-        if ($cpuName -and $cpuName -match "Intel" -and (
+        if (-not $cpuName) { return $null }
+        if ($cpuName -match "Intel" -and (
             $cpuName -match "\b1[2-9]\d{3}[A-Z]" -or  # 12th–19th gen Core-series (suffix required)
             $cpuName -match "\bUltra\b"                 # Core Ultra (Meteor Lake / Arrow Lake)
         )) {
             return $cpuName
         }
-        return $null
+        # CPU detected successfully but is not an Intel hybrid — return empty string
+        # (falsy but distinguishable from $null which means detection failed)
+        return ""
     } catch {
         Write-Debug "Intel 12th-gen+ CPU detection failed: $_"
         return $null

@@ -9,10 +9,15 @@
 #  Panels: Dashboard, Analyze, Optimize, Backup, Benchmark, Video, Settings
 #  Shared: Launch-Terminal, Save-SettingsToState
 
+$Script:DashboardLastLoad = [datetime]::MinValue
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Dashboard {
+    if (([datetime]::Now - $Script:DashboardLastLoad).TotalSeconds -lt 30) { return }
+    $Script:DashboardLastLoad = [datetime]::Now
+
     # Progress from progress.json
     try {
         $prog = Load-Progress
@@ -49,7 +54,11 @@ function Load-Dashboard {
                 (El "DashPerfDelta"   ).Foreground = if ($dAvg -gt 0) { New-Brush "#22c55e" } elseif ($dAvg -lt 0) { New-Brush "#ef4444" } else { New-Brush "#6b7280" }
             })
         } elseif ($hist -and $hist.Count -eq 1) {
-            $Window.Dispatcher.Invoke({ (El "DashPerfBaseline").Text = "Baseline: avg $($hist[0].avgFps) fps  1%low $($hist[0].p1Fps) fps" })
+            $Window.Dispatcher.Invoke({
+                (El "DashPerfBaseline").Text = "Baseline: avg $($hist[0].avgFps) fps  1%low $($hist[0].p1Fps) fps"
+                (El "DashPerfLatest").Text = ""
+                (El "DashPerfDelta").Text = ""
+            })
         }
     } catch { Write-Debug "Dashboard benchmark history load failed: $($_.Exception.Message)" }
 
@@ -341,6 +350,12 @@ function Load-Backup {
 })
 
 (El "BtnRestoreAll").Add_Click({
+    if (Test-BackupLock) {
+        [System.Windows.MessageBox]::Show(
+            "Another CS2 Optimization process is running. Wait for it to finish first.",
+            "Locked", "OK", "Warning")
+        return
+    }
     $r = [System.Windows.MessageBox]::Show("Restore ALL backed-up settings?`nThis will undo every change the suite made.","Restore All","YesNo","Warning")
     if ($r -eq "Yes") {
         try {
@@ -361,14 +376,24 @@ function Load-Backup {
 })
 
 (El "BtnRestoreStep").Add_Click({
+    if (Test-BackupLock) {
+        [System.Windows.MessageBox]::Show(
+            "Another CS2 Optimization process is running. Wait for it to finish first.",
+            "Locked", "OK", "Warning")
+        return
+    }
     $sel = (El "BackupGrid").SelectedItem
     if (-not $sel) { [System.Windows.MessageBox]::Show("Select a row first.","Restore Step"); return }
     $stepTitle = $sel.Step
     $r = [System.Windows.MessageBox]::Show("Restore all changes from:`n`"$stepTitle`"?","Restore Step","YesNo","Question")
     if ($r -eq "Yes") {
         try {
-            Restore-StepChanges $stepTitle
-            [System.Windows.MessageBox]::Show("Restore complete for:`n$stepTitle","Done")
+            $ok = Restore-StepChanges $stepTitle
+            if ($ok) {
+                [System.Windows.MessageBox]::Show("Restore complete for:`n$stepTitle","Done")
+            } else {
+                [System.Windows.MessageBox]::Show("Restore partially failed for:`n$stepTitle`n`nSome entries could not be restored. Check the log for details.","Restore Incomplete","OK","Warning")
+            }
             Load-Backup
         } catch { [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)","Restore Failed") }
     }
@@ -513,7 +538,7 @@ function Draw-BenchChart {
     $raw = (El "BenchVprof").Text.Trim()
     if ($raw -match "Avg\s*=\s*([\d.]+)") {
         $avg = [double]$Matches[1]
-        $cap = [math]::Max($CFG_FpsCap_Min, [int]($avg - [math]::Round($avg * $CFG_FpsCap_Percent)))
+        $cap = [math]::Max($CFG_FpsCap_Min, [math]::Floor($avg - [math]::Round($avg * $CFG_FpsCap_Percent)))
         (El "BenchCapLabel").Text = "→  Cap:"
         (El "BenchCapValue").Text = "$cap"
         $Script:UISync.LastCap = $cap
@@ -620,6 +645,8 @@ $Script:VideoPresets = @{
 }
 
 function Get-ResolvedVideoTier {
+    # Auto tier: HIGH for NVIDIA (detected via driver version), MID for AMD/Intel
+    # The suite is NVIDIA-focused; AMD/Intel users should select tier manually
     param([string]$TierSel)
     if ($TierSel -eq "Auto") {
         $nv = Get-NvidiaDriverVersion
@@ -658,7 +685,7 @@ function Refresh-VideoGrid {
 
     (El "VideoGrid").ItemsSource = $rows
     $diffs = @($rows | Where-Object { $_.StatusLabel -notmatch "OK" }).Count
-    (El "VideoSummary").Text = "$diffs setting(s) differ from $tier-tier recommendation"
+    (El "VideoSummary").Text = "$diffs setting(s) need attention for $tier-tier recommendation"
 }
 
 (El "VideoTierPicker").Add_SelectionChanged({ if ((El "VideoTierPicker").SelectedItem) { Refresh-VideoGrid } })
@@ -707,7 +734,7 @@ $writeVideo = {
             $lines += "    `"$($kv.Key)`"`t`"$($kv.Value)`""
         }
         $lines += "}"
-        $lines | Set-Content $Script:VideoTxtPath -Encoding UTF8
+        [System.IO.File]::WriteAllLines($Script:VideoTxtPath, [string[]]$lines, [System.Text.UTF8Encoding]::new($false))
 
         [System.Windows.MessageBox]::Show("video.txt written ($tier tier).`nOriginal saved as video.txt.bak`n`n$Script:VideoTxtPath","Done")
         Load-Video
@@ -754,7 +781,12 @@ function Save-SettingsToState {
         $state | Add-Member -NotePropertyName "profile" -NotePropertyValue $prof -Force
         $state | Add-Member -NotePropertyName "mode"    -NotePropertyValue $mode -Force
         Save-JsonAtomic -Data $state -Path $CFG_StateFile
-    } catch { Write-Debug "Settings state save failed: $($_.Exception.Message)" }
+    } catch {
+        Write-Debug "Settings state save failed: $($_.Exception.Message)"
+        [System.Windows.MessageBox]::Show(
+            "Failed to save settings:`n$($_.Exception.Message)`n`nYour profile/mode change was NOT persisted. Terminal operations may use the previous settings.",
+            "Settings Save Error", "OK", "Warning")
+    }
 }
 
 foreach ($rb in @("RadioSafe","RadioRecommended","RadioCompetitive","RadioCustom")) {

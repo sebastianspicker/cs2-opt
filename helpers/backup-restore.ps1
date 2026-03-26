@@ -207,12 +207,12 @@ function Backup-PowerPlan {
     <#  Records the currently active power plan GUID before switching.
         Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$StepTitle)
-    if ($SCRIPT:DryRun) { Write-Host "  [DRY-RUN] Would backup current power plan" -ForegroundColor Magenta; return }
+    if ($SCRIPT:DryRun) { Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Would backup current power plan" -ForegroundColor Magenta; return }
     $originalGuid = $null
     $originalName = $null
     try {
         $activeOutput = powercfg /getactivescheme 2>&1
-        if ($activeOutput -match "([a-f0-9-]{36})") {
+        if ($activeOutput -match "([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})") {
             $originalGuid = $Matches[1]
             if ($activeOutput -match "\((.+)\)\s*$") {
                 $originalName = $Matches[1]
@@ -471,8 +471,9 @@ function Restore-DrsSettings {
     .DESCRIPTION
         For each backed up setting:
         - If it existed before: writes the previous value back via DRS
-        - If it didn't exist: writes 0 (default) as fallback
+        - If it didn't exist: skips (no previous value to restore)
         If the profile was created by us, deletes it entirely.
+        Returns $true on success, $false on failure.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Entry',
         Justification = 'Entry is captured by the Invoke-DrsSession scriptblock closure')]
@@ -481,10 +482,14 @@ function Restore-DrsSettings {
     if (-not (Initialize-NvApiDrs)) {
         Write-Warn "Cannot restore DRS settings — nvapi64.dll unavailable (driver uninstalled or 32-bit PowerShell)."
         Write-Warn "To restore DRS settings: reinstall the NVIDIA driver, then re-run Restore."
-        return
+        return $false
     }
 
     try {
+        # Use a single-element array as a mutable container that survives child scope
+        # created by & $Action inside Invoke-DrsSession (scriptblock closures in PS
+        # capture by reference, but & creates a new scope for simple variable writes).
+        $result = @{ ok = $true }
         Invoke-DrsSession -Action {
             param($session)
 
@@ -497,6 +502,7 @@ function Restore-DrsSettings {
             }
             if ($drsProfile -eq [IntPtr]::Zero) {
                 Write-Warn "DRS restore: CS2 profile not found — may have been deleted already."
+                $result.ok = $false
                 return
             }
 
@@ -507,6 +513,7 @@ function Restore-DrsSettings {
                     Write-OK "Deleted DRS profile: $($Entry.profile)"
                 } catch {
                     Write-Warn "DRS restore: could not delete profile — $_"
+                    $result.ok = $false
                 }
             } else {
                 # Profile existed before — restore individual settings
@@ -536,14 +543,17 @@ function Restore-DrsSettings {
                     Write-OK "Restored $restored DRS settings in profile '$($Entry.profile)'"
                 } else {
                     Write-Warn "DRS restore: $restored restored, $errors failed in profile '$($Entry.profile)'"
+                    $result.ok = $false
                 }
                 if ($skipped -gt 0) {
                     Write-Info "DRS restore: $skipped setting(s) were new (no previous value) — left as-is."
                 }
             }
         }
+        return $result.ok
     } catch {
         Write-Warn "DRS restore failed: $_"
+        return $false
     }
 }
 
@@ -668,6 +678,13 @@ function Restore-StepChanges {
                     $restoreOk++
                 }
                 "service" {
+                    # SECURITY: Validate service name — a tampered backup.json could inject
+                    # path traversal or special characters into registry paths and WMI queries.
+                    if ($e.name -notmatch '^[a-zA-Z0-9_\-\. ]+$' -or $e.name.Length -gt 256) {
+                        Write-Warn "Service restore skipped — invalid service name: '$($e.name)'"
+                        $restoreFail++
+                        continue
+                    }
                     $startMap = @{ "Auto"="Automatic"; "Manual"="Manual"; "Disabled"="Disabled"; "Auto Delayed"="AutomaticDelayedStart" }
                     $mapped = if ($startMap[$e.originalStartType]) { $startMap[$e.originalStartType] } else { $e.originalStartType }
                     # Boot/System/Unknown are kernel driver start types — Set-Service cannot change them
@@ -735,7 +752,7 @@ function Restore-StepChanges {
                     # Delete any FPSHeaven/CS2 Optimized plans we created
                     $allPlans = powercfg /list 2>&1
                     foreach ($line in $allPlans) {
-                        if ($line -match "([a-f0-9-]{36})") {
+                        if ($line -match "([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})") {
                             $planGuid = $Matches[1]
                             if (($line -match "FPSHeaven" -or $line -match "CS2 Optimized") -and $planGuid -ne $e.originalGuid) {
                                 powercfg /delete $planGuid 2>&1 | Out-Null
@@ -746,10 +763,11 @@ function Restore-StepChanges {
                     $restoreOk++
                 }
                 "drs" {
-                    Restore-DrsSettings -Entry $e
-                    $restoreOk++
+                    $drsResult = Restore-DrsSettings -Entry $e
+                    if ($drsResult -eq $false) { $restoreFail++ } else { $restoreOk++ }
                 }
                 "scheduledtask" {
+                    $taskRestoreFailed = $false
                     if (-not $e.existed) {
                         # Task didn't exist before we created it — remove it entirely
                         try {
@@ -762,7 +780,10 @@ function Restore-StepChanges {
                                 Unregister-ScheduledTask -TaskName $e.taskName -Confirm:$false
                                 Write-OK "Removed scheduled task: $($e.taskName)"
                             }
-                        } catch { Write-Warn "Could not remove scheduled task $($e.taskName): $_" }
+                        } catch {
+                            Write-Warn "Could not remove scheduled task $($e.taskName): $_"
+                            $taskRestoreFailed = $true
+                        }
                         if ($e.scriptPath -and (Test-Path $e.scriptPath)) {
                             Remove-Item $e.scriptPath -Force -ErrorAction SilentlyContinue
                             Write-OK "Removed: $($e.scriptPath)"
@@ -776,6 +797,7 @@ function Restore-StepChanges {
                             $task = Get-ScheduledTask -TaskName $e.taskName -ErrorAction SilentlyContinue
                             if (-not $task) {
                                 Write-Warn "Scheduled task '$($e.taskName)' no longer exists — cannot restore."
+                                $taskRestoreFailed = $true
                             } elseif ($shouldBeEnabled -and $task.State -eq "Disabled") {
                                 Enable-ScheduledTask -TaskName $e.taskName -ErrorAction Stop | Out-Null
                                 Write-OK "Re-enabled scheduled task: $($e.taskName)"
@@ -785,9 +807,12 @@ function Restore-StepChanges {
                             } else {
                                 Write-Info "Scheduled task '$($e.taskName)' already in correct state — kept."
                             }
-                        } catch { Write-Warn "Could not restore task $($e.taskName): $_" }
+                        } catch {
+                            Write-Warn "Could not restore task $($e.taskName): $_"
+                            $taskRestoreFailed = $true
+                        }
                     }
-                    $restoreOk++
+                    if ($taskRestoreFailed) { $restoreFail++ } else { $restoreOk++ }
                 }
                 "nic_adapter" {
                     try {
@@ -807,11 +832,15 @@ function Restore-StepChanges {
                 }
                 "qos_uro" {
                     # Remove QoS policies that were created
+                    $qosFailed = $false
                     foreach ($policyName in $e.policies) {
                         try {
-                            Remove-NetQosPolicy -Name $policyName -Confirm:$false -ErrorAction SilentlyContinue
+                            Remove-NetQosPolicy -Name $policyName -Confirm:$false -ErrorAction Stop
                             Write-OK "Removed QoS policy: $policyName"
-                        } catch { Write-Warn "Could not remove QoS policy '$policyName': $_" }
+                        } catch {
+                            Write-Warn "Could not remove QoS policy '$policyName': $_"
+                            $qosFailed = $true
+                        }
                     }
                     # Restore URO state
                     if ($e.uroState -and $e.uroState -ne "n/a") {
@@ -821,10 +850,11 @@ function Restore-StepChanges {
                                 Write-OK "Restored URO state: $($e.uroState)"
                             } else {
                                 Write-Debug "URO restore: netsh returned error — $uroOut"
+                                $qosFailed = $true
                             }
-                        } catch { Write-Debug "URO restore failed: $_" }
+                        } catch { Write-Debug "URO restore failed: $_"; $qosFailed = $true }
                     }
-                    $restoreOk++
+                    if ($qosFailed) { $restoreFail++ } else { $restoreOk++ }
                 }
                 "defender" {
                     try {

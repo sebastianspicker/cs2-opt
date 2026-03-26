@@ -94,18 +94,18 @@ function Invoke-CheckWindowsGaming {
 
     # Fast Startup
     $fs = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" "HiberbootEnabled"
-    $st = if ($fs -eq 0) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "Boot" "Fast Startup" $(if ($fs -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-23" "Prevents MSI interrupt changes persisting across shutdown"))
+    $st = if ($null -ne $fs -and $fs -eq 0) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Boot" "Fast Startup" $(if ($null -ne $fs -and $fs -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-23" "Prevents MSI interrupt changes persisting across shutdown"))
 
     # Game Mode
     $gm = Get-RegVal "HKCU:\Software\Microsoft\GameBar" "AutoGameModeEnabled"
-    $st = if ($gm -eq 1) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "Gaming" "Game Mode" $(if ($gm -eq 1) {"Enabled"} else {"Disabled/Not set"}) "Enabled (1)" $st "P1-12" "WU deferral + MMCSS Games scheduling path"))
+    $st = if ($gm -eq 1 -or $null -eq $gm) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Gaming" "Game Mode" $(if ($gm -eq 1 -or $null -eq $gm) {"Enabled"} else {"Disabled"}) "Enabled (1)" $st "P1-12" "WU deferral + MMCSS Games scheduling path"))
 
     # Game DVR
     $dvr = Get-RegVal "HKCU:\System\GameConfigStore" "GameDVR_Enabled"
-    $st = if ($dvr -eq 0) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "Gaming" "Game DVR" $(if ($dvr -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-31" "Background recording steals GPU time"))
+    $st = if ($null -ne $dvr -and $dvr -eq 0) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Gaming" "Game DVR" $(if ($null -ne $dvr -and $dvr -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-31" "Background recording steals GPU time"))
 
     # MPO
     $mpo = Get-RegVal "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode"
@@ -173,8 +173,8 @@ function Invoke-CheckSystemLatency {
 
     # FTH
     $fth = Get-RegVal "HKLM:\SOFTWARE\Microsoft\FTH" "Enabled"
-    $st = if ($fth -eq 0) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "System" "Fault Tolerant Heap" $(if ($fth -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-27" "Prevents 10-15% heap slowdown after crashes"))
+    $st = if ($null -ne $fth -and $fth -eq 0) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "System" "Fault Tolerant Heap" $(if ($null -ne $fth -and $fth -eq 0) {"Disabled"} else {"Enabled"}) "Disabled (0)" $st "P1-27" "Prevents 10-15% heap slowdown after crashes"))
 
     # Automatic Maintenance
     $maint = Get-RegVal "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance" "MaintenanceDisabled"
@@ -207,12 +207,14 @@ function Invoke-CheckSystemLatency {
     $r.Add((New-CheckItem "Windows" "MMCSS" "Games Task Priority" "Pri=$gPri Sched=$gSch GPU=$gGpu" "6 / High / 8" $st "P1-27" "MMCSS Games scheduling class for foreground game threads"))
 
     # Boot config (bcdedit) — read-only query
+    # Use /v to get canonical element names (without /v, names are localized).
+    # Boolean values are also localized (Yes/Ja/Oui/Sí/Sim) — match common forms.
     try {
-        $bcdOutput = bcdedit /enum "{current}" 2>&1 | Out-String
-        $dynTick = if ($bcdOutput -match "disabledynamictick\s+Yes") { "OK" } else { "WARN" }
+        $bcdOutput = bcdedit /enum "{current}" /v 2>&1 | Out-String
+        $dynTick = if ($bcdOutput -match "disabledynamictick\s+(Yes|Ja|Oui|S[ií]|Sim)") { "OK" } else { "WARN" }
         $r.Add((New-CheckItem "Windows" "Boot" "Dynamic Tick" $(if ($dynTick -eq "OK") {"Disabled"} else {"Active"}) "Disabled" $dynTick "P1-10" "Adaptive timer causes irregular CPU wakeups — frametime jitter"))
 
-        $platTick = if ($bcdOutput -match "useplatformtick\s+Yes") { "OK" } else { "WARN" }
+        $platTick = if ($bcdOutput -match "useplatformtick\s+(Yes|Ja|Oui|S[ií]|Sim)") { "OK" } else { "WARN" }
         $r.Add((New-CheckItem "Windows" "Boot" "Platform Tick" $(if ($platTick -eq "OK") {"Active"} else {"Inactive"}) "Active" $platTick "P1-10" "Hardware timer instead of software timer"))
     } catch { Write-Debug "bcdedit check failed: $_" }
 
@@ -271,6 +273,7 @@ function Invoke-CheckNetwork {
     $r.Add((New-CheckItem "Network" "QoS" "QoS NLA Bypass" $(if ($nla -eq "1") {"Enabled"} else {"Not set"}) "1" $st "P1-16" "Required for DSCP EF=46 QoS to function on unidentified networks"))
 
     # URO (Win11 only)
+    # NOTE: netsh output is locale-dependent; "disabled" may not match on non-English Windows
     try {
         $build = [System.Environment]::OSVersion.Version.Build
         if ($build -ge 22000) {
@@ -295,12 +298,13 @@ function Invoke-CheckServices {
         "XboxNetApiSvc"  = "Xbox Network API"
         "XboxGipSvc"     = "Xbox Accessory Mgmt"
     }
+    $xboxSvcs = if ($CFG_XboxServices) { $CFG_XboxServices } else { @("XblAuthManager","XblGameSave","XboxNetApiSvc","XboxGipSvc") }
     $checks = @(
         @{ Name="SysMain"; Label="SysMain (Superfetch)"; Target="Disabled" }
         @{ Name="WSearch"; Label="Windows Search";       Target="Disabled" }
-    ) + $(if ($CFG_XboxServices) { $CFG_XboxServices | ForEach-Object {
+    ) + $($xboxSvcs | ForEach-Object {
         @{ Name=$_; Label=$(if ($xboxLabels[$_]) { $xboxLabels[$_] } else { $_ }); Target="Disabled" }
-    } } else { @() }) + @(
+    }) + @(
         @{ Name="qWave";  Label="qWave (QoS probe)";    Target="Disabled" }
     )
 

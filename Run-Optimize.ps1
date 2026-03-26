@@ -75,8 +75,8 @@ Ensure-Dir $CFG_WorkDir
 Ensure-Dir $CFG_LogDir
 
 $TOTAL_STEPS = 38
-$PHASE = 1
 $SCRIPT:PhaseTotal = $TOTAL_STEPS
+$PHASE = 1
 
 try {
     Initialize-PhaseCounters
