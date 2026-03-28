@@ -44,15 +44,18 @@ function Invoke-Async {
         }
         if ($capturedHandle.IsCompleted) {
             $timer.Stop()
-            try { $capturedRs.EndInvoke($capturedHandle) } catch { $Script:UISync.AsyncError = $_.Exception.Message }
+            $errorOccurred = $false
+            try { $capturedRs.EndInvoke($capturedHandle) } catch { $Script:UISync.AsyncError = $_.Exception.Message; $errorOccurred = $true }
             finally { $capturedRs.Dispose() }
-            if ($Script:UISync.AsyncError) {
+            if ($errorOccurred) {
                 $Window.Dispatcher.Invoke({
                     [System.Windows.MessageBox]::Show("Background task error: $($Script:UISync.AsyncError)", "Error", "OK", "Error")
                 })
                 $Script:UISync.AsyncError = $null
+            } else {
+                & $capturedDone
             }
-            & $capturedDone
+            $Script:AsyncTimers.Remove($timer)
         }
     }.GetNewClosure())
     $Script:AsyncTimers.Add($timer)

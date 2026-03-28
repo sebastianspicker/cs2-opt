@@ -69,6 +69,8 @@ The problem: not all X3D chips have V-Cache on all cores.
 | 5700X3D, 5800X3D, 7800X3D, 9800X3D | 1 | All cores — no pinning needed |
 | 7900X3D, 7950X3D, 9900X3D, 9950X3D | 2 | **CCD0 only** — CCD1 is plain cache |
 
+**9900X3D asymmetric CCD fix:** The 9900X3D has an 8+4 core layout (8 cores on CCD0 with V-Cache, 4 cores on CCD1). Earlier code assumed all dual-CCD X3D chips had symmetric CCDs (e.g., 8+8 or 6+6). The suite now detects the 9900X3D specifically and uses `ccd0Cores = 8` for the correct affinity mask, instead of `Floor(totalCores / 2) = 6`.
+
 On a 7950X3D, cores 0–7 (CCD0) have 96 MB of L3 cache per CCD. Cores 8–15 (CCD1) have 32 MB of standard L3. If CS2's game thread runs on CCD1, it has one-third the cache capacity, leading to significantly more cache misses during game state lookups.
 
 AMD's own game detection heuristic in AGESA firmware is supposed to route CS2 to CCD0 automatically. In practice, as of early 2026, this heuristic is unreliable — it can route CS2 to CCD1 during the initial seconds of a match, and Windows thread migration can move threads between CCDs during gameplay.

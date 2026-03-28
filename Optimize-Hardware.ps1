@@ -153,12 +153,22 @@ if ($startStep -le 15) {
                 # Disable Windows Update service
                 Stop-Service wuauserv -Force -ErrorAction SilentlyContinue
                 Set-Service wuauserv -StartupType Disabled -ErrorAction SilentlyContinue
-                Write-OK "Windows Update service (wuauserv) disabled."
+                $wuCheck = (Get-Service wuauserv -ErrorAction SilentlyContinue).StartType
+                if ($wuCheck -eq 'Disabled') {
+                    Write-OK "Windows Update service (wuauserv) disabled."
+                } else {
+                    Write-Warn "wuauserv could not be disabled (StartType: $wuCheck). May require TrustedInstaller or registry override."
+                }
 
                 # Disable Update Orchestrator
                 Stop-Service UsoSvc -Force -ErrorAction SilentlyContinue
                 Set-Service UsoSvc -StartupType Disabled -ErrorAction SilentlyContinue
-                Write-OK "Update Orchestrator (UsoSvc) disabled."
+                $usoCheck = (Get-Service UsoSvc -ErrorAction SilentlyContinue).StartType
+                if ($usoCheck -eq 'Disabled') {
+                    Write-OK "Update Orchestrator (UsoSvc) disabled."
+                } else {
+                    Write-Warn "UsoSvc could not be disabled (StartType: $usoCheck). May require TrustedInstaller or registry override."
+                }
 
                 # Disable Windows Update Medic Service
                 # Note: WaaSMedicSvc is TrustedInstaller-protected on most Windows versions.
@@ -209,28 +219,51 @@ if ($startStep -le 16) {
         -Undo "Re-enable EEE via Device Manager -> NIC -> Advanced; netsh int udp set global uro=enabled; Remove-NetQosPolicy -Name CS2_UDP_Ports,CS2_App -Confirm:\$false; remove RSS registry entries; set DisabledComponents=0 in HKLM:\...Tcpip6\Parameters" `
         -Action {
             # ── Adapter-level properties (EEE, Flow Control, Interrupt Moderation, Buffers) ─
+            # DisplayName varies by vendor: Intel uses "EEE", Realtek uses "Energy Efficient Ethernet".
+            # Try the primary name first; on failure try the alternate (Realtek-style) name.
             $nic = $null
             try {
                 $nic = Get-ActiveNicAdapter
                 if ($nic) {
                     Write-OK "Adapter: $($nic.Name) — $($nic.InterfaceDescription)"
+                    $isRealtek = $nic.InterfaceDescription -match "Realtek|RTL"
+
+                    # 5 GbE NICs (e.g., RTL8126) benefit from larger buffers
+                    $effectiveTweaks = $CFG_NIC_Tweaks.Clone()
+                    if ($nic.Speed -and $nic.Speed -ge 5000000000) {
+                        $effectiveTweaks["ReceiveBuffers"] = "2048"
+                        $effectiveTweaks["TransmitBuffers"] = "2048"
+                        Write-Info "5+ GbE NIC detected ($('{0:N1}' -f ($nic.Speed / 1e9)) Gbps) — using larger buffers (2048)"
+                    }
+
                     if (-not $SCRIPT:DryRun) {
-                        # Backup current NIC adapter property values before modification
-                        foreach ($t in $CFG_NIC_Tweaks.GetEnumerator()) {
+                        foreach ($t in $effectiveTweaks.GetEnumerator()) {
+                            # Try primary name, then alternate if primary fails
+                            $displayName = $t.Key
                             $origProp = Get-NetAdapterAdvancedProperty -Name $nic.Name `
-                                -DisplayName $t.Key -ErrorAction SilentlyContinue
+                                -DisplayName $displayName -ErrorAction SilentlyContinue
+                            if (-not $origProp -and $CFG_NIC_Tweaks_AltNames.ContainsKey($t.Key)) {
+                                $displayName = $CFG_NIC_Tweaks_AltNames[$t.Key]
+                                $origProp = Get-NetAdapterAdvancedProperty -Name $nic.Name `
+                                    -DisplayName $displayName -ErrorAction SilentlyContinue
+                            }
                             if ($origProp) {
                                 Backup-NicAdapterProperty -AdapterName $nic.Name `
-                                    -PropertyName $t.Key -OriginalValue $origProp.DisplayValue `
+                                    -PropertyName $displayName -OriginalValue $origProp.DisplayValue `
                                     -PropertyType "DisplayName" -StepTitle $SCRIPT:CurrentStepTitle
                             }
-                            Set-NetAdapterAdvancedProperty -Name $nic.Name -DisplayName $t.Key `
-                                -DisplayValue $t.Value -ErrorAction SilentlyContinue
-                            Write-OK "NIC: $($t.Key) = $($t.Value)"
+                            $nicResult = Set-NetAdapterAdvancedProperty -Name $nic.Name -DisplayName $displayName `
+                                -DisplayValue $t.Value -ErrorAction SilentlyContinue -PassThru
+                            if ($nicResult) {
+                                Write-OK "NIC: $displayName = $($t.Value)"
+                            } else {
+                                Write-Sub "NIC: $($t.Key) — not exposed by this adapter (skipped)"
+                            }
                         }
                     } else {
-                        foreach ($t in $CFG_NIC_Tweaks.GetEnumerator()) {
-                            Write-Host "  [DRY-RUN] Would set NIC $($nic.Name): $($t.Key) = $($t.Value)" -ForegroundColor Magenta
+                        foreach ($t in $effectiveTweaks.GetEnumerator()) {
+                            $name = if ($isRealtek -and $CFG_NIC_Tweaks_AltNames.ContainsKey($t.Key)) { $CFG_NIC_Tweaks_AltNames[$t.Key] } else { $t.Key }
+                            Write-Host "  [DRY-RUN] Would set NIC $($nic.Name): $name = $($t.Value)" -ForegroundColor Magenta
                         }
                     }
 
@@ -343,7 +376,7 @@ if ($startStep -le 16) {
                     if ($existing) { $existingPolicies += $pName }
                 }
                 # URO state was captured above BEFORE the disable call
-                Backup-QosAndUro -PolicyNames @("CS2_UDP_Ports", "CS2_App") `
+                Backup-QosAndUro -PolicyNames $existingPolicies `
                     -UroState $currentUro -StepTitle $SCRIPT:CurrentStepTitle
 
                 # Port-based policy: CS2 default game ports 27015–27036 UDP

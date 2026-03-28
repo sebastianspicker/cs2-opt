@@ -148,6 +148,8 @@ if ($startStep -le 34) {
                         $optLines += "$($kv.Key) $($kv.Value)"
                     }
                     if (-not $SCRIPT:DryRun) {
+                        # Back up existing optimization.cfg before overwriting
+                        if (Test-Path $optPath) { Copy-Item $optPath "$optPath.bak" -Force }
                         # Use BOM-less UTF-8 — PS 5.1's -Encoding UTF8 adds a BOM (EF BB BF)
                         # which can corrupt the first line if Source 2 doesn't skip it.
                         [System.IO.File]::WriteAllLines($optPath, $optLines, [System.Text.UTF8Encoding]::new($false))
@@ -250,7 +252,7 @@ if ($startStep -le 34) {
                     # localconfig.vdf is a per-user Valve Data Format file storing
                     # per-app Steam settings. CS2 App ID = 730.
                     $lcPath = Get-ChildItem "$steamPath\userdata\*\config\localconfig.vdf" `
-                        -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+                        -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
                     if ($lcPath -and (Test-Path $lcPath)) {
                         $lc = Get-Content $lcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
                         # VDF is nested text with recursive braces. A flat regex like

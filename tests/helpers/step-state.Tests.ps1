@@ -188,14 +188,13 @@ Describe "Clear-Progress" {
         }
     }
 
-    It "does not reset progress for a different phase" {
+    It "resets progress even for a different phase (cross-phase re-run)" {
         Complete-Step -phase 1 -stepNum 5 -stepName "P1 Step 5"
 
-        Mock Write-Warn {}
         Clear-Progress 3
 
-        # Phase 1 progress should still be intact
-        Test-StepDone -phase 1 -stepNum 5 | Should -Be $true
+        # Cross-phase reset: progress should be cleared so the new phase starts fresh
+        Test-StepDone -phase 1 -stepNum 5 | Should -Be $false
     }
 
     It "resets all progress when phase is null" {

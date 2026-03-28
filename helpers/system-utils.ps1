@@ -105,12 +105,25 @@ function Save-State($obj, $path) {
 
 function Load-State($path) {
     if (-not (Test-Path $path)) { throw "Settings file not found at '$path' — run Phase 1 first (START.bat -> [1])." }
-    # -ErrorAction Stop ensures Get-Content failures are terminating (caught by callers' catch blocks)
-    # regardless of the global $ErrorActionPreference setting.
-    $s = Get-Content $path -ErrorAction Stop | ConvertFrom-Json
+    # -Raw ensures the entire file is read as a single string (consistent with backup-restore.ps1).
+    # Without -Raw, multi-line JSON could be split into a string array, causing ConvertFrom-Json to
+    # receive individual lines instead of a complete JSON document.
+    $raw = Get-Content $path -Raw -ErrorAction Stop
+    try {
+        $s = $raw | ConvertFrom-Json
+    } catch {
+        $corruptPath = "$path.corrupt.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+        try { Copy-Item $path $corruptPath -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted state file." }
+        Write-Warn "State file corrupt — preserved as $corruptPath"
+        throw "State file corrupt — preserved as $corruptPath"
+    }
     $SCRIPT:Mode     = $s.mode
     $SCRIPT:LogLevel = if ($s.logLevel) { $s.logLevel } else { "NORMAL" }
     $SCRIPT:Profile  = if ($s.profile) { $s.profile } else { "RECOMMENDED" }
+    if (-not $SCRIPT:Mode) {
+        Write-Debug "Load-State: mode was null/empty — defaulting to CONTROL"
+        $SCRIPT:Mode = "CONTROL"
+    }
     $SCRIPT:DryRun   = ($SCRIPT:Mode -eq "DRY-RUN")
     return $s
 }
@@ -121,7 +134,7 @@ function Initialize-ScriptDefaults {
     if (Test-Path $CFG_StateFile) {
         try {
             # -ErrorAction Stop ensures Get-Content failures throw into the catch block.
-            $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
+            $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
             $SCRIPT:Mode     = $st.mode
             $SCRIPT:LogLevel = if ($st.logLevel) { $st.logLevel } else { "NORMAL" }
             $SCRIPT:Profile  = if ($st.profile) { $st.profile } else { "RECOMMENDED" }
@@ -256,6 +269,7 @@ function Set-ClipboardSafe {
 }
 
 function Clear-Dir($path, $label) {
+    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Clear-Dir skipped for $Path"; return 0 }
     if (-not (Test-Path $path)) { Write-Debug "${label}: not found ($path)"; return 0 }
     $items = Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue
     $files = @($items | Where-Object { -not $_.PSIsContainer })
@@ -396,7 +410,9 @@ function Test-ServiceCheck {
     )
     try {
         $svc = Get-Service -Name $ServiceName -ErrorAction Stop
-        $rawStartType = (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'").StartMode
+        # Escape single quotes in the service name to prevent WQL injection
+        $escapedName = $ServiceName -replace "'", "''"
+        $rawStartType = (Get-CimInstance Win32_Service -Filter "Name='$escapedName'").StartMode
         # WMI returns "Auto" but Set-Service uses "Automatic" — normalize for comparison
         $startType = switch ($rawStartType) {
             "Auto"         { "Automatic" }

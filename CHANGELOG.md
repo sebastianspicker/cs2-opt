@@ -10,6 +10,24 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- Phase 3 Step 7: VBS / Core Isolation (Memory Integrity) disable — detects HVCI via `Win32_DeviceGuard`, disables via registry, warns about FACEIT/Vanguard dependency. Replaces the previously reserved step slot.
+- DRS profile: rBAR Enable (`983226`) + rBAR Options (`983227`) — per-application Resizable BAR for RTX 30/40/50
+- NIC: RSS master switch (`*RSS`) check — creates/enables if absent or disabled (some Realtek drivers ship with `*RSS=0`, silently ignoring all RSS sub-parameters)
+- NIC: speed-aware RSS queue count — 5+ GbE NICs (e.g., RTL8126) get 8 queues instead of 4
+- NIC: DisplayName fallback for Realtek NICs — tries Intel-style names first, falls back to Realtek-style (`"Energy Efficient Ethernet"` instead of `"EEE"`)
+- NIC: 5 GbE buffer sizing — `ReceiveBuffers = 2048` for NICs at 5+ Gbps link speed
+- System analysis: WHEA error check (PBO/CO stability indicator — warns if errors in last 24h)
+- Process priority: 9900X3D asymmetric CCD mask — 8+4 layout detected per-model instead of assuming symmetric `Floor(totalCores/2)`
+- NVIDIA driver: laptop GPU `psid`/`pfid` entries for RTX 30/40/50 Laptop series
+- Debloat: `Microsoft.Windows.PhoneLink` (Win11 23H2+ renamed package, alongside existing `Microsoft.YourPhone`)
+
+### Changed
+- DRS profile: removed `279476686` (Variable refresh rate) — not present in NPI, likely inert; 6 remaining G-SYNC/VRR settings cover all paths
+- DRS profile: removed `1074665807` (CUDA Force P2 State) — undocumented duplicate; `1343646814` (CUDA_STABLE_PERF_LIMIT) handles same override
+- DRS profile: `Trilinear optimization` name corrected — value `0` means ON (driver perf shortcut enabled), not OFF
+- Power plan: PCIe ASPM GUIDs fixed — previous GUIDs were incorrect, meaning ASPM disable was never applied. Now uses correct subgroup `501a4d13-...` and setting `ee12f906-...`
+
+### Added (previous — initial release)
 - `helpers/process-priority.ps1` — replaces Process Lasso (final external tool eliminated). IFEO PerfOptions for persistent High CPU priority; scheduled task for dual-CCD X3D affinity pinning (7900X3D/7950X3D/9900X3D/9950X3D)
 - `helpers/power-plan.ps1` — replaces FPSHeaven `.pow` binary import with native `powercfg` calls. Fixed 4 bugs in the original plan (passive cooling, AMD PROCTHROTTLEMIN, duty cycling, PERFAUTONOMOUS)
 - `helpers/nvidia-drs.ps1` + `helpers/nvidia-profile.ps1` — direct `nvapi64.dll` DRS write via C# `Add-Type`, replacing NVIDIA Profile Inspector dependency. 52 DWORD settings decoded and written to DRS binary database

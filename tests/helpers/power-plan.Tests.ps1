@@ -25,11 +25,11 @@ AfterAll {
 Describe "Power Plan GUID Constants" {
 
     It "defines PCIe ASPM subgroup GUID" {
-        $PP_SUB_PCIE | Should -Be "ee12f906-d277-404b-b6da-e5fa1a576df5"
+        $PP_SUB_PCIE | Should -Be "501a4d13-42af-4429-9fd1-a8218c268e20"
     }
 
     It "defines ASPM setting GUID" {
-        $PP_ASPM | Should -Be "501a4d13-42af-4429-9fd1-a8218c268e20"
+        $PP_ASPM | Should -Be "ee12f906-d277-404b-b6da-e5fa1a576df5"
     }
 
     It "defines processor subgroup GUID" {

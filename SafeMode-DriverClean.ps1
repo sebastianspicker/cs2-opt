@@ -32,6 +32,7 @@
 #>
 
 $ErrorActionPreference = "Continue"
+Set-StrictMode -Version Latest
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -55,8 +56,8 @@ try {
     try {
         $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
                Where-Object { $_.Status -eq "OK" } | Select-Object -First 1
-        if ($gpu.Name -match "AMD|Radeon") { $detectedGpu = "4" }
-        elseif ($gpu.Name -match "Intel") { $detectedGpu = "5" }
+        if ($gpu.Name -match "AMD|Radeon") { $detectedGpu = "3" }
+        elseif ($gpu.Name -match "Intel") { $detectedGpu = "4" }
     } catch {}
     $state = [PSCustomObject]@{ gpuInput=$detectedGpu; mode="CONTROL"; profile="RECOMMENDED"; rollbackDriver=$null; nvidiaDriverPath=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false

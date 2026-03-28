@@ -23,8 +23,14 @@ function Get-RamInfo {
         # Use 95% threshold to reduce false positives on DDR5 where JEDEC
         # speeds (e.g., 4800 MT/s) can be close to rated XMP speeds (e.g., 5200 MT/s).
         # A 90% threshold would incorrectly flag JEDEC-only operation as "XMP active".
+        # Special case: DDR5 JEDEC baseline is 4800 MT/s. If the module reports
+        # <= 4800 MT/s, it's running at JEDEC spec, not XMP/EXPO — regardless of
+        # how close configMhz is to the threshold. Without this check, JEDEC-only
+        # DDR5-4800 sticks would be flagged as "XMP active".
         $xmpActive = if ($configMhz -gt 0 -and $speedMhz -gt 0) {
-            if ($isDDR5) {
+            if ($isDDR5 -and $speedMhz -le 4800) {
+                $false
+            } elseif ($isDDR5) {
                 $configMhz -ge ([math]::Floor($speedMhz / 2) * 0.95)
             } else {
                 $configMhz -ge ($speedMhz * 0.95)
@@ -64,8 +70,8 @@ function Get-NvidiaDriverVersion {
             return $null
         }
         $combined = "$($parts[-2])$($parts[-1])"
-        if ($combined.Length -lt 2) {
-            Write-Debug "NVIDIA DriverVersion combined segment too short: $combined"
+        if ($combined.Length -lt 5) {
+            Write-Debug "NVIDIA version combined segment too short for reliable decode: $combined"
             return $null
         }
         $nvStr = $combined.Substring(1)  # Remove Windows prefix digit
@@ -167,6 +173,8 @@ function Get-ActiveNicAdapter {
     try {
         # Combine hardcoded essentials with configurable $CFG_VirtualAdapterFilter
         $filterPattern = "Wi-Fi|Wireless"
+        # NOTE: $CFG_VirtualAdapterFilter is a regex alternation pattern (e.g., "Hyper-V|VPN|Virtual")
+        # — metacharacters in adapter names would need escaping before inclusion here.
         if ($CFG_VirtualAdapterFilter) {
             $filterPattern = "$filterPattern|$CFG_VirtualAdapterFilter"
         }
@@ -269,6 +277,7 @@ function Test-DualChannel {
             $channels = $locators | ForEach-Object {
                 if ($_ -match '[_]([A-Z])\d') { $Matches[1] }
                 elseif ($_ -match 'Channel\s*([A-Z0-9])') { $Matches[1] }
+                elseif ($_ -match 'DIMM\s+([A-Z])\d') { $Matches[1] }
             } | Where-Object { $_ } | Select-Object -Unique
             if ($channels.Count -ge 2) {
                 return @{ DualChannel = $true; Sticks = $sticks.Count; Reason = "$($sticks.Count) sticks across $($channels.Count) channels (DeviceLocator) — dual-channel likely." }
@@ -277,5 +286,173 @@ function Test-DualChannel {
         return @{ DualChannel = $false; Sticks = $sticks.Count; Reason = "$($sticks.Count) sticks but same bank/channel — possibly wrong slots." }
     } catch {
         return @{ DualChannel = $null; Sticks = 0; Reason = "Could not read RAM info." }
+    }
+}
+
+# ── AMD Ryzen X3D CPU Info ─────────────────────────────────────────────────
+
+function Get-AmdCpuInfo {
+    <#
+    .SYNOPSIS  Detects AMD Ryzen CPU details for X3D-specific BIOS guidance.
+    .DESCRIPTION
+        Returns structured info about AMD CPUs including X3D status, generation,
+        and per-model recommended PBO/CO settings from the X3D tuning guide.
+
+        Return value semantics:
+          @{ IsAMD=$true; IsX3D=$true; ... }  -> AMD X3D detected
+          @{ IsAMD=$true; IsX3D=$false; ... } -> AMD but not X3D
+          @{ IsAMD=$false; ... }              -> Not AMD (Intel/other)
+          $null                                -> Detection failed
+    #>
+    try {
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        if (-not $cpu -or -not $cpu.Name) { return $null }
+        $name = $cpu.Name.Trim()
+
+        $isAMD = $cpu.Manufacturer -match "AMD"
+        if (-not $isAMD) {
+            return @{ IsAMD = $false; IsX3D = $false; CpuName = $name }
+        }
+
+        $isX3D = $name -match "X3D"
+        $isDualCCD = $name -match "(7900X3D|7950X3D|9900X3D|9950X3D)"
+        $isSingleCCD = $isX3D -and -not $isDualCCD
+
+        # Zen 5 (9000-series) vs Zen 4 (7000-series) vs Zen 3 (5000-series)
+        $isZen5 = $name -match "\b9[0-9]{2,3}X3D\b"
+        $isZen4 = $name -match "\b7[0-9]{2,3}X3D\b"
+
+        # Per-model recommended settings from X3D tuning guide
+        $recommendedCO = if ($isZen5) { -20 } elseif ($isZen4) { -15 } else { -10 }
+        $recommendedBoostOverride = if ($isZen5) { 200 } else { 0 }
+        $expectedBoostMhz = if ($name -match "9800X3D") { 5200 }
+            elseif ($name -match "9900X3D") { 5500 }
+            elseif ($name -match "9950X3D") { 5700 }
+            elseif ($name -match "9700X3D") { 5100 }
+            elseif ($name -match "7800X3D") { 5050 }
+            elseif ($name -match "7900X3D") { 5600 }
+            elseif ($name -match "7950X3D") { 5700 }
+            elseif ($name -match "5800X3D") { 4500 }
+            elseif ($name -match "5700X3D") { 4100 }
+            else { 0 }
+
+        $maxTempC = if ($isZen5) { 90 } else { 85 }
+
+        return @{
+            IsAMD                    = $true
+            IsX3D                    = $isX3D
+            IsSingleCCD              = $isSingleCCD
+            IsDualCCD                = $isDualCCD
+            IsZen5                   = $isZen5
+            IsZen4                   = $isZen4
+            CpuName                  = $name
+            RecommendedCO            = $recommendedCO
+            RecommendedBoostOverride = $recommendedBoostOverride
+            ExpectedBoostMhz         = $expectedBoostMhz
+            MaxTempC                 = $maxTempC
+            CoreCount                = $cpu.NumberOfCores
+            LogicalProcessors        = $cpu.NumberOfLogicalProcessors
+            MaxClockSpeed            = $cpu.MaxClockSpeed
+        }
+    } catch {
+        Write-Debug "AMD CPU detection error: $_"
+        return $null
+    }
+}
+
+# ── DDR5 Timing Info ───────────────────────────────────────────────────────
+
+function Get-Ddr5TimingInfo {
+    <#
+    .SYNOPSIS  Extended DDR5 timing analysis for FCLK/MCLK 1:1 verification.
+    .DESCRIPTION
+        Builds on Get-RamInfo with DDR5-specific checks: FCLK:MCLK ratio,
+        rated vs active speed gap (detects downclocked EXPO kits), and
+        DIMM count for dual-channel verification.
+    #>
+    $ram = Get-RamInfo
+    if (-not $ram -or -not $ram.IsDDR5) { return $null }
+
+    # DDR5 active transfer rate: ConfiguredClockSpeed * 2
+    $activeMTs = $ram.ActiveMhz * 2
+    # FCLK on AM5: max stable 1:1 is 2000 MHz (DDR5-6000, MCLK 3000).
+    # This is an approximation — actual FCLK ceiling varies by silicon quality.
+    # For display purposes only; not used in any gating logic.
+    $expectedFclk = [math]::Min($ram.ActiveMhz, 2000)
+    # Detect if kit is downclocked (rated > active, e.g., 8200 → 6000)
+    $isDownclocked = ($ram.SpeedMhz -gt ($activeMTs * 1.05))
+    # Optimal 1:1 check: ActiveMhz should be exactly 3000 for DDR5-6000
+    $isOptimal1to1 = ($activeMTs -ge 5600 -and $activeMTs -le 6400)
+
+    return @{
+        TotalGB        = $ram.TotalGB
+        SpeedMhz       = $ram.SpeedMhz
+        ActiveMhz      = $ram.ActiveMhz
+        ActiveMTs      = $activeMTs
+        Sticks         = $ram.Sticks
+        IsDDR5         = $true
+        XmpActive      = $ram.XmpActive
+        IsDownclocked  = $isDownclocked
+        IsOptimal1to1  = $isOptimal1to1
+        ExpectedFclk   = $expectedFclk
+        RatedMTs       = $ram.SpeedMhz
+    }
+}
+
+# ── WHEA Hardware Error Check ──────────────────────────────────────────────
+
+function Test-WheaErrors {
+    <#
+    .SYNOPSIS  Checks Windows Event Log for WHEA (hardware) errors.
+    .DESCRIPTION
+        Queries System log for WHEA-Logger events which indicate hardware
+        instability (CPU, RAM, PCIe). After PBO/CO tuning, WHEA errors
+        mean the undervolt is too aggressive.
+
+        Returns:
+          @{ Count=0; Recent=@(); HasErrors=$false }  -> clean
+          @{ Count=5; Recent=@(...); HasErrors=$true } -> instability detected
+          $null -> query failed (e.g., insufficient permissions)
+    #>
+    try {
+        $events = @(Get-WinEvent -FilterHashtable @{
+            LogName      = 'System'
+            ProviderName = 'Microsoft-Windows-WHEA-Logger'
+        } -MaxEvents 50 -ErrorAction SilentlyContinue)
+
+        # Filter to last 24 hours for actionable count
+        $cutoff = (Get-Date).AddHours(-24)
+        $recent = @($events | Where-Object { $_.TimeCreated -ge $cutoff })
+
+        return @{
+            Count     = $events.Count
+            Recent    = $recent
+            RecentCount = $recent.Count
+            HasErrors = ($recent.Count -gt 0)
+            LastError = if ($events.Count -gt 0) { $events[0].TimeCreated } else { $null }
+        }
+    } catch {
+        Write-Debug "WHEA event query failed: $_"
+        return $null
+    }
+}
+
+# ── Motherboard Detection ──────────────────────────────────────────────────
+
+function Get-MotherboardInfo {
+    <#
+    .SYNOPSIS  Returns motherboard manufacturer and product name.
+    .DESCRIPTION  Used for board-specific BIOS guidance (e.g., ASUS Strix M.2 slots).
+    #>
+    try {
+        $board = Get-CimInstance Win32_BaseBoard -ErrorAction Stop | Select-Object -First 1
+        return @{
+            Manufacturer = if ($board.Manufacturer) { $board.Manufacturer.Trim() } else { "" }
+            Product      = if ($board.Product) { $board.Product.Trim() } else { "" }
+            IsASUS       = ($board.Manufacturer -match "ASUSTeK|ASUS")
+        }
+    } catch {
+        Write-Debug "Motherboard detection error: $_"
+        return $null
     }
 }

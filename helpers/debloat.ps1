@@ -28,6 +28,7 @@ function Invoke-GamingDebloat {
         "Microsoft.Todos",
         "Microsoft.WindowsFeedbackHub",
         "Microsoft.YourPhone",
+        "Microsoft.Windows.PhoneLink",
         "Microsoft.WindowsMaps",
         "Microsoft.ZuneMusic",
         "Microsoft.ZuneVideo",
@@ -49,18 +50,28 @@ function Invoke-GamingDebloat {
         $apps = Get-AppxPackage -Name $pkg -AllUsers -ErrorAction SilentlyContinue
         if ($apps) {
             if (-not $SCRIPT:DryRun) {
-                $apps | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
-                # Also remove provisioned package to prevent reinstall on Windows feature updates
-                if ($provisionedPkgs) {
-                    $provisionedPkgs |
-                        Where-Object { $_.DisplayName -eq $pkg } |
-                        Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Out-Null
+                try {
+                    $apps | Remove-AppxPackage -AllUsers -ErrorAction Stop
+                    Write-OK "Removed: $pkg"
+                    $removedCount++
+                } catch {
+                    Write-Debug "Failed to remove $($pkg): $_"
                 }
-                Write-OK "Removed: $pkg"
+                # Also remove provisioned package to prevent reinstall on Windows feature updates
+                # Runs independently — provisioned removal should not be blocked by AppxPackage failure
+                try {
+                    if ($provisionedPkgs) {
+                        $provisionedPkgs |
+                            Where-Object { $_.DisplayName -eq $pkg } |
+                            Remove-AppxProvisionedPackage -Online -ErrorAction Stop | Out-Null
+                    }
+                } catch {
+                    Write-Debug "Failed to remove provisioned package $($pkg): $_"
+                }
             } else {
                 Write-Host "  [DRY-RUN] Would remove AppX: $pkg" -ForegroundColor Magenta
+                $removedCount++
             }
-            $removedCount++
         }
     }
     if ($removedCount -eq 0) {
@@ -125,10 +136,10 @@ function Invoke-GamingDebloat {
                 Backup-ScheduledTask -TaskName $t.TaskName -StepTitle $SCRIPT:CurrentStepTitle
                 try {
                     Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop | Out-Null
+                    Write-OK "Disabled task: $($t.TaskName)"
                 } catch {
-                    Write-Debug "Failed to disable task $($t.TaskName): $_"
+                    Write-Warn "Failed to disable task $($t.TaskName): $_"
                 }
-                Write-OK "Disabled task: $($t.TaskName)"
             } else {
                 Write-Host "  [DRY-RUN] Would disable task: $($t.TaskName)" -ForegroundColor Magenta
             }

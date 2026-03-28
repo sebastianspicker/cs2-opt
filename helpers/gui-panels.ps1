@@ -92,7 +92,7 @@ function Load-Dashboard {
                 DualCh   = if ($dc) { $dc.Reason } else { "" }
                 DualChOk = if ($dc) { $dc.DualChannel } else { $false }
                 NicName  = if ($nic) { $nic.Name } else { "Not found" }
-                NicSpeed = if ($nic) { "$([math]::Round($nic.LinkSpeed/1e6)) Mbps" } else { "" }
+                NicSpeed = if ($nic) { "$([math]::Round($nic.Speed/1e6)) Mbps" } else { "" }
                 NicType  = if ($nic) { "✓ Wired" } else { "⚠ No active wired NIC" }
                 NicOk    = ($null -ne $nic)
                 OsName   = if ($os) { $os.Caption -replace "Microsoft Windows ", "Windows " } else { "?" }

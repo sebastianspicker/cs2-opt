@@ -248,7 +248,7 @@ Runs automatically on the first normal boot after driver removal.
 | 4 | NVIDIA CS2 Profile | T3 | SAFE | 52 DWORD settings via `nvapi64.dll` DRS direct write (not registry — see Key Decisions) |
 | 5 | FPS cap info | — | — | Benchmark map links + methodology |
 | 6 | Launch options + video settings | — | — | `-console +exec autoexec` + video.txt tier guide |
-| 7 | *(reserved)* | — | — | — |
+| 7 | VBS / Core Isolation disable | T2 | MODERATE | Disables Memory Integrity (HVCI) — removes 5–15% CPU overhead on OEM Win11. Skip if FACEIT/Vanguard. |
 | 8 | AMD GPU settings (AMD only) | T2 | SAFE | Manual Radeon Software guide |
 | 9 | DNS server configuration | T3 | SAFE | Configurable in `config.env.ps1` |
 | 10 | Process priority / CCD affinity | T3 | SAFE | IFEO `CpuPriorityClass=3` (High) + X3D CCD scheduled task (dual-CCD only) |
@@ -404,7 +404,7 @@ The README covers the *what*. These docs cover the *why* — architecture decisi
 | [`docs/windows-scheduler.md`](docs/windows-scheduler.md) | MMCSS, Game Mode reversal, `Win32PrioritySeparation` (Variable→Fixed, Blur Busters 2025), FTH heap slowdown, Automatic Maintenance CPU spike, Intel PowerThrottling auto-detection |
 | [`docs/process-priority.md`](docs/process-priority.md) | IFEO kernel mechanism, why it beats `-high` and Process Lasso, X3D CCD topology (dual-CCD only), affinity mask calculation, task design |
 | [`docs/nvidia-optimization.md`](docs/nvidia-optimization.md) | DRS binary database vs `d3d\` registry path, clean driver install methodology, R570 regression |
-| [`docs/nvidia-drs-settings.md`](docs/nvidia-drs-settings.md) | All 52 DRS settings: IDs, values, decoded meanings, 12-section breakdown, registry keys, 3 excluded settings |
+| [`docs/nvidia-drs-settings.md`](docs/nvidia-drs-settings.md) | All 52 DRS settings: IDs, values, decoded meanings, 13-section breakdown (incl. rBAR), registry keys, 3 excluded settings |
 | [`docs/power-plan.md`](docs/power-plan.md) | 4 FPSHeaven bugs, AMD CPPC2 vs Intel branching, EPP mechanics, PCIe ASPM, NVMe APST, C-state depth vs wake latency |
 | [`docs/services.md`](docs/services.md) | Per-service justification (SysMain, WSearch, qWave, 4 Xbox), Xbox wireless controller warning, re-enable commands |
 | [`docs/debloat.md`](docs/debloat.md) | Full AppX removal list with rationale, telemetry service/task disable, what is NOT removed |

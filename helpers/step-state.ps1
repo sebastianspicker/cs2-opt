@@ -4,7 +4,7 @@
 
 function Load-Progress {
     if (Test-Path $CFG_ProgressFile) {
-        try { return (Get-Content $CFG_ProgressFile -ErrorAction Stop | ConvertFrom-Json) }
+        try { return (Get-Content $CFG_ProgressFile -Raw -ErrorAction Stop | ConvertFrom-Json) }
         catch {
             Write-Warn "Progress tracking file was corrupted — starting fresh. (Your optimizations are not affected.)"
             try { Copy-Item $CFG_ProgressFile "$CFG_ProgressFile.corrupt" -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted progress file." }
@@ -23,7 +23,10 @@ function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     # Flush backup buffer BEFORE persisting progress — if we crash between flush and
     # Save-Progress, the worst case is re-running a completed step (safe). The reverse
     # (progress saved, backup lost) means we can't rollback a step we recorded as done.
-    try { Flush-BackupBuffer } catch { Write-Debug "Flush-BackupBuffer in Complete-Step failed: $_" }
+    try { Flush-BackupBuffer } catch {
+        Write-Warn "Flush-BackupBuffer in Complete-Step failed: $_ — skipping Save-Progress (step will re-run on resume)."
+        return
+    }
     $prog = Load-Progress
     if (-not $prog) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
@@ -159,6 +162,10 @@ function Clear-Progress($phase = $null) {
         Save-Progress $empty
         Write-Debug "Progress reset$(if($phase){" (Phase $phase)"})"
     } else {
-        Write-Warn "Progress not reset — you're looking at Phase $($prog.phase) but requested Phase $phase. Use START.bat -> [5] for full reset."
+        # Cross-phase re-run: progress file has a different phase than requested.
+        # Still reset — the user explicitly asked to start over from this phase.
+        Write-Debug "Cross-phase reset: progress had Phase $($prog.phase), resetting for Phase $phase"
+        $empty = [PSCustomObject]@{ phase=0; lastCompletedStep=0; lastSkippedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
+        Save-Progress $empty
     }
 }

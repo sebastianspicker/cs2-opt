@@ -143,10 +143,15 @@ Many NIC drivers (notably Intel I219-V, I225-V, I226-V — the most common gamin
 The suite adds missing RSS entries to the NIC driver key:
 
 ```
+*RSS               = 1  (master switch — created/enabled if absent or 0)
 *RSSProfile        = 1  (ClosestProcessor — use cache-local core)
 *RssBaseProcNumber = 2  (start from Core 2, skip Core 0/1)
-*MaxRssProcessors  = 4  (spread across up to 4 cores)
-*NumRssQueues      = 4  (explicit queue count)
+*MaxRssProcessors  = 4  (spread across up to 4 cores; 8 for 5+ GbE)
+*NumRssQueues      = 4  (explicit queue count; 8 for 5+ GbE)
 ```
+
+**RSS master switch (`*RSS`):** Some Realtek drivers ship with `*RSS=0` (or the key missing entirely), which silently ignores all RSS sub-parameters. The suite checks and enables `*RSS` before writing the queue/processor settings.
+
+**Speed-aware queue count:** NICs at 5+ Gbps link speed (e.g., Realtek RTL8126 5 GbE) use 8 RSS queues and 8 max processors instead of 4, to handle higher packet rates without saturating individual cores. The suite detects link speed via `$nic.Speed` and scales automatically. Queue count is also capped at the actual processor count to avoid driver errors.
 
 These are added only if absent — existing values are never overwritten. The Intel I225-V/I226-V are specifically flagged because they are known to ship without these entries on most OEM board drivers.

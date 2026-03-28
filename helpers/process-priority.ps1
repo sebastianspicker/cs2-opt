@@ -51,7 +51,12 @@ function Get-X3DCcdInfo {
         $totalCores = $cpu.NumberOfCores
         $totalLP    = $cpu.NumberOfLogicalProcessors
         $smtEnabled = ($totalLP -gt $totalCores)
-        $ccd0Cores  = [math]::Floor($totalCores / 2)
+        # Per-model CCD0 core count for known asymmetric X3D CPUs.
+        # 9900X3D = 8+4, 9950X3D/7950X3D = 8+8, 7900X3D = 6+6.
+        $ccd0Cores = if ($cpu.Name -match "9900X3D") { 8 }
+            elseif ($cpu.Name -match "7950X3D|9950X3D") { 8 }
+            elseif ($cpu.Name -match "7900X3D") { 6 }
+            else { [math]::Floor($totalCores / 2) }
 
         # Build affinity mask for CCD0 (V-Cache CCD)
         [long]$mask = 0
@@ -193,7 +198,7 @@ if (`$procs) {
             if (`$p.ProcessorAffinity -ne [IntPtr]`$mask) {
                 `$p.ProcessorAffinity = [IntPtr]`$mask
             }
-        } catch {}
+        } catch { `$global:_affinityErrors++ }
     }
 }
 "@

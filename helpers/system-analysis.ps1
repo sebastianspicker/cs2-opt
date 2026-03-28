@@ -54,10 +54,40 @@ function Invoke-CheckHardware {
         $vbsVal = $dg.VirtualizationBasedSecurityStatus
         $vbsStr = switch ($vbsVal) { 0 { "Off" } 1 { "Configured (not running)" } 2 { "Running" } default { "Unknown" } }
         $st = if ($vbsVal -eq 0) { "OK" } elseif ($vbsVal -eq 1) { "INFO" } else { "WARN" }
-        $results.Add((New-CheckItem "Hardware" "Security" "VBS / HVCI" $vbsStr "Off" $st "P1-7" "VBS running = 5-15% CPU overhead in games on OEM Win11 builds"))
+        $results.Add((New-CheckItem "Hardware" "Security" "VBS / HVCI" $vbsStr "Off" $st "P3-7" "VBS running = 5-15% CPU overhead in games on OEM Win11 builds"))
     } catch {
-        $results.Add((New-CheckItem "Hardware" "Security" "VBS / HVCI" "Query failed" "Off" "INFO" "P1-7" "Could not query Win32_DeviceGuard"))
+        $results.Add((New-CheckItem "Hardware" "Security" "VBS / HVCI" "Query failed" "Off" "INFO" "P3-7" "Could not query Win32_DeviceGuard"))
     }
+
+    # WHEA errors (PBO/CO stability indicator)
+    try {
+        $whea = Test-WheaErrors
+        if ($whea) {
+            $wheaStr = if ($whea.HasErrors) { "$($whea.RecentCount) in last 24h" } else { "0 recent ($($whea.Count) total)" }
+            $wheaSt = if ($whea.HasErrors) { "ERR" } elseif ($whea.Count -gt 0) { "WARN" } else { "OK" }
+            $results.Add((New-CheckItem "Hardware" "CPU" "WHEA Errors" $wheaStr "0" $wheaSt "BIOS" "WHEA errors indicate PBO/CO instability — reduce Curve Optimizer by 5"))
+        }
+    } catch { Write-Debug "WHEA check failed: $_" }
+
+    # AMD X3D CPU base clock (informational — MaxClockSpeed is base, not boost)
+    try {
+        $amdCpu = Get-AmdCpuInfo
+        if ($amdCpu -and $amdCpu.IsX3D -and $amdCpu.MaxClockSpeed -gt 0) {
+            $baseStr = "$($amdCpu.MaxClockSpeed) MHz (base clock)"
+            $results.Add((New-CheckItem "Hardware" "CPU" "X3D Base Clock" $baseStr "N/A (boost requires HWiNFO)" "INFO" "BIOS" "Win32_Processor.MaxClockSpeed reports base clock, not boost — use HWiNFO to verify boost"))
+        }
+    } catch { Write-Debug "X3D base clock check failed: $_" }
+
+    # DDR5 FCLK/MCLK 1:1
+    try {
+        $ddr5 = Get-Ddr5TimingInfo
+        if ($ddr5 -and $ddr5.IsDDR5) {
+            $mtsStr = "DDR5-$($ddr5.ActiveMTs)"
+            $ddr5St = if ($ddr5.IsOptimal1to1) { "OK" } elseif ($ddr5.ActiveMTs -gt 6400) { "WARN" } else { "INFO" }
+            $ddr5Rec = if ($amdCpu -and $amdCpu.IsX3D) { "DDR5-6000 (1:1)" } else { "XMP rated speed" }
+            $results.Add((New-CheckItem "Hardware" "Memory" "DDR5 Speed" $mtsStr $ddr5Rec $ddr5St "P1-2" "AM5 optimal: DDR5-6000 (FCLK 2000, MCLK 3000, 1:1 ratio)"))
+        }
+    } catch { Write-Debug "DDR5 timing check failed: $_" }
 
     # Dual-channel RAM
     try {
@@ -183,9 +213,9 @@ function Invoke-CheckSystemLatency {
 
     # NTFS Last Access
     $ntfsLa = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisableLastAccessUpdate"
-    # 0x80000001 = user-managed + disabled (Win10 1803+); 1 = disabled (legacy)
-    $st = if ($ntfsLa -eq 0x80000001 -or $ntfsLa -eq 1) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "Filesystem" "NTFS Last Access" $(if ($ntfsLa -eq 0x80000001 -or $ntfsLa -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (0x80000001)" $st "P1-27" "Removes metadata write on every file read"))
+    # (-2147483647) = 0x80000001 as signed int32 — PS 5.1 reads DWORD as Int32; 1 = disabled (legacy)
+    $st = if ($ntfsLa -eq (-2147483647) -or $ntfsLa -eq 1) { "OK" } else { "WARN" }
+    $r.Add((New-CheckItem "Windows" "Filesystem" "NTFS Last Access" $(if ($ntfsLa -eq (-2147483647) -or $ntfsLa -eq 1) {"Disabled"} else {"Enabled"}) "Disabled (0x80000001)" $st "P1-27" "Removes metadata write on every file read"))
 
     # NTFS 8.3 Name Creation
     $ntfs83 = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" "NtfsDisable8dot3NameCreation"
@@ -207,14 +237,15 @@ function Invoke-CheckSystemLatency {
     $r.Add((New-CheckItem "Windows" "MMCSS" "Games Task Priority" "Pri=$gPri Sched=$gSch GPU=$gGpu" "6 / High / 8" $st "P1-27" "MMCSS Games scheduling class for foreground game threads"))
 
     # Boot config (bcdedit) — read-only query
-    # Use /v to get canonical element names (without /v, names are localized).
-    # Boolean values are also localized (Yes/Ja/Oui/Sí/Sim) — match common forms.
+    # Use /v to get hex element IDs instead of localized key names.
+    # Match on hex IDs (locale-independent) + any truthy value — same approach as Verify-Settings.ps1.
+    # 0x26000060 = disabledynamictick, 0x26000092 = useplatformtick
     try {
         $bcdOutput = bcdedit /enum "{current}" /v 2>&1 | Out-String
-        $dynTick = if ($bcdOutput -match "disabledynamictick\s+(Yes|Ja|Oui|S[ií]|Sim)") { "OK" } else { "WARN" }
+        $dynTick = if ($bcdOutput -match "0x26000060\s+\S+") { "OK" } else { "WARN" }
         $r.Add((New-CheckItem "Windows" "Boot" "Dynamic Tick" $(if ($dynTick -eq "OK") {"Disabled"} else {"Active"}) "Disabled" $dynTick "P1-10" "Adaptive timer causes irregular CPU wakeups — frametime jitter"))
 
-        $platTick = if ($bcdOutput -match "useplatformtick\s+(Yes|Ja|Oui|S[ií]|Sim)") { "OK" } else { "WARN" }
+        $platTick = if ($bcdOutput -match "0x26000092\s+\S+") { "OK" } else { "WARN" }
         $r.Add((New-CheckItem "Windows" "Boot" "Platform Tick" $(if ($platTick -eq "OK") {"Active"} else {"Inactive"}) "Active" $platTick "P1-10" "Hardware timer instead of software timer"))
     } catch { Write-Debug "bcdedit check failed: $_" }
 
@@ -273,14 +304,20 @@ function Invoke-CheckNetwork {
     $r.Add((New-CheckItem "Network" "QoS" "QoS NLA Bypass" $(if ($nla -eq "1") {"Enabled"} else {"Not set"}) "1" $st "P1-16" "Required for DSCP EF=46 QoS to function on unidentified networks"))
 
     # URO (Win11 only)
-    # NOTE: netsh output is locale-dependent; "disabled" may not match on non-English Windows
+    # netsh output is locale-dependent — check for ABSENCE of enabled patterns
+    # since there are fewer locale variants for "enabled" than "disabled"
     try {
         $build = [System.Environment]::OSVersion.Version.Build
         if ($build -ge 22000) {
             $uro = & netsh int udp show global 2>&1 | Select-String "uro"
-            $uroVal = if ($uro -match "disabled") { "disabled" } else { "enabled" }
-            $st = if ($uroVal -eq "disabled") { "OK" } else { "WARN" }
-            $r.Add((New-CheckItem "Network" "Stack" "URO (UDP Receive Offload)" $uroVal "disabled" $st "P1-16" "URO batches UDP datagrams causing receive jitter on Win11"))
+            $uroStr = if ($uro) { "$uro".Trim() } else { "" }
+            if (-not $uroStr) {
+                $r.Add((New-CheckItem "Network" "Stack" "URO (UDP Receive Offload)" "not available" "disabled" "OK" "P1-16" "URO not present on this build — no action needed"))
+            } else {
+                $uroVal = if ($uroStr -notmatch "enabled|aktiviert|activé|abilitato|activado|ativado") { "disabled" } else { "enabled" }
+                $st = if ($uroVal -eq "disabled") { "OK" } else { "WARN" }
+                $r.Add((New-CheckItem "Network" "Stack" "URO (UDP Receive Offload)" $uroVal "disabled" $st "P1-16" "URO batches UDP datagrams causing receive jitter on Win11"))
+            }
         }
     } catch { Write-Debug "URO check failed: $_" }
 
@@ -348,7 +385,7 @@ function Invoke-CheckCS2 {
 
     # optimization.cfg
     $optExists = Test-Path $optPath
-    $r.Add((New-CheckItem "CS2" "Config" "optimization.cfg" $(if ($optExists) {"Present"} else {"Missing"}) "Present" $(if ($optExists) {"OK"} else {"ERR"}) "P1-34" "56 optimized CVars — network, audio, mouse, video"))
+    $r.Add((New-CheckItem "CS2" "Config" "optimization.cfg" $(if ($optExists) {"Present"} else {"Missing"}) "Present" $(if ($optExists) {"OK"} else {"ERR"}) "P1-34" "74 optimized CVars — network, audio, mouse, video"))
 
     if ($optExists) {
         # Check key CVars in optimization.cfg

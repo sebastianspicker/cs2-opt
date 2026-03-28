@@ -155,6 +155,7 @@ function Remove-GpuDriverClean {
 
     if ($driverPackages.Count -eq 0) {
         Write-Warn "No $GpuVendor display driver packages found. Driver may already be removed."
+        Write-Warn "If on non-English Windows, pnputil text parsing may have failed due to locale. Run 'pnputil /enum-drivers' manually to verify."
         Write-Warn "Continuing with registry and cache cleanup."
     }
 
