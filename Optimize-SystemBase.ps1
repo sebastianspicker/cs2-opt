@@ -444,16 +444,16 @@ if ($startStep -le 7) {
         $amdInfo = Get-AmdCpuInfo
         $isX3D = ($amdInfo -and $amdInfo.IsX3D)
         $hagsState = if ($isX3D) { "OFF (X3D guide: Off by default — benchmark both)" }
-            elseif ($gpuInput -eq "2") { "OFF (RTX 4000 and older can hurt)" }
-            else { "ON (recommended for RTX 5000)" }
-        $hagsVal = if ($isX3D -or $gpuInput -eq "2") { 0 } else { 2 }
+            elseif ($gpuInput -eq "2") { "ON (2026: RTX 40 benefits from HAGS after MPO removal)" }
+            else { "ON (recommended for RTX 50/40)" }
+        $hagsVal = if ($isX3D) { 0 } else { 2 }
         Invoke-TieredStep -Tier 2 -Title "HAGS $hagsState" `
             -Why "HAGS lets the GPU manage its own render queue -> less CPU overhead." `
-            -Evidence "Measurable effect on RTX 3000+ / RDNA2+. RTX 2000 and older: can worsen 1% lows. X3D guide (B22): Off (Default)." `
-            -Caveat "Setup-dependent. Always benchmark (CapFrameX) before and after.$(if ($isX3D) { ' X3D guide defaults to Off — test On with RTX 5000.' })" `
+            -Evidence "2026: MPO removal in Win11 24H2 fixed HAGS-related stutters. RTX 40/50 + AMD 9000: ON recommended (ThourCS2, Blur Busters). RTX 3000/RDNA2: test both. RTX 2000 and older: can worsen 1% lows. X3D guide (B22): Off (Default)." `
+            -Caveat "Post-MPO (Win11 24H2+): HAGS ON is safe for modern GPUs. Always benchmark (CapFrameX) before and after on older hardware.$(if ($isX3D) { ' X3D guide defaults to Off — test On with RTX 50/40.' })" `
             -Risk "MODERATE" -Depth "REGISTRY" -EstimateKey "HAGS Toggle" `
             -Improvement "Less CPU overhead for GPU scheduling — +2-5% on RTX 3000+" `
-            -SideEffects "RTX 2000 and older: may worsen 1% lows. Benchmark to verify." `
+            -SideEffects "RTX 2000 and older: may worsen 1% lows. Post-MPO (Win11 24H2+): most stutter reports resolved. Benchmark to verify on older GPUs." `
             -Undo "Set HwSchMode = 1 (or toggle in Windows Settings -> Display -> Graphics)" `
             -Action {
                 # ── Secure Boot check (Win11 HAGS requirement) ──────────────────────

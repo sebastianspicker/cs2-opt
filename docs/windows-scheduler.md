@@ -16,19 +16,23 @@ Normally, the Windows kernel (`dxgkrnl.sys`) manages GPU memory page tables and 
 
 The theoretical benefit: fewer CPU-to-GPU context switches, lower DPC overhead from the display kernel, faster VRAM allocation.
 
-### Why the results are inconsistent
+### Why the results were inconsistent (pre-2026)
 
 HAGS requires three things working correctly in concert: the GPU hardware (adequate hardware queue support), the driver (WDDM 2.7+ with proper HAGS implementation), and the game engine (using the GPU memory APIs correctly).
 
-On **RTX 30-series and newer**, NVIDIA has optimized HAGS extensively. Benchmarks from ThourCS2 (2025) show neutral-to-positive results on RTX 3000+ in CS2.
+The primary source of HAGS-related stutters was **Multi-Plane Overlay (MPO)** interaction with DWM compositing, not HAGS itself. Windows 11 24H2 removed MPO as a default behavior, resolving most reported HAGS stutter cases.
 
-On **RTX 20-series and older**, HAGS can reduce 1% lows by 3–8% because the hardware queue implementation is less complete and the CPU-side scheduling overhead that HAGS was supposed to eliminate remains, while adding new overhead from the firmware scheduler.
+### 2026 evidence
 
-**AMD RX 6000+** — mixed results. The driver implementation has improved significantly in 2024–2025, but per-game variance is high.
+**RTX 40/50 + AMD RX 9000:** HAGS ON is recommended. Post-MPO removal, ThourCS2 and Blur Busters 2026 testing shows neutral-to-positive results. The CPU scheduling overhead reduction from GPU-side VRAM management is now reliably measurable without MPO interference.
+
+**RTX 30 / RDNA2:** Neutral to slightly positive. Test both on your specific system.
+
+**RTX 20 and older:** HAGS can still reduce 1% lows by 3–8% because the hardware queue implementation is less complete. Benchmark before committing.
 
 ### The suite's recommendation
 
-The step explains the hardware dependency, shows your current HAGS state, and asks you to choose. It recommends enabling on RTX 30-series+, disabling on older GPUs, and testing for AMD. If you enable HAGS and your 1% lows get worse in the Phase 3 benchmark compared to baseline, disable it.
+The suite defaults HAGS ON for RTX 40/50 and OFF for X3D CPUs (per the X3D tuning guide). Other configurations are prompted with evidence. If you enable HAGS and your 1% lows get worse in the Phase 3 benchmark compared to baseline, disable it.
 
 **Important:** HAGS must also be enabled if you want to use DLSS Frame Generation (DLSS 3+). If you use a GPU that supports it and want frame generation in other games, enable HAGS regardless of CS2 results.
 

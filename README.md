@@ -195,7 +195,7 @@ All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Back
 | 4 | Fullscreen Optimizations off | T1 | SAFE | `AppCompatFlags\Layers` = `~ DISABLEDXMAXIMIZEDWINDOWEDMODE` for cs2.exe |
 | 5 | NVIDIA driver version check | T2 | AGGRESSIVE | R570+ regression warning (566.36 stable fallback) |
 | 6 | CS2 Optimized Power Plan | T1 | MODERATE | Tiered `powercfg` calls: T1 (9 settings), T2 (+15–16 vendor-aware), T3 (+5 C-states). 4 bugs fixed from FPSHeaven original |
-| 7 | HAGS toggle | T2 | MODERATE | HwSchMode registry; results vary by GPU gen — test both |
+| 7 | HAGS toggle | T2 | MODERATE | HwSchMode registry; 2026: ON for RTX 40/50 post-MPO removal. Older GPUs: test both |
 | 8 | Pagefile fixed size | T2 | MODERATE | Auto-skipped if ≥32 GB RAM |
 | 9 | Resizable BAR / SAM | T2 | SAFE | BIOS guide only — no PowerShell changes |
 | 10 | Dynamic Tick + Platform Timer | T3 | MODERATE | `bcdedit /set disabledynamictick Yes` + `useplatformtick Yes` |

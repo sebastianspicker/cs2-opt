@@ -21,7 +21,7 @@ Every optimization tracked by this suite, with estimated impact ranges from isol
 | Disable Overlays | T2 | SAFE | 0–3 | 0–2 | MEDIUM | Community consensus | Overlay rendering overhead |
 | Autoexec CVars | T2 | SAFE | 0–2 | 0 | MEDIUM | Valve console documentation | Network interpolation tuning |
 | MSI Interrupts | T2 | MODERATE | 0–5 | 0–1 | MEDIUM | valleyofdoom/PC-Tuning | Reduces DPC latency |
-| HAGS Toggle | T2 | MODERATE | −3–5 | −2–3 | LOW | ThourCS2; varies by GPU generation | Can help or hurt — test both |
+| HAGS Toggle | T2 | MODERATE | −3–5 | −2–3 | MEDIUM | ThourCS2; Blur Busters 2026; Win11 24H2 MPO removal | 2026: ON recommended for RTX 40/50 + AMD 9000 post-MPO. Older GPUs: test both |
 | NIC Tweaks | T2 | MODERATE | 0–3 | 0 | LOW | LatencyMon community guides | Only if NIC DPC spikes detected |
 | Debloat | T2 | MODERATE | 0–2 | 0–1 | LOW | Background process reduction | Fewer background tasks |
 | Timer Resolution | T2 | SAFE | 0–2 | 0 | MEDIUM | valleyofdoom/PC-Tuning | More precise system timer |
