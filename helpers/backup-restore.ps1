@@ -125,6 +125,7 @@ function Get-BackupDataRaw {
         $corruptPath = "$CFG_BackupFile.corrupt.$ts"
         try { Copy-Item $CFG_BackupFile $corruptPath -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted backup file — original may already be gone." }
         Write-Warn "backup.json was corrupted — saved copy to $corruptPath before resetting."
+        Write-Warn "Backup history reset — previous entries preserved in $corruptPath"
         Initialize-Backup
         return [PSCustomObject]@{ entries = @(); created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
     }
@@ -181,7 +182,8 @@ function Backup-ServiceState {
     param([string]$ServiceName, [string]$StepTitle)
     try {
         $svc = Get-Service -Name $ServiceName -ErrorAction Stop
-        $startType = (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop).StartMode
+        $escapedName = $ServiceName -replace "'", "''"
+        $startType = (Get-CimInstance Win32_Service -Filter "Name='$escapedName'" -ErrorAction Stop).StartMode
         # Capture DelayedAutoStart flag — services with "Automatic (Delayed Start)" show StartMode=Auto
         # but have a separate registry flag. Without this, restore loses the "Delayed" qualifier.
         $delayedStart = $false
@@ -324,17 +326,24 @@ function Backup-NicAdapterProperty {
         [string]$PropertyType,
         [string]$StepTitle
     )
+    # Capture InterfaceDescription for cross-adapter detection on restore
+    $ifDesc = ""
+    try {
+        $adapter = Get-NetAdapter -Name $AdapterName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($adapter) { $ifDesc = $adapter.InterfaceDescription }
+    } catch { Write-Debug "Backup-NicAdapterProperty: could not resolve InterfaceDescription for '$AdapterName'" }
     $entry = [ordered]@{
-        type          = "nic_adapter"
-        adapterName   = $AdapterName
-        propertyName  = $PropertyName
-        originalValue = $OriginalValue
-        propertyType  = $PropertyType
-        step          = $StepTitle
-        timestamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        type                 = "nic_adapter"
+        adapterName          = $AdapterName
+        interfaceDescription = $ifDesc
+        propertyName         = $PropertyName
+        originalValue        = $OriginalValue
+        propertyType         = $PropertyType
+        step                 = $StepTitle
+        timestamp            = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-NicAdapterProperty: '$PropertyName' = '$OriginalValue' on '$AdapterName'"
+    Write-Debug "Backup-NicAdapterProperty: '$PropertyName' = '$OriginalValue' on '$AdapterName' ($ifDesc)"
 }
 
 function Backup-QosAndUro {
@@ -816,6 +825,16 @@ function Restore-StepChanges {
                 }
                 "nic_adapter" {
                     try {
+                        # Cross-adapter detection: verify the current adapter matches what was backed up.
+                        # If a different NIC now uses the same name, restoring properties could misconfigure it.
+                        if ($e.interfaceDescription) {
+                            $currentAdapter = Get-NetAdapter -Name $e.adapterName -ErrorAction SilentlyContinue | Select-Object -First 1
+                            if ($currentAdapter -and $currentAdapter.InterfaceDescription -ne $e.interfaceDescription) {
+                                Write-Warn "NIC restore skipped for '$($e.propertyName)' on '$($e.adapterName)': adapter changed from '$($e.interfaceDescription)' to '$($currentAdapter.InterfaceDescription)'"
+                                $restoreFail++
+                                continue
+                            }
+                        }
                         if ($e.propertyType -eq "RegistryKeyword") {
                             Set-NetAdapterAdvancedProperty -Name $e.adapterName `
                                 -RegistryKeyword $e.propertyName -RegistryValue $e.originalValue -ErrorAction Stop
@@ -831,12 +850,17 @@ function Restore-StepChanges {
                     }
                 }
                 "qos_uro" {
-                    # Remove QoS policies that were created
+                    # Remove QoS policies that were created (only if they still exist)
                     $qosFailed = $false
                     foreach ($policyName in $e.policies) {
                         try {
-                            Remove-NetQosPolicy -Name $policyName -Confirm:$false -ErrorAction Stop
-                            Write-OK "Removed QoS policy: $policyName"
+                            $existingPolicy = Get-NetQosPolicy -Name $policyName -ErrorAction SilentlyContinue
+                            if ($existingPolicy) {
+                                Remove-NetQosPolicy -Name $policyName -Confirm:$false -ErrorAction Stop
+                                Write-OK "Removed QoS policy: $policyName"
+                            } else {
+                                Write-Debug "QoS policy '$policyName' does not exist — nothing to remove"
+                            }
                         } catch {
                             Write-Warn "Could not remove QoS policy '$policyName': $_"
                             $qosFailed = $true
@@ -886,14 +910,35 @@ function Restore-StepChanges {
                 }
                 "dns" {
                     try {
+                        # Resolve the current InterfaceIndex — the stored index may be stale
+                        # if the adapter was re-plugged or the system was rebooted.
+                        $ifIndex = $e.interfaceIndex
+                        try {
+                            Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
+                                -ServerAddresses @("127.0.0.1") -ErrorAction Stop 2>$null
+                            # Revert the probe immediately
+                            Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
+                                -ResetServerAddresses -ErrorAction SilentlyContinue
+                        } catch {
+                            # Stored interfaceIndex is invalid — resolve by adapter name
+                            Write-Debug "DNS restore: stored InterfaceIndex $ifIndex invalid, resolving by adapter name '$($e.adapterName)'"
+                            $resolvedAdapter = Get-NetAdapter -Name $e.adapterName -ErrorAction SilentlyContinue |
+                                Select-Object -First 1
+                            if ($resolvedAdapter) {
+                                $ifIndex = $resolvedAdapter.InterfaceIndex
+                                Write-Debug "DNS restore: resolved '$($e.adapterName)' to InterfaceIndex $ifIndex"
+                            } else {
+                                throw "Adapter '$($e.adapterName)' not found — cannot determine current InterfaceIndex"
+                            }
+                        }
                         if ($e.originalDnsServers -and $e.originalDnsServers.Count -gt 0) {
-                            Set-DnsClientServerAddress -InterfaceIndex $e.interfaceIndex `
+                            Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
                                 -ServerAddresses $e.originalDnsServers -ErrorAction Stop
-                            Write-OK "Restored DNS on $($e.adapterName): $($e.originalDnsServers -join ', ')"
+                            Write-OK "Restored DNS on $($e.adapterName) (ifIndex $ifIndex): $($e.originalDnsServers -join ', ')"
                         } else {
-                            Set-DnsClientServerAddress -InterfaceIndex $e.interfaceIndex `
+                            Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
                                 -ResetServerAddresses -ErrorAction Stop
-                            Write-OK "Restored DNS on $($e.adapterName): reset to automatic (DHCP)"
+                            Write-OK "Restored DNS on $($e.adapterName) (ifIndex $ifIndex): reset to automatic (DHCP)"
                         }
                         $restoreOk++
                     } catch {
@@ -958,28 +1003,33 @@ function Restore-Interactive {
         Write-Warn "Wait for it to finish, or close it manually before restoring."
         return
     }
-    $backup = Get-BackupData
-    if (-not $backup.entries -or $backup.entries.Count -eq 0) {
-        Write-Info "No backups to restore."
-        return
+    Set-BackupLock
+    try {
+        $backup = Get-BackupData
+        if (-not $backup.entries -or $backup.entries.Count -eq 0) {
+            Write-Info "No backups to restore."
+            return
+        }
+
+        Show-BackupSummary
+        Write-Blank
+        $grouped = $backup.entries | Group-Object -Property step
+        Write-Host "  Select step to restore:" -ForegroundColor White
+        for ($i = 0; $i -lt $grouped.Count; $i++) {
+            Write-Host "  [$($i+1)]  $($grouped[$i].Name)  ($($grouped[$i].Count) change(s))" -ForegroundColor White
+        }
+        Write-Host "  [A]  Restore ALL" -ForegroundColor Yellow
+        Write-Host "  [0]  Cancel" -ForegroundColor DarkGray
+
+        $choice = Read-Host "  Choice"
+        if ($choice -eq "0" -or [string]::IsNullOrWhiteSpace($choice)) { return }
+        if ($choice -match "^[aA]$") { Restore-AllChanges; return }
+
+        $idx = 0
+        if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $grouped.Count) {
+            Restore-StepChanges -StepTitle $grouped[$idx-1].Name
+        } else { Write-Warn "Invalid selection." }
+    } finally {
+        Remove-BackupLock
     }
-
-    Show-BackupSummary
-    Write-Blank
-    $grouped = $backup.entries | Group-Object -Property step
-    Write-Host "  Select step to restore:" -ForegroundColor White
-    for ($i = 0; $i -lt $grouped.Count; $i++) {
-        Write-Host "  [$($i+1)]  $($grouped[$i].Name)  ($($grouped[$i].Count) change(s))" -ForegroundColor White
-    }
-    Write-Host "  [A]  Restore ALL" -ForegroundColor Yellow
-    Write-Host "  [0]  Cancel" -ForegroundColor DarkGray
-
-    $choice = Read-Host "  Choice"
-    if ($choice -eq "0" -or [string]::IsNullOrWhiteSpace($choice)) { return }
-    if ($choice -match "^[aA]$") { Restore-AllChanges; return }
-
-    $idx = 0
-    if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $grouped.Count) {
-        Restore-StepChanges -StepTitle $grouped[$idx-1].Name
-    } else { Write-Warn "Invalid selection." }
 }

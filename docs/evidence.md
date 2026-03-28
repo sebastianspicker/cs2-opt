@@ -27,6 +27,7 @@ Every optimization tracked by this suite, with estimated impact ranges from isol
 | Timer Resolution | T2 | SAFE | 0–2 | 0 | MEDIUM | valleyofdoom/PC-Tuning | More precise system timer |
 | SysMain Disable | T3 | MODERATE | 0–3 | 0–1 | LOW | Community consensus | Only on HDD or low RAM |
 | Visual Effects | T3 | SAFE | 0–1 | 0–1 | LOW | DWM overhead reduction | Minimal impact |
+| VBS/Core Isolation Off | T2 | MODERATE | 2–8 | 1–5 | MEDIUM | Microsoft VBS docs; Phoronix benchmarks | Removes hypervisor overhead on OEM Win11. Skip if FACEIT/Vanguard. |
 | Windows Update Blocker | T3 | CRITICAL | 0 | 0 | N/A | Security trade-off | Disables security updates — not recommended |
 
 > **Reading this table:** "1% Low" is frametime consistency (higher = fewer stutters). "Avg FPS" is average framerate. Negative values mean intentional reduction (FPS Cap) or possible regression (HAGS on older GPUs). Confidence reflects the quality and reproducibility of the evidence.
@@ -170,7 +171,7 @@ Phase 2 runs automatically from `RunOnce`. **No profile interaction — all step
 | 4 | NVIDIA CS2 profile (native) | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | 52 DWORD settings applied natively via DRS |
 | 5 | FPS cap info | — | — | `info` | `info` | `info` | `info` | — |
 | 6 | Launch options + video settings | — | — | `info` | `info` | `info` | `info` | — |
-| 7 | Reserved | — | — | `—` | `—` | `—` | `—` | — |
+| 7 | VBS / Core Isolation disable | T2 | MODERATE | `skip` | `prompted` | `prompted` | `prompted` | Disables HVCI; skip if FACEIT/Vanguard |
 | 8 | AMD GPU settings guide | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | AMD GPU only |
 | 9 | DNS server configuration | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | Not for corporate/managed networks |
 | 10 | Process priority / CCD affinity | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | IFEO PerfOptions + scheduled task for X3D CCD |

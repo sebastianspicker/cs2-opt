@@ -83,8 +83,8 @@ $PP_HIBERNATEIDLE  = "9d7815a6-7ee4-497e-8888-515a05f02364"  # Hibernate timeout
 # Windows maintains an independent software ASPM layer on top of BIOS ASPM settings.
 # Even if BIOS ASPM is "disabled", the Windows power plan can still pull PCIe devices
 # (GPU, NIC, NVMe) into lower link states between frames, causing exit-latency spikes.
-$PP_SUB_PCIE       = "ee12f906-d277-404b-b6da-e5fa1a576df5"  # PCIe ASPM subgroup
-$PP_ASPM           = "501a4d13-42af-4429-9fd1-a8218c268e20"  # Link State Power Mgmt: 0=Off
+$PP_SUB_PCIE       = "501a4d13-42af-4429-9fd1-a8218c268e20"  # PCIe Express subgroup (Microsoft SUB_PCIEXPRESS)
+$PP_ASPM           = "ee12f906-d277-404b-b6da-e5fa1a576df5"  # Link State Power Management: 0=Off
 
 
 function Set-PowerPlanValue {
@@ -189,8 +189,10 @@ function Apply-PowerPlan {
 
     if (-not $PlanGuid) { Write-Warn "Apply-PowerPlan: No plan GUID provided."; return }
 
-    $isAMD   = (Get-ChipsetVendor) -eq "AMD"
-    $vendor  = if ($isAMD) { "AMD" } else { "Intel" }
+    $chipVendor = Get-ChipsetVendor
+    $isAMD   = $chipVendor -eq "AMD"
+    $isIntel = $chipVendor -eq "Intel"
+    $vendor  = if ($isAMD) { "AMD" } elseif ($isIntel) { "Intel" } else { "Unknown" }
     $applyT2 = $SCRIPT:Profile -in @("RECOMMENDED", "COMPETITIVE", "CUSTOM")
     $applyT3 = $SCRIPT:Profile -in @("COMPETITIVE", "CUSTOM")
 
@@ -242,7 +244,8 @@ function Apply-PowerPlan {
 
         # PROCTHROTTLEMIN: AMD=0 (allows OS freq hints to PB2); Intel=100 (locks base clock)
         # FPSHeaven used 100 universally — breaks AMD Precision Boost 2.
-        $minState = if ($isAMD) { 0 } else { 100 }
+        # Unknown vendor: use 0 (safe default — allows OS frequency scaling on any CPU)
+        $minState = if ($isIntel) { 100 } else { 0 }
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PROCTHROTTLEMIN $minState "CPU min perf state (${vendor}: ${minState}%)"
 
         # EPP = 0: tells CPPC2 "maximum performance" — measurable boost frequency improvement
@@ -260,7 +263,8 @@ function Apply-PowerPlan {
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_CPMINCORES 100 "Core parking min (100%, no parking)"
 
         # Intel-only: secondary ring min cores (E-core ring on hybrid architectures)
-        if (-not $isAMD) {
+        # Only apply for confirmed Intel CPUs — skip for AMD and unknown vendors
+        if ($isIntel) {
             Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_CPMINCORES1 100 "Intel ring min cores (100%)"
         }
 
@@ -284,7 +288,7 @@ function Apply-PowerPlan {
         # GPU high performance mode — even when GPU load is momentarily low
         Set-PowerPlanValue $PlanGuid $PP_SUB_GPUPREF $PP_GPUPREF 4 "GPU preference (high performance)"
 
-        $t2Count = if ($isAMD) { 15 } else { 16 }
+        $t2Count = if ($isIntel) { 16 } else { 15 }
         Write-OK "T2: $t2Count settings applied ($vendor config)."
     }
 
@@ -294,9 +298,18 @@ function Apply-PowerPlan {
         Write-Host "  NOTE: T3 disables deep C-states. Expect +5–15°C CPU temp at idle." -ForegroundColor DarkYellow
         Write-Host "  Safe with adequate cooling. Revert via Restore/Rollback if temps spike." -ForegroundColor DarkYellow
 
-        # C-states fully disabled — eliminates >100µs C-state exit latency
-        # Trade-off: +5–15°C CPU idle temp. Safe with good cooling; not recommended for laptops.
-        Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_IDLEDISABLE 1 "CPU idle disable (C-states off)"
+        # C-states: X3D guide (B21) says keep enabled on single-CCD X3D (irrelevant for
+        # single-CCD, saves power, no latency impact). Only disable on non-X3D or dual-CCD.
+        $amdCpu = Get-AmdCpuInfo
+        $skipCstateDisable = ($amdCpu -and $amdCpu.IsX3D -and $amdCpu.IsSingleCCD)
+        if ($skipCstateDisable) {
+            Write-Info "X3D single-CCD detected ($($amdCpu.CpuName)): keeping C-states enabled."
+            Write-Info "X3D guide (B21): C-state disable is irrelevant on single-CCD X3D — no latency benefit, saves power."
+        } else {
+            # C-states fully disabled — eliminates >100µs C-state exit latency
+            # Trade-off: +5–15°C CPU idle temp. Safe with good cooling; not recommended for laptops.
+            Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_IDLEDISABLE 1 "CPU idle disable (C-states off)"
+        }
 
         # Duty cycling off — prevents periodic forced freq pauses (we invert FPSHeaven's value of 1)
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_DUTYCYCLING 0 "Duty cycling (off)"
@@ -306,6 +319,7 @@ function Apply-PowerPlan {
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFINCRTIME 100 "Perf increase time (100µs)"
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFDECRTIME 250000 "Perf decrease time (250ms)"
 
-        Write-OK "T3: 5 settings applied."
+        $t3Count = if ($skipCstateDisable) { 4 } else { 5 }
+        Write-OK "T3: $t3Count settings applied.$(if ($skipCstateDisable) { ' (C-states kept enabled — X3D single-CCD)' })"
     }
 }

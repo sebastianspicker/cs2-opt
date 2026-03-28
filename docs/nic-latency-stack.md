@@ -46,6 +46,14 @@ HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-...}\000X
 
 These are set via `RegistryKeyword`, meaning the NIC driver reads them at device initialization. Changes require a device restart (handled by `Disable-NetAdapter` + `Enable-NetAdapter` or reboot).
 
+### DisplayName Fallback for Realtek NICs
+
+Intel and Realtek use different `DisplayName` strings for the same settings (e.g., Intel: `"EEE"`, Realtek: `"Energy Efficient Ethernet"`). The suite tries the Intel-style name first; if the property is not found, it falls back to the Realtek-style `DisplayName` via `$CFG_NIC_Tweaks_AltNames`. This covers the Realtek RTL8125/RTL8126 family (2.5 GbE / 5 GbE) which ships on many 2024–2026 gaming boards.
+
+### 5 GbE Buffer Sizing
+
+NICs at 5+ Gbps link speed (e.g., Realtek RTL8126) use larger receive/transmit buffers (`ReceiveBuffers = 2048`) to handle the higher packet rate without overflow. The suite detects link speed via `$nic.Speed` and scales automatically.
+
 ### How to verify
 
 LatencyMon → Drivers tab. If NIC DPC latency shows spikes correlated with traffic bursts (not constant spikes), PHY wake latency is likely the cause. After this step, those burst-correlated spikes should flatten.
@@ -96,14 +104,17 @@ Core 0 is also the default handler for most OS bookkeeping: APIC timer interrupt
 
 ### What the suite adds
 
-Four missing entries in the NIC's driver registry key:
+Five entries in the NIC's driver registry key (created if absent):
 
 | Entry | Value | Meaning |
 |-------|-------|---------|
+| `*RSS` | 1 | Master switch — some Realtek drivers ship with `*RSS=0`, silently ignoring all sub-parameters |
 | `*RSSProfile` | 1 (ClosestProcessor) | RSS queues processed on the CPU core whose L3 cache is nearest to where the DMA'd packet data landed |
 | `*RssBaseProcNumber` | 2 | Start RSS queues from Core 2, keeping Core 0/1 free for OS tasks |
-| `*MaxRssProcessors` | 4 | Spread processing across 4 cores maximum — adequate for 128 pkt/sec |
-| `*NumRssQueues` | 4 | Explicit queue count |
+| `*MaxRssProcessors` | 4 (or 8 for 5+ GbE) | Spread processing across 4 cores maximum — adequate for 128 pkt/sec at 1–2.5 GbE; 8 for 5+ GbE |
+| `*NumRssQueues` | 4 (or 8 for 5+ GbE) | Explicit queue count, scaled to link speed |
+
+**Speed-aware scaling:** NICs at 5+ Gbps (e.g., Realtek RTL8126 5 GbE) use 8 queues and 8 max processors to handle higher packet rates. Queue count is capped at the actual processor count.
 
 **Existing values are never overwritten.** If your NIC driver or motherboard vendor already configured RSS, the suite leaves it alone.
 
@@ -215,7 +226,7 @@ Many common "network optimization" steps that appear in guides are omitted becau
 | Disable RSC (Receive Segment Coalescing) | Coalesces TCP *segments* — not UDP datagrams |
 | Disable LSO (Large Send Offload) | NIC-based TCP segmentation — irrelevant for 80-byte UDP |
 | Disable TCP/UDP Checksum Offload | UDP checksum for 80-byte datagrams takes nanoseconds in hardware; software is slower |
-| `*TransmitBuffers = 256` | Suite sets 512 (safe default); reducing below 512 risks overflows during background traffic bursts |
+| `*TransmitBuffers = 256` | Suite sets 512 (safe default; 2048 for 5+ GbE NICs); reducing below 512 risks overflows during background traffic bursts |
 | Disable ARPOffload / NSOffload | Active only during system sleep — zero effect during gameplay |
 | Disable WakeOnMagicPacket | Active only when system is powered off |
 

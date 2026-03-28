@@ -51,7 +51,7 @@ $SCRIPT:StepCatalog = @(
     [PSCustomObject]@{ Phase=3; Step=4;  Category="GPU";      Title="NVIDIA DRS Profile";           Tier=3; Risk="SAFE";       Depth="DRIVER";     EstKey="";   CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=5;  Category="CS2";      Title="FPS Cap Info";                  Tier=1; Risk="SAFE";       Depth="CHECK";      EstKey="FPS Cap";                   CheckOnly=$true;  Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=6;  Category="CS2";      Title="Launch Options + Video";        Tier=2; Risk="SAFE";       Depth="APP";        EstKey="";                         CheckOnly=$false; Reboot=$false }
-    [PSCustomObject]@{ Phase=3; Step=7;  Category="System";   Title="Reserved";                      Tier=1; Risk="SAFE";       Depth="CHECK";      EstKey="";                         CheckOnly=$true;  Reboot=$false }
+    [PSCustomObject]@{ Phase=3; Step=7;  Category="Security";  Title="VBS / Core Isolation";           Tier=2; Risk="MODERATE";   Depth="REGISTRY";   EstKey="VBS/Core Isolation Off";    CheckOnly=$false; Reboot=$true  }
     [PSCustomObject]@{ Phase=3; Step=8;  Category="GPU";      Title="AMD GPU Settings";              Tier=2; Risk="SAFE";       Depth="CHECK";      EstKey="";                         CheckOnly=$true;  Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=9;  Category="Network";  Title="DNS Configuration";             Tier=3; Risk="SAFE";       Depth="NETWORK";    EstKey="";                         CheckOnly=$false; Reboot=$false }
     [PSCustomObject]@{ Phase=3; Step=10; Category="CPU";      Title="Process Priority + X3D CCD";    Tier=3; Risk="SAFE";       Depth="REGISTRY";   EstKey="";                         CheckOnly=$false; Reboot=$false }

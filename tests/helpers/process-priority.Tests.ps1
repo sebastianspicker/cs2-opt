@@ -149,6 +149,34 @@ Describe "Get-X3DCcdInfo" {
             $result.DualCCD | Should -Be $true
         }
 
+        It "detects 9900X3D as dual CCD with asymmetric 8+4 layout" {
+            Mock Get-CimInstance {
+                [PSCustomObject]@{
+                    Name = "AMD Ryzen 9 9900X3D"
+                    NumberOfCores = 12
+                    NumberOfLogicalProcessors = 24
+                }
+            }
+            $result = Get-X3DCcdInfo
+            $result.DualCCD | Should -Be $true
+            $result.Ccd0Cores | Should -Be 8
+            $result.TotalCores | Should -Be 12
+        }
+
+        It "calculates correct affinity mask for 9900X3D with SMT (8+4 asymmetric)" {
+            Mock Get-CimInstance {
+                [PSCustomObject]@{
+                    Name = "AMD Ryzen 9 9900X3D"
+                    NumberOfCores = 12
+                    NumberOfLogicalProcessors = 24
+                }
+            }
+            $result = Get-X3DCcdInfo
+            # CCD0 cores 0-7 = bits 0-7, SMT partners = bits 12-19
+            # Mask = 0xFF + (0xFF << 12) = 0xFF0FF
+            $result.AffinityMask | Should -Be 0xFF0FF
+        }
+
         It "calculates correct affinity mask for 7950X3D with SMT" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{

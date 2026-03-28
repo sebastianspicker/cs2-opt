@@ -10,7 +10,7 @@ function Initialize-Log {
         Get-ChildItem $CFG_LogDir -Filter "optimize_*.log" |
             Sort-Object LastWriteTime -Descending |
             Select-Object -Skip $CFG_LogMaxFiles |
-            Remove-Item -Force
+            Remove-Item -Force -ErrorAction SilentlyContinue
     }
     Set-Content $CFG_LogFile @"
 ================================================================================

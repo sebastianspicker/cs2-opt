@@ -39,7 +39,7 @@ $NV_DRS_SETTINGS = @(
     # ── Texture Filtering ────────────────────────────────────────────────────
     @{ Id=13510289;   Value=20;         Name="Texture filtering quality: High Performance" }
     @{ Id=1686376;    Value=1;          Name="Negative LOD bias: Clamp" }
-    @{ Id=3066610;    Value=0;          Name="Trilinear optimization: OFF" }
+    @{ Id=3066610;    Value=0;          Name="Trilinear optimization: ON (0=driver perf shortcut enabled)" }
     @{ Id=8703344;    Value=0;          Name="Anisotropic filter optimization: OFF" }
     @{ Id=15151633;   Value=0;          Name="Anisotropic sample optimization: OFF" }
     @{ Id=6524559;    Value=0;          Name="Driver controlled LOD bias: OFF" }
@@ -48,7 +48,7 @@ $NV_DRS_SETTINGS = @(
     @{ Id=276652957;  Value=0;          Name="AA gamma correction: OFF" }
     @{ Id=276757595;  Value=0;          Name="AA mode: Application Controlled" }
     @{ Id=545898348;  Value=0;          Name="AA line gamma: OFF" }
-    @{ Id=270426537;  Value=1;          Name="Anisotropic filtering: App Controlled" }
+    @{ Id=270426537;  Value=1;          Name="Anisotropic filtering: Off [Linear] (app decides AF level)" }
     @{ Id=282245910;  Value=0;          Name="Anisotropic mode: App Controlled" }
 
     # ── FXAA ─────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ $NV_DRS_SETTINGS = @(
     @{ Id=278196567;  Value=0;          Name="VRR global feature: OFF" }
     @{ Id=278196727;  Value=0;          Name="VRR requested state: OFF" }
     @{ Id=279476652;  Value=1;          Name="G-SYNC: FORCE_OFF" }
-    @{ Id=279476686;  Value=0;          Name="Variable refresh rate: OFF" }
+    # Removed: Id=279476686 (0x10A879CE) — not in NPI, likely inert; other 6 G-SYNC settings cover VRR
     @{ Id=279476687;  Value=1;          Name="G-SYNC (2): FORCE_OFF" }
     @{ Id=294973784;  Value=0;          Name="G-SYNC globally: OFF" }
     @{ Id=5912412;    Value=2525368439; Name="VSync tear control: disabled" }
@@ -79,6 +79,12 @@ $NV_DRS_SETTINGS = @(
     @{ Id=284810369;  Value=17;         Name="Optimus: force dGPU" }
     @{ Id=284810372;  Value=16777216;   Name="Optimus shim: force dGPU rendering" }
 
+    # ── Resizable BAR ───────────────────────────────────────────────────────
+    # NPI CustomSettingNames.xml: 0x000F00BA = "rBAR - Enable", 1 = Enabled
+    # Both Enable + Options are required for per-application rBAR to take effect.
+    @{ Id=983226;     Value=1;          Name="rBAR: Enabled (allows CPU full VRAM access — RTX 30/40/50)" }
+    @{ Id=983227;     Value=1;          Name="rBAR - Options: Enabled (companion setting for per-app rBAR)" }
+
     # ── Shader Cache ─────────────────────────────────────────────────────────
     @{ Id=11306135;   Value=10240;      Name="Shader disk cache max: 10240 MB (10 GB)" }
 
@@ -86,18 +92,15 @@ $NV_DRS_SETTINGS = @(
     @{ Id=270198627;  Value=0;          Name="Smooth AFR: OFF" }
 
     # ── CUDA P-State Lock ────────────────────────────────────────────────────
-    # Prevents memory clock from downclocking to P2 during CUDA workloads even
-    # when PerfLevelSrc=0x2222 and Power Management Mode = Prefer Max Performance
-    # are already set. These target different P-state override points.
-    # valleyofdoom/PC-Tuning §configure-nvidia: confirmed fix for CUDA P2 drop.
-    @{ Id=1074665807; Value=0;          Name="CUDA - Force P2 State: OFF (keeps memory clock at P0)" }
+    # Removed: Id=1074665807 (0x400E194F) — undocumented duplicate; NPI-recognized
+    # Id=1343646814 (0x50166C5E) below handles the same CUDA P-state override.
 
     # ── Decoded flags (source: CustomSettingNames.xml + NVIDIA 2022 leak DB) ─
     @{ Id=390467;     Value=1;          Name="Ultra Low Latency - CPL State: On (Reflex prereq — CPL mode active; NVCP ULL-Enabled is a separate setting)" }
     @{ Id=14566042;   Value=0;          Name="DXR_ENABLE: OFF (DirectX Raytracing disabled — CS2 doesn't use DXR)" }
     @{ Id=274606621;  Value=4;          Name="ANSEL_FREESTYLE_MODE: APPROVED_ONLY (4; no active overhead)" }
     @{ Id=549198379;  Value=0;          Name="VK_NV_RAYTRACING: DISABLE (Vulkan RT extension off — CS2 doesn't use VK RT)" }
-    @{ Id=1343646814; Value=0;          Name="CUDA_STABLE_PERF_LIMIT: FORCE_OFF (0; prevents CUDA P-state drop; redundant with Id=1074665807)" }
+    @{ Id=1343646814; Value=0;          Name="CUDA_STABLE_PERF_LIMIT: FORCE_OFF (0; prevents CUDA P-state drop to P2)" }
     @{ Id=2156231208; Value=1;          Name="GFE_MONITOR_USAGE: 1 (GFE telemetry state; no impact without GFE installed)" }
 
     # ── Partially decoded flags (inferred from position + NVIDIA leak DB) ────
@@ -117,7 +120,7 @@ $NV_DRS_SETTINGS = @(
     @{ Id=276387096;  Value=60;         Name="Unknown post-2022 flag (0x10795518; driver-ignored on current releases)" }
     @{ Id=276387097;  Value=0;          Name="Unknown post-2022 flag (0x10795519; driver-ignored on current releases)" }
 )
-# TOTAL: 52 DWORD settings via DRS
+# TOTAL: 52 DWORD settings via DRS (was 51: added rBAR Options companion setting)
 
 # ── Excluded settings ──────────────────────────────────────────────────────
 # 2966161525 (0xB0CC0875) — Smooth Motion APIs = 1 → frame interpolation adds latency
@@ -238,6 +241,30 @@ function Apply-NvidiaCS2ProfileDrs {
         [string]$FrlLabel = "500"
     )
 
+    # Validate FRL value — prevent nonsensical caps from corrupting the DRS profile
+    if ($FrlValue -le 0 -or $FrlValue -gt 1000) { $FrlValue = 500 }
+
+    # ── DRY-RUN: print what WOULD be applied, skip Invoke-DrsSession entirely ──
+    # The entire Invoke-DrsSession call creates a real DRS session that executes
+    # CreateProfile/AddApplication — mutating the DRS database even in DRY-RUN.
+    # Only the registry fallback path (PerfLevelSrc, DisableDynamicPstate) goes
+    # through Set-RegistryValue which handles DRY-RUN itself.
+    if ($SCRIPT:DryRun) {
+        $applied = 0
+        foreach ($s in $NV_DRS_SETTINGS) {
+            $writeValue = [uint32]$s.Value
+            if ($s.Id -eq 277041162 -and $FrlValue -ne 500) {
+                $writeValue = [uint32]$FrlValue
+            }
+            Write-Host "  [DRY-RUN] Would set DRS: $($s.Name) = $writeValue" -ForegroundColor Magenta
+            $applied++
+        }
+        Write-Host "  [DRY-RUN] Would save DRS database" -ForegroundColor Magenta
+        $SCRIPT:_drsApplied = $applied
+        $SCRIPT:_drsErrors  = 0
+        return $true
+    }
+
     try {
         Invoke-DrsSession -Action {
             param($session)
@@ -313,16 +340,14 @@ function Apply-NvidiaCS2ProfileDrs {
             # ── Backup current DRS values ───────────────────────────────────
             # Backup failure must not abort the settings write — wrap separately
             $effectiveTitle = if ($SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle } else { "NVIDIA CS2 DRS Profile" }
-            if (-not $SCRIPT:DryRun) {
-                try {
-                    Backup-DrsSettings -Session $session -DrsProfile $drsProfile `
-                        -SettingIds ($NV_DRS_SETTINGS | ForEach-Object { $_.Id }) `
-                        -StepTitle $effectiveTitle `
-                        -ProfileName $(if ($profileName) { $profileName } else { $SCRIPT:DRS_FOUND_VIA_APP }) `
-                        -ProfileCreated $profileCreated
-                } catch {
-                    Write-Warn "DRS backup failed (settings will still be applied): $_"
-                }
+            try {
+                Backup-DrsSettings -Session $session -DrsProfile $drsProfile `
+                    -SettingIds ($NV_DRS_SETTINGS | ForEach-Object { $_.Id }) `
+                    -StepTitle $effectiveTitle `
+                    -ProfileName $(if ($profileName) { $profileName } else { $SCRIPT:DRS_FOUND_VIA_APP }) `
+                    -ProfileCreated $profileCreated
+            } catch {
+                Write-Warn "DRS backup failed (settings will still be applied): $_"
             }
 
             # ── Apply settings ──────────────────────────────────────────────
@@ -335,12 +360,6 @@ function Apply-NvidiaCS2ProfileDrs {
                 # 277041162 = FRL NVCPL (frame rate limiter, not legacy FRL 277041154)
                 if ($s.Id -eq 277041162 -and $FrlValue -ne 500) {
                     $writeValue = [uint32]$FrlValue
-                }
-
-                if ($SCRIPT:DryRun) {
-                    Write-Host "  [DRY-RUN] Would set DRS: $($s.Name) = $writeValue" -ForegroundColor Magenta
-                    $applied++
-                    continue
                 }
 
                 try {
@@ -356,11 +375,7 @@ function Apply-NvidiaCS2ProfileDrs {
             # Store counts for the caller's summary
             $SCRIPT:_drsApplied = $applied
             $SCRIPT:_drsErrors  = $errors
-
-            if ($SCRIPT:DryRun) {
-                Write-Host "  [DRY-RUN] Would save DRS database" -ForegroundColor Magenta
-            }
-        } -NoSave:$SCRIPT:DryRun
+        }
 
         return $true
     } catch {

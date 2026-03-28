@@ -114,6 +114,14 @@ public class NvApiDrs
     //  NVDRS_APPLICATION_V1 (4104 bytes):
     //    version(4) + isPredefined(4) + appName(4096)
     //
+    //  NOTE on NVDRS_APPLICATION versions:
+    //    V1 (4104 bytes, version tag 0x00011008) is the minimum supported struct.
+    //    Later versions (V3, V4) add fields like userFriendlyName, launcher, etc.
+    //    NVAPI is backward-compatible: passing a V1 struct to DRS_CreateApplication
+    //    and DRS_FindAppByName works on all driver versions. The driver reads the
+    //    version tag to determine which fields are present. V1 is sufficient for
+    //    binding cs2.exe to a profile — the extra V3/V4 fields are optional metadata.
+    //
     private const int UNICODE_STR_BYTES = 4096;
 
     private const int SETTING_SIZE = 12320;

@@ -32,7 +32,14 @@ function Get-LatestNvidiaDriver {
     # Map common GPU series to NVIDIA product series/family IDs
     # [ordered] ensures deterministic match order (longest/newest series first)
     $gpuName = $gpu.Name
+    # Laptop entries MUST come before their desktop counterparts — [ordered]
+    # iterates in insertion order and we break on first match. Laptop GPUs
+    # contain "Laptop" in the name (e.g., "NVIDIA GeForce RTX 4060 Laptop GPU")
+    # and need different psid/pfid values for NVIDIA's driver lookup API.
     $seriesMap = [ordered]@{
+        "RTX 50.*Laptop" = @{ psid = 131; pfid = 1010 }  # GeForce RTX 50 Series (Laptops)
+        "RTX 40.*Laptop" = @{ psid = 130; pfid = 957 }   # GeForce RTX 40 Series (Laptops)
+        "RTX 30.*Laptop" = @{ psid = 118; pfid = 957 }   # GeForce RTX 30 Series (Laptops)
         "RTX 50"  = @{ psid = 129; pfid = 1010 }   # GeForce RTX 50 Series
         "RTX 40"  = @{ psid = 128; pfid = 993 }     # GeForce RTX 40 Series
         "RTX 30"  = @{ psid = 127; pfid = 945 }     # GeForce RTX 30 Series

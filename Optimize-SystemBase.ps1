@@ -25,7 +25,7 @@ if ($startStep -le 2) {
         -Why "RAM at JEDEC default = slower than rated. Generally recommended, CS2 effect not isolated." `
         -Evidence "Hardware logic: plausible. CS2 benchmark: no clear proof. No downside to activation." `
         -Risk "SAFE" -Depth "CHECK" `
-        -Improvement "Ensures RAM runs at purchased speed — general system benefit" `
+        -Improvement "Warns if RAM is running below rated speed (XMP/EXPO off)" `
         -SideEffects "None — read-only check with BIOS instructions" `
         -Undo "N/A (check only)" `
         -Action {
@@ -35,8 +35,13 @@ if ($startStep -le 2) {
                 Write-Info "Task Manager -> Performance -> Memory -> Speed"
             } else {
                 Write-Info "RAM:           $($ram.TotalGB) GB | $($ram.Sticks) stick(s)"
-                Write-Info "Rated speed:   $($ram.SpeedMhz) MHz  (per SPD)"
-                Write-Info "Active:        $($ram.ActiveMhz) MHz  (actual)"
+                if ($ram.IsDDR5) {
+                    Write-Info "Rated speed:   $($ram.SpeedMhz) MT/s  (per SPD)"
+                    Write-Info "Active:        $($ram.ActiveMhz * 2) MT/s  ($($ram.ActiveMhz) MHz clock)"
+                } else {
+                    Write-Info "Rated speed:   $($ram.SpeedMhz) MHz  (per SPD)"
+                    Write-Info "Active:        $($ram.ActiveMhz) MHz  (actual)"
+                }
 
                 if ($ram.XmpActive) {
                     Write-OK "XMP/EXPO is active — RAM running at rated speed."
@@ -45,7 +50,9 @@ if ($startStep -le 2) {
                     Write-Err "XMP/EXPO is NOT active!"
                     Write-Blank
                     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
-                    Write-Host "  │  $("RAM running at $($ram.ActiveMhz) MHz instead of $($ram.SpeedMhz) MHz".PadRight(60))│" -ForegroundColor Yellow
+                    $activeLabel = if ($ram.IsDDR5) { "$($ram.ActiveMhz * 2) MT/s" } else { "$($ram.ActiveMhz) MHz" }
+                    $ratedLabel  = if ($ram.IsDDR5) { "$($ram.SpeedMhz) MT/s" } else { "$($ram.SpeedMhz) MHz" }
+                    Write-Host "  │  $("RAM running at $activeLabel instead of $ratedLabel".PadRight(60))│" -ForegroundColor Yellow
                     Write-Host "  │                                                              │" -ForegroundColor Yellow
                     Write-Host "  │  Note: CS2-specific 1%-low effect is not proven by           │" -ForegroundColor DarkGray
                     Write-Host "  │  isolated benchmarks. Generally recommended though —         │" -ForegroundColor DarkGray
@@ -57,7 +64,8 @@ if ($startStep -le 2) {
                     Write-Host "  │  3.  Enable Profile 1                                      │" -ForegroundColor White
                     Write-Host "  │  4.  Save + restart                                        │" -ForegroundColor White
                     Write-Host "  │  5.  Verify: Task Manager -> Performance -> Memory          │" -ForegroundColor White
-                    Write-Host "  │  $("    -> Should show '$($ram.SpeedMhz) MHz'".PadRight(60))│" -ForegroundColor White
+                    $verifyLabel = if ($ram.IsDDR5) { "$($ram.SpeedMhz) MT/s" } else { "$($ram.SpeedMhz) MHz" }
+                    Write-Host "  │  $("    -> Should show '$verifyLabel'".PadRight(60))│" -ForegroundColor White
                     Write-Host "  │                                                              │" -ForegroundColor Yellow
                     Write-Host "  │  AFTERWARDS: RAM stability test recommended                 │" -ForegroundColor DarkGray
                     Write-Host "  │  TM5 / HCI MemTest  (github.com/integrityhf/TM5)           │" -ForegroundColor DarkGray
@@ -67,35 +75,113 @@ if ($startStep -le 2) {
                 }
             }
 
-            # ── BIOS Optimization Checklist ──────────────────────────────
+            # ── BIOS Optimization Checklist (CPU-aware) ────────────────────
+            $amdCpu = Get-AmdCpuInfo
+            $ddr5Info = Get-Ddr5TimingInfo
+            $boardInfo = Get-MotherboardInfo
+            $isX3D = ($amdCpu -and $amdCpu.IsX3D)
+
             Write-Blank
             Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor DarkGray
             Write-Host "  │  BIOS OPTIMIZATION CHECKLIST (cannot be automated)          │" -ForegroundColor DarkGray
             Write-Host "  │                                                              │" -ForegroundColor DarkGray
-            Write-Host "  │  While in BIOS, check these settings:                       │" -ForegroundColor White
+
+            # ── Section 1: Platform (universal) ──────────────────────────
+            Write-Host "  │  PLATFORM SETTINGS (T1 — always set):                      │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  XMP / EXPO / DOCP  -> Profile 1 (RAM rated speed)      │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  Above 4G Decoding  -> ENABLED  (required for ReBAR)    │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  Re-Size BAR        -> ENABLED or Auto                  │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  CSM / Legacy       -> DISABLED (full UEFI-only mode)   │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  IOMMU              -> ENABLED                          │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  SR-IOV             -> DISABLED                         │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  Spread Spectrum    -> DISABLED (reduces clock jitter)  │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  Secure Boot        -> ENABLED (Win11 + HAGS)           │" -ForegroundColor White
+            Write-Host "  │  $([char]0x2714)  Fast Boot          -> ENABLED (BIOS POST speed —       │" -ForegroundColor White
+            Write-Host "  │     different from Windows Fast Startup)                      │" -ForegroundColor DarkGray
+            Write-Host "  │  $([char]0x2714)  ECO Mode           -> Auto (Disabled)                  │" -ForegroundColor White
+
+            if ($isX3D) {
+                # ── Section 2: X3D-specific CPU tuning ──────────────────
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  $($amdCpu.CpuName) — CPU TUNING (T2):$(' ' * [math]::Max(0, 38 - $amdCpu.CpuName.Length))│" -ForegroundColor Yellow
+                Write-Host "  │  Path: Advanced -> AMD Overclocking -> PBO                  │" -ForegroundColor DarkGray
+                Write-Host "  │  $([char]0x2714)  Core Performance Boost -> Auto (Enabled) — PBO prerequisite│" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  CPU Core Ratio     -> Auto — manual ratio overrides PBO│" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  PBO                -> Advanced                         │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  PBO Limits         -> Motherboard                      │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  PBO Scalar         -> Auto (1X)                        │" -ForegroundColor White
+                if ($amdCpu.IsZen5) {
+                    Write-Host "  │  $([char]0x2714)  Boost Clock Override -> Enabled (+200)                 │" -ForegroundColor Cyan
+                } else {
+                    Write-Host "  │  $([char]0x2714)  Boost Clock Override -> Disabled                       │" -ForegroundColor Cyan
+                }
+                Write-Host "  │  $([char]0x2714)  Curve Optimizer    -> All Cores, Negative              │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  CO Magnitude       -> $($amdCpu.RecommendedCO) (start conservative)$(' ' * [math]::Max(0, 11 - "$($amdCpu.RecommendedCO)".Length))│" -ForegroundColor Cyan
+                Write-Host "  │  $([char]0x2714)  VRM / LLC / Voltages -> All Auto                      │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  CPU SOC Voltage    -> Auto (verify <= 1.20V)          │" -ForegroundColor White
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  Validate: OCCT AVX2 15 min. Crash -> reduce CO by 5.      │" -ForegroundColor DarkGray
+                Write-Host "  │  Expected boost: >= $($amdCpu.ExpectedBoostMhz) MHz (ST), Temp < $($amdCpu.MaxTempC)C       │" -ForegroundColor DarkGray
+
+                # ── Section 3: X3D warnings ─────────────────────────────
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  WARNINGS:                                                  │" -ForegroundColor Red
+                Write-Host "  │  $([char]0x2718)  Core Tuning Config -> AUTO (NOT Legacy!)               │" -ForegroundColor Red
+                Write-Host "  │     Legacy = -5 to -9% FPS (OC.net, HardwareLuxx 19 games) │" -ForegroundColor Red
+                Write-Host "  │  $([char]0x2714)  Performance Bias   -> None                             │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  PBO Scalar 10X     -> AVOID (negates undervolt)        │" -ForegroundColor DarkYellow
+            }
+
+            # ── Section 4: DDR5 RAM tuning ────────────────────────────
+            if ($ddr5Info -and $ddr5Info.IsDDR5) {
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  DDR5 RAM TUNING$(if ($isX3D) { ' (X3D optimal: DDR5-6000 1:1)' } else { '' }):$(' ' * $(if ($isX3D) { 15 } else { 44 }))│" -ForegroundColor Yellow
+                if ($isX3D) {
+                    Write-Host "  │  $([char]0x2714)  Memory Frequency   -> DDR5-6000 (manual)               │" -ForegroundColor White
+                    Write-Host "  │  $([char]0x2714)  FCLK Frequency     -> 2000 (manual)                    │" -ForegroundColor White
+                    Write-Host "  │  $([char]0x2714)  UCLK DIV1 MODE     -> UCLK=MEMCLK (1:1)               │" -ForegroundColor White
+                }
+                Write-Host "  │  $([char]0x2714)  Power Down Enable  -> Disabled                         │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  Memory Context Restore -> Disabled                     │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  Bank Refresh Mode  -> Normal (AGESA 1.3.0.0+)          │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  GDM                -> Auto (Enabled)                   │" -ForegroundColor White
+                if ($ddr5Info.IsDownclocked) {
+                    Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                    Write-Host "  │  NOTE: Kit rated $($ddr5Info.RatedMTs) MT/s, running at $($ddr5Info.ActiveMTs) MT/s.  │" -ForegroundColor DarkYellow
+                    Write-Host "  │  If EXPO fails at 6000: set CL36-36-36-72-108 manually.    │" -ForegroundColor DarkYellow
+                    Write-Host "  │  See X3D_KOMPLETT_GUIDE.md Section C for subtiming stages.  │" -ForegroundColor DarkGray
+                }
+                Write-Host "  │  $([char]0x25B2) PD=Disabled + MCR=Enabled = BSOD! Keep both synced.    │" -ForegroundColor Red
+            }
+
+            # ── Section 5: Board-specific (ASUS Strix X870E-E) ────────
+            if ($boardInfo -and $boardInfo.Product -match "X870E.*E|ROG STRIX X870E") {
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  STRIX X870E-E SPECIFIC:                                    │" -ForegroundColor Yellow
+                Write-Host "  │  $([char]0x2714)  BIOS >= 1504 (AGESA 1.2.0.3d)                         │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2714)  Boot SSD in M.2_1 (CPU PCIe 5.0, keeps GPU x16)      │" -ForegroundColor White
+                Write-Host "  │  $([char]0x2718)  AVOID M.2_2 or M.2_3 (drops GPU to x8!)               │" -ForegroundColor Red
+                Write-Host "  │  $([char]0x2714)  M.2_4, M.2_5 (chipset PCIe 4.0) safe for extra SSDs  │" -ForegroundColor White
+                Write-Host "  │  $([char]0x25CB)  Ignore: AI OC, AEMP, AI Cache Boost, Dynamic OC      │" -ForegroundColor DarkGray
+            }
+
+            # ── Section 6: Generic (non-X3D) settings ─────────────────
+            if (-not $isX3D) {
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  ADDITIONAL SETTINGS:                                       │" -ForegroundColor White
+                Write-Host "  │  ?  C-States           -> C1 only or all disabled           │" -ForegroundColor DarkGray
+                Write-Host "  │                          (reduces latency, increases temp)   │" -ForegroundColor DarkGray
+                Write-Host "  │  ?  Virtualization     -> Off if no VMs/WSL/Docker used     │" -ForegroundColor DarkGray
+                Write-Host "  │                          (also disables VBS/HVCI overhead)   │" -ForegroundColor DarkGray
+            }
+
+            # ── Common footer ─────────────────────────────────────────
+            if ((Get-ChipsetVendor) -eq "AMD") {
+                Write-Host "  │                                                              │" -ForegroundColor DarkGray
+                Write-Host "  │  $([char]0x2714)  TPM -> Discrete TPM (not AMD fTPM — causes freezes)   │" -ForegroundColor White
+            }
             Write-Host "  │                                                              │" -ForegroundColor DarkGray
-            Write-Host "  │  ✓  XMP / EXPO / DOCP  -> Profile 1 (RAM rated speed)      │" -ForegroundColor White
-            Write-Host "  │  ✓  Above 4G Decoding  -> ENABLED  (required for ReBAR)    │" -ForegroundColor White
-            Write-Host "  │  ✓  Re-Size BAR        -> ENABLED or Auto                  │" -ForegroundColor White
-            Write-Host "  │  ✓  Fast Boot          -> DISABLED (proper HW init)        │" -ForegroundColor White
-            Write-Host "  │  ✓  Legacy USB         -> DISABLED (if no USB keyboard/    │" -ForegroundColor White
-            Write-Host "  │                          mouse needed in BIOS)              │" -ForegroundColor DarkGray
-            Write-Host "  │  ✓  PCIe ASPM          -> DISABLED or L0s (reduces PCIe   │" -ForegroundColor White
-            Write-Host "  │                          latency spikes)                    │" -ForegroundColor DarkGray
-            Write-Host "  │  ✓  Spread Spectrum    -> DISABLED (reduces clock jitter)  │" -ForegroundColor White
-            Write-Host "  │  ?  C-States           -> C1 only or all disabled          │" -ForegroundColor DarkGray
-            Write-Host "  │                          (reduces latency, increases temp)  │" -ForegroundColor DarkGray
-            Write-Host "  │  ?  Virtualization     -> Off if no VMs/WSL/Docker used    │" -ForegroundColor DarkGray
-            Write-Host "  │                          (also disables VBS/HVCI overhead) │" -ForegroundColor DarkGray
-            Write-Host "  │  ✓  Secure Boot        -> ENABLED (Win11 requires for HAGS)│" -ForegroundColor White
-            Write-Host "  │  ✓  TPM (Ryzen only)   -> Discrete TPM, not AMD fTPM       │" -ForegroundColor White
-            Write-Host "  │                          AMD fTPM causes random 1-2s freeze │" -ForegroundColor DarkGray
-            Write-Host "  │                          BIOS -> Security -> AMD fTPM ->    │" -ForegroundColor DarkGray
-            Write-Host "  │                          Discrete TPM (keep Win11 TPM req) │" -ForegroundColor DarkGray
-            Write-Host "  │  ✓  CSM / Legacy       -> DISABLED (full UEFI-only mode)   │" -ForegroundColor White
-            Write-Host "  │                                                              │" -ForegroundColor DarkGray
-            Write-Host "  │  NOTE: C-States disable raises idle CPU temperature         │" -ForegroundColor Yellow
-            Write-Host "  │  significantly. Only disable on well-cooled systems.        │" -ForegroundColor Yellow
+            Write-Host "  │  VBS/Core Isolation will be checked in Phase 3 Step 7.      │" -ForegroundColor DarkGray
             Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor DarkGray
 
             Complete-Step $PHASE 2 "XMP-Check"
@@ -354,12 +440,17 @@ if ($startStep -le 7) {
         Write-Info "AMD/Intel: Configure HAGS via system settings or driver software."
         Skip-Step $PHASE 7 "HAGS"
     } else {
-        $hagsState = if ($gpuInput -eq "2") { "OFF (RTX 4000 and older can hurt)" } else { "ON (recommended for RTX 5000)" }
-        $hagsVal   = if ($gpuInput -eq "2") { 0 } else { 2 }
+        # X3D guide (B22): HAGS Off by default on X3D CPUs — override GPU-based default
+        $amdInfo = Get-AmdCpuInfo
+        $isX3D = ($amdInfo -and $amdInfo.IsX3D)
+        $hagsState = if ($isX3D) { "OFF (X3D guide: Off by default — benchmark both)" }
+            elseif ($gpuInput -eq "2") { "OFF (RTX 4000 and older can hurt)" }
+            else { "ON (recommended for RTX 5000)" }
+        $hagsVal = if ($isX3D -or $gpuInput -eq "2") { 0 } else { 2 }
         Invoke-TieredStep -Tier 2 -Title "HAGS $hagsState" `
             -Why "HAGS lets the GPU manage its own render queue -> less CPU overhead." `
-            -Evidence "Measurable effect on RTX 3000+ / RDNA2+. RTX 2000 and older: can worsen 1% lows." `
-            -Caveat "Setup-dependent. Always benchmark (CapFrameX) before and after." `
+            -Evidence "Measurable effect on RTX 3000+ / RDNA2+. RTX 2000 and older: can worsen 1% lows. X3D guide (B22): Off (Default)." `
+            -Caveat "Setup-dependent. Always benchmark (CapFrameX) before and after.$(if ($isX3D) { ' X3D guide defaults to Off — test On with RTX 5000.' })" `
             -Risk "MODERATE" -Depth "REGISTRY" -EstimateKey "HAGS Toggle" `
             -Improvement "Less CPU overhead for GPU scheduling — +2-5% on RTX 3000+" `
             -SideEffects "RTX 2000 and older: may worsen 1% lows. Benchmark to verify." `
@@ -438,6 +529,17 @@ if ($startStep -le 8) {
     } elseif ($ramGB -ge 32) {
         Write-Info "RAM: ${ramGB} GB — pagefile fix has little effect on CS2 with >= 32 GB RAM."
         Write-Info "CS2 fits entirely in RAM. Pagefile only used on RAM overflow."
+        # Still check for dangerous pagefile configs even with plenty of RAM:
+        # disabled pagefile (0 MB) or system-managed with no guaranteed minimum
+        # can cause hard crashes when RAM is fully consumed by CS2 + other apps.
+        $pfCheck = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+        $autoManaged = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).AutomaticManagedPagefile
+        if ($pfCheck -and $pfCheck.InitialSize -eq 0 -and $pfCheck.MaximumSize -eq 0 -and -not $autoManaged) {
+            Write-Warn "Pagefile is DISABLED (0 MB). Even with ${ramGB} GB RAM, a missing pagefile can cause hard crashes under extreme memory pressure."
+            Write-Warn "Recommendation: Enable system-managed pagefile or set a minimum of 4096 MB."
+        } elseif ($autoManaged) {
+            Write-Info "Pagefile is system-managed (OK for ${ramGB} GB RAM)."
+        }
         Skip-Step $PHASE 8 "Pagefile (sufficient RAM)"
     } else {
         $pfMB = if ($ramGB -gt 0) { $ramGB * 1024 * 2 } else { 16384 }

@@ -21,7 +21,8 @@
 | `Microsoft.People` | People | Contact sync background service |
 | `Microsoft.Todos` | Microsoft To Do | Background sync |
 | `Microsoft.WindowsFeedbackHub` | Feedback Hub | Telemetry upload; Windows diagnostic submission |
-| `Microsoft.YourPhone` | Phone Link | Background phone connection daemon |
+| `Microsoft.YourPhone` | Phone Link (legacy package name) | Background phone connection daemon |
+| `Microsoft.Windows.PhoneLink` | Phone Link (Win11 23H2+ package name) | Same app, renamed package — both are removed to cover all Windows versions |
 | `Microsoft.WindowsMaps` | Maps | Background map data updates |
 | `Microsoft.ZuneMusic` | Groove Music / Media Player | Superseded by Windows 11's native Media Player |
 | `Microsoft.ZuneVideo` | Movies & TV | Background store connectivity |

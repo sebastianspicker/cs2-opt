@@ -3,7 +3,7 @@
 > Covers Phase 3 Step 4, `helpers/nvidia-profile.ps1`, and `helpers/nvidia-drs.ps1`.
 > For the DRS write mechanism itself, see [`docs/nvidia-optimization.md`](nvidia-optimization.md).
 
-The suite writes 52 DWORD settings directly to the NVIDIA DRS binary database (`nvdrs.dat`) via `nvapi64.dll`. Three settings are intentionally excluded (see [Excluded Settings](#excluded-settings)). Two registry keys (`PerfLevelSrc`, `DisableDynamicPstate`) are always applied regardless of DRS availability.
+The suite writes 52 DWORD settings directly to the NVIDIA DRS binary database (`nvdrs.dat`) via `nvapi64.dll`. Two settings from the original profile were removed (VRR `279476686` — not in NPI, likely inert; CUDA Force P2 `1074665807` — duplicate of `1343646814`). Two rBAR settings were added (`983226`, `983227`). Three settings are intentionally excluded (see [Excluded Settings](#excluded-settings)). Two registry keys (`PerfLevelSrc`, `DisableDynamicPstate`) are always applied regardless of DRS availability.
 
 ---
 
@@ -24,7 +24,7 @@ The suite writes 52 DWORD settings directly to the NVIDIA DRS binary database (`
 |------|--------|-------|-------------|
 | Texture filtering quality | `13510289` | `20` (High Performance) | Disables driver-side texture quality enhancements. CS2 uses its own texture filtering; driver enhancement is overhead with no visual benefit in a competitive context. |
 | Negative LOD bias | `1686376` | `1` (Clamp) | Prevents the driver from applying negative LOD bias (sharpening hack). Clamping avoids driver-injected aliasing. |
-| Trilinear optimization | `3066610` | `0` (OFF) | Disables trilinear filter quality optimization (a quality-reduction shortcut). CS2 manages its own filtering. |
+| Trilinear optimization | `3066610` | `0` (ON — shortcut enabled) | Enables the driver's trilinear performance shortcut (`0` = ON in NVIDIA DRS). Reduces trilinear filtering cost with negligible visual difference in CS2. |
 | Anisotropic filter optimization | `8703344` | `0` (OFF) | Disables anisotropic filtering shortcuts. AF quality is controlled by CS2's own settings. |
 | Anisotropic sample optimization | `15151633` | `0` (OFF) | Companion to above — ensures per-sample AF is not reduced by the driver. |
 | Driver-controlled LOD bias | `6524559` | `0` (OFF) | Disables the driver's autonomous LOD bias adjustments. |
@@ -65,10 +65,11 @@ G-SYNC and VRR add frame pacing overhead per CS2's rendering model. CS2 does not
 | VRR global feature | `278196567` | `0` (OFF) |
 | VRR requested state | `278196727` | `0` (OFF) |
 | G-SYNC | `279476652` | `1` (Force OFF) |
-| Variable refresh rate | `279476686` | `0` (OFF) |
 | G-SYNC (secondary) | `279476687` | `1` (Force OFF) |
 | G-SYNC globally | `294973784` | `0` (OFF) |
 | VSync tear control | `5912412` | `2525368439` (disabled) |
+
+> `279476686` (Variable refresh rate) was removed — not present in NPI, likely inert. The remaining 6 G-SYNC/VRR settings cover all VRR paths.
 
 ### Ansel
 
@@ -84,6 +85,13 @@ G-SYNC and VRR add frame pacing overhead per CS2's rendering model. CS2 does not
 | Optimus rendering GPU | `284810369` | `17` | Forces discrete GPU rendering on Optimus laptops. On desktop systems with a single GPU this is a no-op. |
 | Optimus shim mode | `284810372` | `16777216` | Companion Optimus shim setting — ensures CS2 render path goes through dGPU on hybrid systems. |
 
+### Resizable BAR
+
+| Name | DRS ID | Value | Explanation |
+|------|--------|-------|-------------|
+| rBAR Enable | `983226` | `1` (Enabled) | Enables per-application Resizable BAR (CPU full VRAM access). Requires BIOS rBAR/SAM enabled. RTX 30/40/50 supported. NPI `CustomSettingNames.xml`: `0x000F00BA`. |
+| rBAR Options | `983227` | `1` (Enabled) | Companion setting — both Enable + Options are required for per-application rBAR to take effect in the DRS profile. |
+
 ### Shader Cache
 
 | Name | DRS ID | Value | Explanation |
@@ -98,13 +106,11 @@ G-SYNC and VRR add frame pacing overhead per CS2's rendering model. CS2 does not
 
 ### CUDA P-State Lock
 
-| Name | DRS ID | Value | Explanation |
-|------|--------|-------|-------------|
-| CUDA Force P2 State | `1074665807` | `0` (OFF) | Prevents the GPU memory clock from downclocking to P2 during CUDA workloads. CS2's Vulkan path can trigger CUDA dispatch patterns in the driver that cause a brief memory bandwidth reduction even when Power Management Mode is already set to Prefer Max Performance. Setting this to OFF keeps memory at P0 at all times. Source: valleyofdoom/PC-Tuning. |
+> `1074665807` (CUDA Force P2 State) was removed — undocumented duplicate. The CUDA P-state override is handled by `1343646814` (CUDA_STABLE_PERF_LIMIT) in the decoded flags section below.
 
 ### Decoded NVIDIA-Internal Flags
 
-These 16 settings have no public DRS enum names. Decoded via reverse engineering against `Orbmu2k/nvidiaProfileInspector` (`CustomSettingNames.xml`) and the NVIDIA 2022 internal settings database (2,054 settings).
+These settings have no public DRS enum names. Decoded via reverse engineering against `Orbmu2k/nvidiaProfileInspector` (`CustomSettingNames.xml`) and the NVIDIA 2022 internal settings database (2,054 settings).
 
 #### Confirmed Decoded
 
@@ -114,7 +120,7 @@ These 16 settings have no public DRS enum names. Decoded via reverse engineering
 | DXR_ENABLE | `14566042` | `0` (OFF) | DirectX Raytracing master enable. CS2 does not use DXR — disabling prevents the RT pipeline from being initialized for this app. |
 | ANSEL_FREESTYLE_MODE | `274606621` | `4` (APPROVED_ONLY) | Ansel/Freestyle approval mode; 4 = approved-only app list. No active overhead — Ansel is also disabled above via its own settings. |
 | VK_NV_RAYTRACING | `549198379` | `0` (DISABLE) | Disables the `VK_NV_ray_tracing` Vulkan extension for CS2. CS2 does not use Vulkan RT; this prevents the driver from advertising and initializing the RT extension for the CS2 Vulkan instance. |
-| CUDA_STABLE_PERF_LIMIT | `1343646814` | `0` (FORCE_OFF) | Prevents a driver-internal CUDA performance cap. Redundant with `1074665807` (CUDA Force P2 State) above — both target different P-state enforcement layers. |
+| CUDA_STABLE_PERF_LIMIT | `1343646814` | `0` (FORCE_OFF) | Prevents a driver-internal CUDA performance cap that can cause GPU memory clock to downclock during CUDA workloads. Replaces the removed `1074665807` (CUDA Force P2 State). |
 | GFE_MONITOR_USAGE | `2156231208` | `1` | GeForce Experience telemetry state flag. No impact when GFE is not installed. |
 
 #### Partially Decoded

@@ -134,7 +134,7 @@ The suite's NVIDIA profile was derived from public NVIDIA DRS documentation (`Nv
 | Frame Rate Limiter | `FRL_FPS_ID (NVCPL)` | 500 (or fpsCap) | If your FPS cap is calculated, it's written directly to the FRL setting |
 | FXAA Disallow | `FXAA_ALLOW_ID` | `DISALLOWED` | Stronger than `FXAA_ENABLE=0` — master gate prevents injection |
 | RT Disabled | DXR + Vulkan RT | 0 | CS2 doesn't use RT; prevents accidental activation |
-| All G-SYNC/VRR | 6 settings | Off/Force Off | Zero VRR overhead per CS2's rendering model |
+| All G-SYNC/VRR | 6 settings | Off/Force Off | Zero VRR overhead; `279476686` removed (inert) |
 | Texture Filtering | `QUALITY_ENHANCEMENTS_ID` | `HIGHPERFORMANCE` | Maximum driver-side quality reduction for GPU headroom |
 
 **Three excluded settings:**
@@ -145,13 +145,15 @@ The suite's NVIDIA profile was derived from public NVIDIA DRS documentation (`Nv
 
 3. **Depth Buffers** (string setting, value `"Buffers=(Depth)"`) — unclear semantics, possibly DLSS-related. No documented effect on CS2.
 
-### CUDA Force P2 State — The Memory Clock Problem
+### CUDA P-State Lock — The Memory Clock Problem
 
-`CUDA_FORCE_P2_STATE` (DRS ID `0x400E194F`, value 0 = OFF).
+`CUDA_STABLE_PERF_LIMIT` (DRS ID `0x50166C5E` / `1343646814`, value 0 = FORCE_OFF).
 
 NVIDIA GPUs have CUDA compute power states (P2, P3, etc.) that can cause the GPU memory clock to downclock during CUDA workloads even when the GPU is in P0 for graphics. In CS2, this can manifest as a brief memory bandwidth reduction when certain shader dispatch patterns trigger CUDA path evaluation in the driver, causing a frametime spike while the memory clock recovers.
 
-Setting this to OFF prevents any CUDA-triggered memory clock reduction while CS2 is running.
+Setting this to FORCE_OFF prevents any CUDA-triggered memory clock reduction while CS2 is running.
+
+> The original `CUDA_FORCE_P2_STATE` (`0x400E194F` / `1074665807`) was removed — undocumented duplicate. `CUDA_STABLE_PERF_LIMIT` handles the same P-state override at a different driver layer.
 
 ### `DisableDynamicPstate = 1` — The Second Lock
 

@@ -9,7 +9,7 @@
     4   NVIDIA CS2 Profile (native registry)  [T3]
     5   FPS Cap Info  [T1]
     6   CS2 Launch Options + In-game Settings
-    7   (reserved)
+    7   VBS / Core Isolation disable  [T2]
     8   AMD GPU Settings  [T2, AMD only]
     9   DNS Server Configuration  [T3]
     10  Process Priority / CCD Affinity (native IFEO)  [T3]
@@ -36,7 +36,7 @@ try {
     Write-Host "    - Or press [Y] below to continue Phase 3 with safe defaults." -ForegroundColor White
     $r = Read-Host "  Continue with defaults? [y/N]"
     if ($r -notmatch "^[jJyY]$") { exit 1 }
-    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; profile="RECOMMENDED"; fpsCap=0; avgFps=0; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
+    $state = [PSCustomObject]@{ gpuInput="2"; mode="CONTROL"; logLevel="NORMAL"; profile="RECOMMENDED"; fpsCap=0; avgFps=0; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }
 $fpsCap   = $state.fpsCap
@@ -248,7 +248,7 @@ if ($startStep -le 4) {
     if ($gpuInput -in @("1","2")) {
         Write-Section "Step 4 — NVIDIA CS2 Profile (DRS direct write)"
         Invoke-TieredStep -Tier 3 -Title "Apply NVIDIA CS2 profile settings (DRS + registry)" `
-            -Why "Writes 52 optimized DWORD settings directly to NVIDIA DRS binary database via nvapi64.dll. Falls back to registry if DRS unavailable." `
+            -Why "Writes 51 optimized DWORD settings directly to NVIDIA DRS binary database via nvapi64.dll. Falls back to registry if DRS unavailable." `
             -Evidence "T3: No isolated 1%-low benchmark for the full profile. Individual flags may be T2." `
             -Caveat "Requires nvapi64.dll (NVIDIA driver installed). Falls back to registry if unavailable." `
             -Risk "SAFE" -Depth "DRIVER" `
@@ -326,10 +326,69 @@ if ($startStep -le 6) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 7 — RESERVED
+# STEP 7 — VBS / CORE ISOLATION DISABLE  [T2]
 # ══════════════════════════════════════════════════════════════════════════════
 if ($startStep -le 7) {
-    Complete-Step $PHASE 7 "Reserved"
+    Write-Section "Step 7 — VBS / Core Isolation (Memory Integrity)"
+    Invoke-TieredStep -Tier 2 -Title "Disable VBS / Core Isolation (Memory Integrity)" `
+        -Why "Virtualization-Based Security runs a Type-1 hypervisor below the kernel. On OEM Win11 systems this adds 5-15% CPU scheduling overhead in games. X3D tuning guide: Off." `
+        -Evidence "Microsoft VBS docs; Phoronix benchmarks show 5-15% overhead. X3D guide (A18): Off. Multiple community benchmarks confirm FPS impact on CPU-bound titles." `
+        -Caveat "SECURITY TRADE-OFF: Disables LSASS credential theft protection. FACEIT Anti-Cheat and Vanguard REQUIRE HVCI — skip this step if using these. Only disable on dedicated gaming PCs." `
+        -Risk "MODERATE" -Depth "REGISTRY" -EstimateKey "VBS/Core Isolation Off" `
+        -Improvement "Removes 5-15% CPU overhead from hypervisor layer — measurable on OEM Win11" `
+        -SideEffects "Reduces credential theft protection (LSASS). May break FACEIT AC / Vanguard." `
+        -Undo "Windows Security -> Device Security -> Core Isolation -> Memory Integrity: ON" `
+        -Action {
+            # Detect current VBS status + check if already pending disable via registry
+            $vbsActive = $false
+            $hvciPendingOff = $false
+            try {
+                $dg = Get-CimInstance -ClassName Win32_DeviceGuard `
+                    -Namespace root/Microsoft/Windows/DeviceGuard -ErrorAction SilentlyContinue
+                if ($dg -and $dg.VirtualizationBasedSecurityStatus -ge 2) {
+                    $vbsActive = $true
+                }
+            } catch { Write-Debug "VBS detection: $_" }
+            try {
+                $hvciVal = Get-ItemProperty `
+                    "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" `
+                    -Name "Enabled" -ErrorAction SilentlyContinue
+                if ($hvciVal -and $hvciVal.Enabled -eq 0) { $hvciPendingOff = $true }
+            } catch {}
+
+            if (-not $vbsActive) {
+                Write-OK "VBS/Core Isolation: not active — no overhead to remove."
+                Complete-Step $PHASE 7 "VBS"
+                return
+            }
+            if ($hvciPendingOff) {
+                Write-OK "Memory Integrity already set to disable — reboot to take effect."
+                Complete-Step $PHASE 7 "VBS"
+                return
+            }
+
+            Write-Warn "VBS/HVCI is ACTIVE — 5-15% CPU overhead detected."
+            Write-Blank
+
+            # FACEIT / Vanguard warning
+            Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Red
+            Write-Host "  │  WARNING: FACEIT AC and Vanguard REQUIRE HVCI enabled.      │" -ForegroundColor Red
+            Write-Host "  │  If you use FACEIT or Valorant, SKIP this step.             │" -ForegroundColor Red
+            Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Red
+            Write-Blank
+
+            # Disable Memory Integrity (HVCI) via registry
+            Set-RegistryValue `
+                "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" `
+                "Enabled" 0 "DWord" "Disable Memory Integrity (HVCI)"
+
+            if (-not $SCRIPT:DryRun) {
+                Write-OK "Memory Integrity (HVCI) disabled. Reboot required for full effect."
+                Write-Info "Verify after reboot: msinfo32 -> Virtualization-based security -> 'Not Enabled'"
+            }
+            Complete-Step $PHASE 7 "VBS"
+        } `
+        -SkipAction { Skip-Step $PHASE 7 "VBS" }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -590,6 +649,69 @@ if ($startStep -le 12) {
   ○  Check settings after Windows Update: START.bat -> [6] Verify
   ○  All 52 NVIDIA DRS settings applied natively — no external tools needed
 "@ -ForegroundColor Cyan
+
+    # ── X3D / Hardware Validation Checks ─────────────────────────────────
+    # Box width: 66 chars total. Inner: "  │  " (6) + content (up to 58) + " " + "│" (1) = 66
+    # Helper: pad content to 58 chars inside the box
+    $amdCpu = Get-AmdCpuInfo
+    if ($amdCpu -and $amdCpu.IsX3D) {
+        Write-Blank
+        Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
+        $hdr = "$($amdCpu.CpuName) — POST-TUNING VALIDATION"
+        Write-Host "  │  $($hdr.PadRight(58))│" -ForegroundColor Cyan
+        Write-Host "  │                                                              │" -ForegroundColor DarkGray
+
+        # CPU clock info (informational — MaxClockSpeed is base clock, not boost)
+        if ($amdCpu.MaxClockSpeed -gt 0) {
+            $msg = "$([char]0x2139)  CPU: $($amdCpu.CpuName) — base clock: $($amdCpu.MaxClockSpeed) MHz"
+            Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor Cyan
+            $msg2 = "   (boost clock requires HWiNFO to verify)"
+            Write-Host "  │  $($msg2.PadRight(58))│" -ForegroundColor DarkGray
+        }
+
+        # WHEA error check
+        $whea = Test-WheaErrors
+        if ($whea) {
+            if ($whea.HasErrors) {
+                $msg = "$([char]0x2718)  WHEA errors: $($whea.RecentCount) in last 24h — CO too aggressive!"
+                Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor Red
+                Write-Host "  │     Reduce Curve Optimizer magnitude by 5 and retest.      │" -ForegroundColor Red
+            } else {
+                $totalLabel = if ($whea.Count -gt 0) { "$($whea.Count) total (none recent)" } else { "0 — clean" }
+                $msg = "$([char]0x2714)  WHEA errors: $totalLabel"
+                Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor Green
+            }
+        }
+
+        # DDR5 FCLK/MCLK 1:1 check
+        $ddr5 = Get-Ddr5TimingInfo
+        if ($ddr5 -and $ddr5.IsDDR5) {
+            $mclk = $ddr5.ActiveMhz
+            $mts  = $ddr5.ActiveMTs
+            if ($ddr5.IsOptimal1to1) {
+                $msg = "$([char]0x2714)  DDR5-$mts (MCLK $mclk MHz) — 1:1 FCLK range"
+                Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor Green
+            } elseif ($mts -gt 6400) {
+                $msg = "$([char]0x25B2)  DDR5-$mts — above 1:1 FCLK sweet spot (6000)"
+                Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor Yellow
+                if ($amdCpu -and $amdCpu.IsAMD) {
+                    Write-Host "  │     Consider DDR5-6000 for lowest latency on AM5.          │" -ForegroundColor DarkGray
+                }
+            } else {
+                $msg = "$([char]0x25CB)  DDR5-$mts (MCLK $mclk MHz)"
+                Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor DarkGray
+            }
+            if ($ddr5.IsDownclocked) {
+                $msg = "$([char]0x2139)  Kit rated $($ddr5.RatedMTs) MT/s, downclocked to $mts MT/s"
+                Write-Host "  │  $($msg.PadRight(58))│" -ForegroundColor DarkGray
+            }
+        }
+
+        Write-Host "  │                                                              │" -ForegroundColor DarkGray
+        Write-Host "  │  Full validation: X3D_KOMPLETT_GUIDE.md Section E           │" -ForegroundColor DarkGray
+        Write-Host "  │  ZenTimings screenshot recommended for RAM timing verify.   │" -ForegroundColor DarkGray
+        Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+    }
 
     Write-Blank
     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor DarkYellow

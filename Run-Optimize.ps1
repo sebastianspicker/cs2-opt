@@ -88,7 +88,8 @@ try {
 
     # ── Phase 1 complete ─────────────────────────────────────────────────────────
     # Persist applied step keys so Phase 3 improvement estimates are cumulative
-    Save-AppliedSteps
+    # Skip in DRY-RUN to avoid overwriting real applied steps with an empty array
+    if (-not $SCRIPT:DryRun) { Save-AppliedSteps }
     if ($SCRIPT:DryRun) {
         Write-PhaseSummary -PhaseLabel "PHASE 1" -DryRun
     } else {

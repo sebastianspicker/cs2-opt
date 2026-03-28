@@ -52,7 +52,7 @@ Test-RegistryCheck "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode" 5 "M
 # HAGS is setup-dependent (0 or 2), just show current value
 try {
     $hagsVal = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -ErrorAction Stop).HwSchMode
-    $hagsLabel = switch ($hagsVal) { 0 {"OFF"} 1 {"ON (default)"} 2 {"ON"} default {"Unknown ($hagsVal)"} }
+    $hagsLabel = switch ($hagsVal) { 0 {"OFF"} 1 {"OFF (default)"} 2 {"ON"} default {"Unknown ($hagsVal)"} }
     Write-Host "  ✓  INFO      HAGS = $hagsLabel  (setup-dependent, no target value)" -ForegroundColor Cyan
     $global:_verifyOkCount++
 } catch {
@@ -174,11 +174,13 @@ try {
     $upmDesktop = "HKCU:\Control Panel\Desktop"
     $upmVal = (Get-ItemProperty -Path $upmDesktop -Name "UserPreferencesMask" -ErrorAction Stop).UserPreferencesMask
     $upmExpected = [byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)
+    # Win11 may return 12 bytes; compare only the first $upmExpected.Length bytes
+    $upmTrimmed = if ($upmVal -and $upmVal.Length -ge $upmExpected.Length) { $upmVal[0..($upmExpected.Length - 1)] } else { $upmVal }
     if ($null -eq $upmVal) {
         Write-Host "  ?  MISSING   UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Red
         Write-Host "               $upmDesktop\UserPreferencesMask" -ForegroundColor DarkGray
         $global:_verifyMissingCount++
-    } elseif (@(Compare-Object $upmVal $upmExpected -SyncWindow 0).Count -eq 0) {
+    } elseif (@(Compare-Object $upmTrimmed $upmExpected -SyncWindow 0).Count -eq 0) {
         Write-Host "  ✓  OK        UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Green
         $global:_verifyOkCount++
     } else {
@@ -206,15 +208,17 @@ try {
     # Without /v, "disabledynamictick" is localized (e.g., German: "Dynamischer Tick deaktiviert")
     # and English-only matching would fail on non-English Windows.
     $bcdOutput = bcdedit /enum "{current}" /v 2>&1 | Out-String
-    # Boolean values are localized (Yes/Ja/Oui/Sí/Sim) — match common forms.
-    if ($bcdOutput -match "disabledynamictick\s+(Yes|Ja|Oui|S[ií]|Sim)") {
+    # Match on hex element IDs (locale-independent) + any truthy value.
+    # Boolean values are localized (Yes/Ja/Oui/Sí/Да/是/Tak/etc.) — hex IDs are not.
+    # 0x26000060 = disabledynamictick, 0x26000092 = useplatformtick
+    if ($bcdOutput -match "0x26000060\s+\S+") {
         Write-Host "  ✓  OK        Dynamic Tick disabled" -ForegroundColor Green
         $global:_verifyOkCount++
     } else {
         Write-Host "  ✗  CHANGED   Dynamic Tick is ACTIVE (expected: disabled)" -ForegroundColor Yellow
         $global:_verifyChangedCount++
     }
-    if ($bcdOutput -match "useplatformtick\s+(Yes|Ja|Oui|S[ií]|Sim)") {
+    if ($bcdOutput -match "0x26000092\s+\S+") {
         Write-Host "  ✓  OK        Platform Tick active" -ForegroundColor Green
         $global:_verifyOkCount++
     } else {

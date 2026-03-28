@@ -124,6 +124,39 @@ function Set-NicRssConfig {
 
     Write-Info "RSS NIC: $($nic.InterfaceDescription)"
 
+    # Ensure RSS master switch is enabled — some Realtek drivers ship with *RSS=0
+    # which silently ignores all RSS sub-parameters (queues, base proc, etc.).
+    # Also enable if *RSS doesn't exist at all (missing = disabled on many drivers).
+    $rssKeyword = Get-ItemProperty $driverKey -Name "*RSS" -ErrorAction SilentlyContinue
+    if ($null -eq $rssKeyword."*RSS") {
+        Set-RegistryValue $driverKey "*RSS" 1 "DWord" "Enable RSS master switch (was absent)"
+        Write-Info "RSS master switch (*RSS) was absent — created and enabled. Sub-parameters below require this."
+    } elseif ([int]$rssKeyword."*RSS" -eq 0) {
+        Set-RegistryValue $driverKey "*RSS" 1 "DWord" "Enable RSS master switch (was disabled)"
+        Write-Info "RSS master switch (*RSS) was 0 — enabled. Sub-parameters below require this."
+    }
+
+    # Speed-aware RSS queue count: 5+ GbE NICs benefit from 8 queues to handle
+    # higher packet rates without saturating individual cores.
+    $rssQueueCount = 4
+    if ($nic.Speed -and $nic.Speed -ge 5000000000) {
+        $rssQueueCount = 8
+        Write-Info "RSS: 5+ GbE NIC detected ($('{0:N1}' -f ($nic.Speed / 1e9)) Gbps) — using $rssQueueCount queues"
+    }
+
+    # Validate RSS settings against actual processor count to avoid assigning
+    # queues to non-existent cores (causes driver errors or silent fallback).
+    $processorCount = [Environment]::ProcessorCount
+    $rssBaseProcNumber = 2
+    if ($processorCount - $rssBaseProcNumber -lt $rssQueueCount) {
+        $rssBaseProcNumber = 1
+        Write-Info "RSS: Only $processorCount logical processors — reduced base proc to $rssBaseProcNumber"
+        if ($processorCount - $rssBaseProcNumber -lt $rssQueueCount) {
+            $rssQueueCount = [math]::Max(1, $processorCount - $rssBaseProcNumber)
+            Write-Info "RSS: Clamped queue count to $rssQueueCount (processor count: $processorCount)"
+        }
+    }
+
     # RSS entries and their rationale:
     #
     #   *RSSProfile = 1 (ClosestProcessor)
@@ -137,23 +170,23 @@ function Set-NicRssConfig {
     #     OS interrupt bookkeeping; Core 1 is its HT/SMT sibling on most CPUs. Starting
     #     at Core 2 keeps NIC DPCs off the most-contended cores.
     #
-    #   *MaxRssProcessors = 4
+    #   *MaxRssProcessors = 4 (or 8 for 5+ GbE)
     #     Upper bound on how many processors RSS will spread queues across. 4 covers all
-    #     gaming scenarios; beyond 4 provides no benefit for CS2's ~128 pkt/s rate.
+    #     gaming scenarios at 1-2.5 GbE; 8 for 5+ GbE to handle higher packet rates.
     #
-    #   *NumRssQueues = 4
+    #   *NumRssQueues = 4 (or 8 for 5+ GbE)
     #     Explicit queue count matching MaxRssProcessors. Without this, drivers may default
     #     to 1 queue regardless of the processor count setting.
     #
     $rssDefaults = [ordered]@{
         "*RSSProfile"        = @{ Value = 1; Type = "DWord";
             Note = "ClosestProcessor: NIC DPCs on cache-local core" }
-        "*RssBaseProcNumber" = @{ Value = 2; Type = "DWord";
-            Note = "Start RSS from Core 2 — avoids Core 0/1 OS overhead" }
-        "*MaxRssProcessors"  = @{ Value = 4; Type = "DWord";
-            Note = "Cap RSS spread at 4 processors" }
-        "*NumRssQueues"      = @{ Value = 4; Type = "DWord";
-            Note = "4 RSS queues matching processor cap" }
+        "*RssBaseProcNumber" = @{ Value = $rssBaseProcNumber; Type = "DWord";
+            Note = "Start RSS from Core $rssBaseProcNumber — avoids Core 0 OS overhead" }
+        "*MaxRssProcessors"  = @{ Value = $rssQueueCount; Type = "DWord";
+            Note = "Cap RSS spread at $rssQueueCount processors" }
+        "*NumRssQueues"      = @{ Value = $rssQueueCount; Type = "DWord";
+            Note = "$rssQueueCount RSS queues matching processor cap" }
     }
 
     $added   = 0
@@ -173,9 +206,11 @@ function Set-NicRssConfig {
     if ($added -gt 0) {
         Write-OK "RSS: added $added missing entries ($skipped existing preserved). Restart required."
         Write-Info "Effect: NIC receive DPCs distributed away from Core 0."
-        # Flag Intel I225-V/I226-V specifically — these are the most commonly affected NICs
+        # Flag NICs known to omit RSS entries by default
         if ($nic.InterfaceDescription -match "I225|I226|I219") {
             Write-Info "Intel $($Matches[0]) detected — this NIC is known to omit RSS entries by default."
+        } elseif ($nic.InterfaceDescription -match "RTL8125|RTL8126|Realtek.*Gaming.*2\.5|Realtek.*5\s*GbE") {
+            Write-Info "Realtek $($Matches[0]) detected — RSS entries added for optimal DPC distribution."
         }
     } else {
         Write-OK "RSS: all $skipped entries already present — no changes needed."
@@ -261,9 +296,16 @@ function Set-NicInterruptAffinity {
     # Target last physical core to avoid Core 0 (OS-heavy); on hybrid CPUs this lands in the E-core region
     $hybridCpu = Get-IntelHybridCpuName
     if ($null -eq $hybridCpu) { Write-Debug "CPU hybrid detection returned null — defaulting to non-hybrid" }
-    $targetCore = [math]::Min($coreCount - 1, 63)
+    # SMT-aware affinity: on AMD sequential SMT, physical core N maps to LP N (thread 0)
+    # and LP N+coreCount (thread 1). We target the last physical core's LP(s).
+    $logicalCount = [Environment]::ProcessorCount
+    $smtEnabled   = ($logicalCount -gt $coreCount)
+    $targetLP     = [math]::Min($coreCount - 1, 63)
+    $mask         = [uint64]1 -shl $targetLP
+    if ($smtEnabled -and ($targetLP + $coreCount) -le 63) {
+        $mask = $mask -bor ([uint64]1 -shl ($targetLP + $coreCount))
+    }
     if ($hybridCpu) { Write-Debug "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity" }
-    $mask = [uint64]1 -shl $targetCore
 
     # Convert mask to 8-byte array for registry (binary value)
     $maskBytes = [BitConverter]::GetBytes([uint64]$mask)
@@ -276,12 +318,15 @@ function Set-NicInterruptAffinity {
         "NIC interrupt affinity policy (Specified Processors): $($nic.FriendlyName)"
 
     # AssignmentSetOverride is Binary — Set-RegistryValue supports this via -Type passthrough
+    $lpIndices = @($targetLP)
+    if ($smtEnabled -and ($targetLP + $coreCount) -le 63) { $lpIndices += ($targetLP + $coreCount) }
+    $lpLabel = ($lpIndices | ForEach-Object { "LP $_" }) -join ", "
     Set-RegistryValue $affinityPath "AssignmentSetOverride" ([byte[]]$maskBytes) "Binary" `
-        "NIC affinity mask 0x$($mask.ToString('X')) -> Core ${targetCore}: $($nic.FriendlyName)"
+        "NIC affinity mask 0x$($mask.ToString('X')) -> ${lpLabel}: $($nic.FriendlyName)"
 
     if (-not $SCRIPT:DryRun) {
-        Write-OK "NIC affinity set: $($nic.FriendlyName) -> Core $targetCore"
-        Write-Info "Affinity mask: 0x$($mask.ToString('X')) (Core $targetCore of $coreCount)"
+        Write-OK "NIC affinity set: $($nic.FriendlyName) -> $lpLabel (physical core $targetLP)"
+        Write-Info "Affinity mask: 0x$($mask.ToString('X')) ($lpLabel of $logicalCount LPs, $coreCount physical cores$(if($smtEnabled){', SMT enabled'}))"
     }
     Write-Info "Restart required for affinity changes to take effect."
 }

@@ -75,7 +75,7 @@ if ($startStep -le 24) {
 if ($startStep -le 25) {
     Write-Section "Step 25 — Disable Nagle's Algorithm"
     Invoke-TieredStep -Tier 2 -Title "Disable TCP Nagle delay (TcpNoDelay + TcpAckFrequency)" `
-        -Why "Nagle's Algorithm bundles small TCP packets -> increases latency for CS2 network ticks." `
+        -Why "Nagle's Algorithm bundles small TCP packets -> increases latency for TCP connections (Steam API, matchmaking — CS2 game ticks use UDP, unaffected by Nagle)." `
         -Evidence "Known since Quake/CS1.6. Reduces TCP packet bundling latency. Measurable in network captures." `
         -Caveat "May minimally increase bandwidth. No effect if CS2 uses pure UDP (most game traffic)." `
         -Risk "SAFE" -Depth "REGISTRY" `

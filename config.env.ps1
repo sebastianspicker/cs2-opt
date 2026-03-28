@@ -65,7 +65,7 @@ $CFG_Autostart_Remove = @(
     "OneDrive","Spotify","Discord","Teams","Skype",
     "AdobeUpdater","AdobeGCInvoker","CCleaner",
     "Dropbox","GoogleDriveFS","EpicGamesLauncher",
-    "NVDisplay.Container","RTSS"
+    "NVDisplay.ContainerLocalSystem","RTSS"
 )
 
 # ── Services to disable ───────────────────────────────────────────────────────
@@ -88,12 +88,28 @@ $CFG_VirtualAdapterFilter = "Loopback|Virtual|Hyper-V|Bluetooth|TAP-Windows|Wire
 #   reducing it. Medium coalesces packets within a short window (~50-100µs) which is
 #   imperceptible for CS2's 128 tick rate but prevents burst-mode interrupt flooding.
 #   Predictable DPC scheduling > theoretically lower single-packet latency.
+#
+# DisplayName varies by vendor:
+#   Intel:   "EEE", "FlowControl", "InterruptModeration", "ReceiveBuffers", "TransmitBuffers"
+#   Realtek: "Energy Efficient Ethernet", "Flow Control", "Interrupt Moderation", "Receive Buffers", "Transmit Buffers"
+# The application layer (Optimize-Hardware.ps1) tries each alternate name if the primary fails.
+#
+# Buffer sizing: 512 is appropriate for 1G/2.5G. 5 GbE NICs (RTL8126) benefit from 2048.
+# Detected at runtime in Optimize-Hardware.ps1 based on link speed.
 $CFG_NIC_Tweaks = @{
     "EEE"                 = "Disabled"
     "FlowControl"         = "Disabled"
     "InterruptModeration" = "Medium"
     "ReceiveBuffers"      = "512"
     "TransmitBuffers"     = "512"
+}
+# Realtek uses space-separated DisplayNames — mapped from Intel-style names at runtime
+$CFG_NIC_Tweaks_AltNames = @{
+    "EEE"                 = "Energy Efficient Ethernet"
+    "FlowControl"         = "Flow Control"
+    "InterruptModeration" = "Interrupt Moderation"
+    "ReceiveBuffers"      = "Receive Buffers"
+    "TransmitBuffers"     = "Transmit Buffers"
 }
 
 # ── Timer Resolution ─────────────────────────────────────────────────────────
@@ -267,6 +283,7 @@ $CFG_ImprovementEstimates = @{
     "SysMain Disable"            = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Only on HDD or low RAM" }
     "Debloat"                    = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Fewer background processes" }
     "Visual Effects"             = @{ P1LowMin=0;  P1LowMax=1;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="DWM overhead reduction" }
+    "VBS/Core Isolation Off"     = @{ P1LowMin=2;  P1LowMax=8;  AvgMin=1; AvgMax=5;  Confidence="MEDIUM"; Note="Removes hypervisor overhead on OEM Win11 — 5-15% CPU cost. Skip if FACEIT/Vanguard." }
     # NetworkThrottlingIndex is intentionally NOT set by the suite.
     # djdallmann xperf analysis found 0xFFFFFFFF increases NDIS.sys DPC latency vs. default (10).
     # "NetworkThrottlingIndex"   = @{ ... } — deliberately omitted; default value 10 is correct.

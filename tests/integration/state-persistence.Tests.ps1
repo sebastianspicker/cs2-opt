@@ -348,13 +348,13 @@ Describe "Clear-Progress" {
         @($prog.completedSteps).Count | Should -Be 0
     }
 
-    It "does not reset progress for non-matching phase" {
+    It "resets progress even for non-matching phase (cross-phase re-run)" {
         New-TestProgressFile -Phase 1 -LastStep 5 -CompletedSteps @("P1:5")
 
         Clear-Progress 3
 
         $prog = Load-Progress
-        $prog.lastCompletedStep | Should -Be 5
+        $prog.lastCompletedStep | Should -Be 0
     }
 
     It "does nothing when progress file does not exist" {

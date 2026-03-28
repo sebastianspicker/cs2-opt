@@ -474,10 +474,14 @@ function Show-CS2SettingsGuide {
     if ($videoTxtPath) {
         $vProceed = Read-Host "  Rename video.txt → video.txt.bak + write optimized? [Y/n]"
         if ($vProceed -notmatch "^[nN]$") {
+            $bakPath = $null
             if ($videoExists) {
-                # Rename existing → .bak (overwrite any previous .bak)
                 $bakPath = "$videoTxtPath.bak"
                 if (-not $SCRIPT:DryRun) {
+                    # Preserve the very first original as .bak.orig
+                    if (-not (Test-Path "$videoTxtPath.bak.orig") -and (Test-Path "$videoTxtPath.bak")) {
+                        Move-Item "$videoTxtPath.bak" "$videoTxtPath.bak.orig" -Force
+                    }
                     Move-Item $videoTxtPath $bakPath -Force
                     Write-OK "Renamed: video.txt  →  video.txt.bak"
                 } else {
@@ -509,7 +513,7 @@ function Show-CS2SettingsGuide {
                     [System.IO.File]::WriteAllLines($videoTxtPath, $vLines, [System.Text.UTF8Encoding]::new($false))
                 } catch {
                     Write-Warn "Failed to write video.txt: $_"
-                    if (Test-Path $bakPath) {
+                    if ($bakPath -and (Test-Path $bakPath)) {
                         Move-Item $bakPath $videoTxtPath -Force
                         Write-Info "Restored original video.txt from backup."
                     }

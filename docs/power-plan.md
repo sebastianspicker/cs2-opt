@@ -101,6 +101,8 @@ These settings are either objectively better for any gaming system with no meani
 | System cooling policy | 1 (active) | Bug fix — passive cooling is wrong for gaming desktops |
 | PCIe ASPM | Off | Windows software ASPM can pull GPU/NIC/NVMe into lower link states between frames |
 
+**PCIe ASPM GUID fix:** The previous implementation used incorrect GUIDs for the PCIe ASPM power setting, meaning the ASPM disable was never actually applied. Fixed to use the correct subgroup (`501a4d13-42af-4429-9fd1-a8218c268e20`) and setting GUID (`ee12f906-d277-404b-b6da-e5fa1a576df5`).
+
 **PCIe ASPM** deserves explanation: even with BIOS ASPM disabled, Windows maintains an independent software ASPM layer. Between frames (when the GPU briefly idles while waiting for the CPU to submit the next frame's draw calls), Windows can transition the PCIe link to L1 or L1.1. The link has a fixed re-entry latency (50–200µs). Setting PCIe ASPM to Off in the power plan prevents these software-initiated link state transitions, ensuring the PCIe bus is always at full speed when needed.
 
 ### T2 — RECOMMENDED+ (15–16 settings)
