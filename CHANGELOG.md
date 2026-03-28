@@ -11,7 +11,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 - Phase 3 Step 7: VBS / Core Isolation (Memory Integrity) disable — detects HVCI via `Win32_DeviceGuard`, disables via registry, warns about FACEIT/Vanguard dependency. Replaces the previously reserved step slot.
-- DRS profile: rBAR Enable (`983226`) + rBAR Options (`983227`) — per-application Resizable BAR for RTX 30/40/50
+- DRS profile: rBAR Enable (`983226`) + rBAR Options (`983227`) — per-application Resizable BAR control. Set to `0` (Disabled) for CS2 — ThourCS2 2026: ~6% better 1% lows with rBAR OFF. System-wide BIOS rBAR stays enabled for other titles
 - NIC: RSS master switch (`*RSS`) check — creates/enables if absent or disabled (some Realtek drivers ship with `*RSS=0`, silently ignoring all RSS sub-parameters)
 - NIC: speed-aware RSS queue count — 5+ GbE NICs (e.g., RTL8126) get 8 queues instead of 4
 - NIC: DisplayName fallback for Realtek NICs — tries Intel-style names first, falls back to Realtek-style (`"Energy Efficient Ethernet"` instead of `"EEE"`)

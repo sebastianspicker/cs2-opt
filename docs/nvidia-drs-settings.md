@@ -89,8 +89,8 @@ G-SYNC and VRR add frame pacing overhead per CS2's rendering model. CS2 does not
 
 | Name | DRS ID | Value | Explanation |
 |------|--------|-------|-------------|
-| rBAR Enable | `983226` | `1` (Enabled) | Enables per-application Resizable BAR (CPU full VRAM access). Requires BIOS rBAR/SAM enabled. RTX 30/40/50 supported. NPI `CustomSettingNames.xml`: `0x000F00BA`. |
-| rBAR Options | `983227` | `1` (Enabled) | Companion setting — both Enable + Options are required for per-application rBAR to take effect in the DRS profile. |
+| rBAR Enable | `983226` | `0` (Disabled) | Disables per-application Resizable BAR for CS2. ThourCS2 2026 benchmarks show ~6% better 1% lows with rBAR OFF in CS2 specifically (Source2 engine doesn't benefit from full VRAM addressing). System-wide BIOS rBAR stays enabled for other titles. NPI `CustomSettingNames.xml`: `0x000F00BA`. |
+| rBAR Options | `983227` | `0` (Disabled) | Companion setting — mirrors rBAR Enable state. Both must be 0 to disable per-application rBAR in the DRS profile. |
 
 ### Shader Cache
 

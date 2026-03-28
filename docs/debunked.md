@@ -64,13 +64,13 @@ These aren't wrong — but they're not universally applicable, which is why they
 | `net_client_steamdatagram_enable_override 1` | Poor routing to Valve GC servers. SDR routes through Valve's backbone. | Already on a direct low-latency connection. SDR can add latency in some regions. |
 | CPU C-states off (BIOS) | Tournament PCs, always-plugged desktops. | Laptops, inadequate cooling, systems at thermal limits. +5–15°C idle. |
 | Disable Virtualization (BIOS) | Minor reduction in VM overhead; disables VBS/HVCI. | Systems running WSL, Docker, Android emulators. Near-zero overhead when VMs idle. |
-| ReBAR force-enable | May help in games without native ReBAR support. | Can cause regression in CS2 — Valve hasn't optimized for forced ReBAR. Benchmark first. |
+| ReBAR force-enable | May help in games without native ReBAR support. | Suite disables per-app rBAR for CS2 (ThourCS2 2026: ~6% better 1% lows with OFF). System-wide BIOS rBAR stays enabled for other titles. |
 | `DisablePagingExecutive = 1` | Systems with ≤12 GB RAM or slower storage. | NVMe + 32 GB: near-zero effect. |
 | VBS/HVCI disable | Older hardware (pre-Zen2, pre-Kabylake) — up to 10% FPS impact. | Modern hardware has near-zero overhead. FACEIT/Vanguard require HVCI. |
 | C-states off (BIOS) | Tournament PCs where every µs matters. | Increases idle temp 10–20°C. Interferes with Turbo/PBO frequency algorithms. |
 | `SystemResponsiveness=0` vs `10` | May marginally help in CPU-bound scenarios. | 0 vs 10 delta unmeasured in CS2. Suite uses 10. |
 | `Win32PrioritySeparation=0x28` vs `0x2A` | Both are "foreground boost" variants. `0x28` = long fixed quantum. | `0x2A` = short fixed quantum (2025 Blur Busters: better 1% lows). Suite uses 0x2A. |
-| HAGS | Required for DLSS 3+ Frame Generation. May reduce scheduling latency. | Mixed benchmarks. No CS2-specific isolated test. Suite presents both options. |
+| HAGS | Required for DLSS 3+ Frame Generation. May reduce scheduling latency. | 2026: ON recommended for RTX 40/50 post-MPO removal (Win11 24H2). Older GPUs: benchmark both. Suite defaults ON for RTX 40/50, OFF for X3D. |
 | fTPM → Discrete TPM (AMD) | Random 1–2s stutters from SMI interrupts on some Ryzen platforms. | Systems already using hardware TPM or not experiencing fTPM spikes. |
 
 ---

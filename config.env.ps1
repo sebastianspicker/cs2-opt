@@ -270,7 +270,7 @@ $CFG_ImprovementEstimates = @{
     # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "FPS Cap"                    = @{ P1LowMin=5;  P1LowMax=20; AvgMin=-9;AvgMax=-9; Confidence="HIGH";   Note="Stabilizes frametimes. Avg drops by cap." }
     "Timer Resolution"           = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="More precise system timer" }
-    "HAGS Toggle"                = @{ P1LowMin=-3; P1LowMax=5;  AvgMin=-2;AvgMax=3;  Confidence="LOW";    Note="Setup-dependent, benchmark both" }
+    "HAGS Toggle"                = @{ P1LowMin=-3; P1LowMax=5;  AvgMin=-2;AvgMax=3;  Confidence="MEDIUM"; Note="2026: ON recommended for RTX 40/50 + AMD 9000 (MPO removal fixed stutters). Older GPUs: benchmark both" }
     "NIC Tweaks"                 = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=0;  Confidence="LOW";    Note="Only if LatencyMon shows NIC DPC" }
     "MSI Interrupts"             = @{ P1LowMin=0;  P1LowMax=5;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Reduces DPC latency" }
     # The following entry is referenced by step-catalog.ps1 for GUI display
@@ -309,7 +309,7 @@ $CFG_NvidiaProfileEstimates = @{
     "NV — Texture Filtering (High Perf)"   = @{ P1LowMin=1;  P1LowMax=3;  AvgMin=1; AvgMax=2;  Confidence="MEDIUM"; Note="Max driver-side quality reduction. Trades AF/trilinear quality for GPU bandwidth" }
     "NV — VSync Force Off"                  = @{ P1LowMin=0;  P1LowMax=0;  AvgMin=0; AvgMax=0;  Confidence="HIGH";   Note="Only adds FPS if VSync was previously on. CS2 default is off — redundant safety net" }
     "NV — Shader Cache 10 GB"               = @{ P1LowMin=1;  P1LowMax=5;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Larger cache reduces recompilation stalls. Measurable only on first session per map. 2026 consensus: 10GB+" }
-    "NV — All VRR/G-SYNC Disabled"         = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Eliminates VRR processing overhead. Only measurable on G-SYNC-capable hardware" }
+    "NV — All VRR/G-SYNC Disabled"         = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Eliminates VRR processing overhead. EXCEPTION: G-SYNC Pulsar (Jan 2026) monitors — Pulsar combines VRR + ULMB 2 strobing; owners may want VRR ON + Reflex ON for the lowest motion blur at high FPS" }
     "NV — FXAA Off (double gate)"           = @{ P1LowMin=0;  P1LowMax=1;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="CS2 doesn't use FXAA but the gate blocks driver injection. Small safety margin" }
     "NV — Ansel Disabled"                   = @{ P1LowMin=0;  P1LowMax=0;  AvgMin=0; AvgMax=0;  Confidence="HIGH";   Note="Zero overhead. Screenshot tool off; no DPC or API cost when inactive" }
     "NV — Antialiasing App Controlled"      = @{ P1LowMin=0;  P1LowMax=1;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Prevents driver AA injection. CS2 controls MSAA natively" }

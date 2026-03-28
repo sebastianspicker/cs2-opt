@@ -80,10 +80,14 @@ $NV_DRS_SETTINGS = @(
     @{ Id=284810372;  Value=16777216;   Name="Optimus shim: force dGPU rendering" }
 
     # ── Resizable BAR ───────────────────────────────────────────────────────
-    # NPI CustomSettingNames.xml: 0x000F00BA = "rBAR - Enable", 1 = Enabled
-    # Both Enable + Options are required for per-application rBAR to take effect.
-    @{ Id=983226;     Value=1;          Name="rBAR: Enabled (allows CPU full VRAM access — RTX 30/40/50)" }
-    @{ Id=983227;     Value=1;          Name="rBAR - Options: Enabled (companion setting for per-app rBAR)" }
+    # NPI CustomSettingNames.xml: 0x000F00BA = "rBAR - Enable"
+    # ThourCS2 2026 benchmark (FPSHeaven Dust2 + offline bots): rBAR OFF gives
+    # ~6% better 1% lows in CS2. CS2's memory access patterns don't benefit from
+    # full VRAM access — the overhead of the larger BAR window hurts frametime
+    # consistency. Disabled per-app for CS2; system-wide BIOS rBAR stays enabled
+    # (other titles like Cyberpunk, Hogwarts Legacy benefit from rBAR).
+    @{ Id=983226;     Value=0;          Name="rBAR: Disabled for CS2 (ThourCS2 2026: ~6% better 1% lows with OFF)" }
+    @{ Id=983227;     Value=0;          Name="rBAR - Options: Disabled (companion setting)" }
 
     # ── Shader Cache ─────────────────────────────────────────────────────────
     @{ Id=11306135;   Value=10240;      Name="Shader disk cache max: 10240 MB (10 GB)" }
