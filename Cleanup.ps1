@@ -328,6 +328,7 @@ if ($doDriver) {
         return
     }
 
+    if ($SCRIPT:DryRun) { Write-Info "[DRY-RUN] Would restart into Safe Mode."; return }
     Write-Host "  Restarting in 10 seconds..." -ForegroundColor Yellow
     Start-Sleep 10; Restart-Computer -Force; exit 0
 }

@@ -211,8 +211,8 @@ if ($startStep -le 1) {
             Write-Info "If you downloaded the driver manually, provide the path now."
             Write-Info "Press [B] to browse for the file, or paste the path, or [Enter] to download."
             $driverExe = if ($SCRIPT:DryRun -or (Test-YoloProfile)) { "" } elseif ($true) {
-                $input = Read-Host "  Path / [B]rowse / [Enter] to download"
-                if ($input -match '^[bB]$') {
+                $userInput = Read-Host "  Path / [B]rowse / [Enter] to download"
+                if ($userInput -match '^[bB]$') {
                     Add-Type -AssemblyName System.Windows.Forms
                     $dlg = New-Object System.Windows.Forms.OpenFileDialog
                     $dlg.Title = "Select NVIDIA Driver Installer"
@@ -221,7 +221,7 @@ if ($startStep -le 1) {
                     if ($dlg.ShowDialog() -eq 'OK') { $dlg.FileName } else { "" }
                 } else {
                     # Strip surrounding quotes that paste sometimes adds
-                    $input -replace '^["'']|["'']$', ''
+                    $userInput -replace '^["'']|["'']$', ''
                 }
             } else { "" }
             if (-not [string]::IsNullOrWhiteSpace($driverExe)) {

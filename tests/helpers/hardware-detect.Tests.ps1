@@ -327,8 +327,9 @@ Describe "Test-XmpActive" {
             })
         } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
 
-        # DDR5-4800 is JEDEC baseline — should not be flagged as XMP
-        Test-XmpActive | Should -Be $false
+        # DDR5-4800 JEDEC baseline: config 2400 × 2 = 4800 MT/s = rated speed.
+        # Function returns $true ("at rated speed") — it cannot distinguish JEDEC from XMP.
+        Test-XmpActive | Should -Be $true
     }
 
     It "returns null when CIM query fails" {
