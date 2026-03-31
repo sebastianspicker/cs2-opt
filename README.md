@@ -73,6 +73,9 @@ Every step is assigned a **tier** and a **risk level**. Your chosen **profile** 
 | **RECOMMENDED** | Auto | ≤ MODERATE → prompted | Skip | Most users (default) |
 | **COMPETITIVE** | Auto | ≤ AGGRESSIVE → prompted | ≤ AGGRESSIVE → prompted | Dedicated gaming PCs |
 | **CUSTOM** | Prompted (full detail) | Prompted (full detail) | Prompted (full detail) | Expert users |
+| **YOLO** | Auto | Auto (≤ AGGRESSIVE) | Auto (≤ AGGRESSIVE) | Experienced users who want zero interaction |
+
+**YOLO** runs every step up to AGGRESSIVE risk without any prompts. CRITICAL steps are still skipped for safety. GPU is auto-detected via WMI, FPS cap defaults to unlimited (0), DNS defaults to Cloudflare. No Read-Host calls, no confirmations, no pauses.
 
 **DRY-RUN** can be combined with any profile — shows what would change without applying anything. `Set-RegistryValue` and `Set-BootConfig` intercept all writes and print them instead.
 
@@ -122,9 +125,14 @@ CS2 has structurally poor frame pacing in Valve's Source 2 engine. Games with si
 
 Seven panels: **Dashboard** (hardware summary, progress), **Analyze** (40+ setting health scan), **Optimize** (step catalog reference), **Backup** (per-step restore), **Benchmark** (FPS history + cap calculator), **Video** (video.txt comparison + one-click write), **Settings** (profile/mode config).
 
+| | | |
+|---|---|---|
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Analyze](docs/screenshots/02-analyze.png) | ![Optimize](docs/screenshots/03-optimize.png) |
+| ![Benchmark](docs/screenshots/05-benchmark.png) | ![Video](docs/screenshots/06-video.png) | ![Settings](docs/screenshots/07-settings.png) |
+
 The GUI does not run optimizations — Phases 1–3 use the terminal. The dashboard handles analysis, backup, benchmarking, and configuration.
 
-For full panel documentation with layout examples, see [`docs/gui.md`](docs/gui.md).
+For full panel documentation, see [`docs/gui.md`](docs/gui.md).
 
 ---
 

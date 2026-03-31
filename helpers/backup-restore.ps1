@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/backup-restore.ps1  —  Setting Backup & Restore System
 # ==============================================================================
 #
@@ -54,7 +54,14 @@ function Test-BackupLock {
         # Auto-expire: no optimization run should take more than 4 hours.
         # Handles the case where a process is alive but hung/stalled indefinitely.
         if ($lockData.started) {
-            $lockAge = (Get-Date) - [datetime]$lockData.started
+            try {
+                $parsedDate = [datetime]::Parse([string]$lockData.started)
+            } catch {
+                Write-Debug "Backup lock has unparseable timestamp '$($lockData.started)' — removing stale lock."
+                Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+                return $false
+            }
+            $lockAge = (Get-Date) - $parsedDate
             if ($lockAge.TotalHours -gt 4) {
                 Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
                 Write-Debug "Removed expired backup lock (age: $([math]::Round($lockAge.TotalHours, 1))h, PID $($lockData.pid))."
@@ -85,7 +92,7 @@ function Test-BackupLock {
 function Set-BackupLock {
     <#  Called at the start of optimization and restore operations.  #>
     $lockData = @{ pid = $PID; started = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
-    $lockData | ConvertTo-Json | Set-Content $CFG_BackupLockFile -Encoding UTF8 -Force
+    Save-JsonAtomic -Data $lockData -Path $CFG_BackupLockFile
 }
 
 function Remove-BackupLock {
@@ -102,7 +109,25 @@ function Flush-BackupBuffer {
     $backup = Get-BackupDataRaw
     $entries = [System.Collections.ArrayList]@($backup.entries)
     foreach ($e in $SCRIPT:_backupPending) {
-        $entries.Add($e) | Out-Null
+        # Deduplicate: skip if an entry for the same key already exists (prevents
+        # duplicate backups on re-run — the first backup holds the true original value)
+        $isDupe = $false
+        foreach ($existing in $entries) {
+            if ($existing.step -eq $e.step -and $existing.type -eq $e.type) {
+                switch ($e.type) {
+                    "registry"      { $isDupe = ($existing.path -eq $e.path -and $existing.name -eq $e.name) }
+                    "service"       { $isDupe = ($existing.name -eq $e.name) }
+                    "scheduledtask" { $isDupe = ($existing.taskName -eq $e.taskName) }
+                    "bootconfig"    { $isDupe = ($existing.key -eq $e.key) }
+                    "powerplan"     { $isDupe = ($existing.originalGuid -eq $e.originalGuid) }
+                    "nic_adapter"   { $isDupe = ($existing.adapterName -eq $e.adapterName -and $existing.propertyName -eq $e.propertyName) }
+                    "dns"           { $isDupe = ($existing.adapterName -eq $e.adapterName) }
+                    default         { $isDupe = $false }
+                }
+                if ($isDupe) { break }
+            }
+        }
+        if (-not $isDupe) { $entries.Add($e) | Out-Null }
     }
     $backup.entries = @($entries)
     Save-BackupData $backup
@@ -269,7 +294,7 @@ function Backup-BootConfig {
             if ($hexId -and $line -match "^\s*$hexId\s+(.+)$") {
                 $existing = $Matches[1].Trim()
                 break
-            } elseif (-not $hexId -and $line -match "^\s*$Key\s+(.+)$") {
+            } elseif (-not $hexId -and $line -match "^\s*$([regex]::Escape($Key))\s+(.+)$") {
                 $existing = $Matches[1].Trim()
                 break
             }
@@ -591,7 +616,7 @@ function Show-BackupSummary {
                 "scheduledtask" { "TASK $($e.taskName) $(if($e.existed){'(existed before)'}else{'(created by us)'})" }
                 "nic_adapter"   { "NIC  $($e.adapterName): $($e.propertyName) = $($e.originalValue)" }
                 "qos_uro"       { "QOS  policies: [$($e.policies -join ', ')] | URO: $($e.uroState)" }
-                "defender"      { "DEF  $($e.exclusionPaths.Count) path(s), $($e.exclusionProcesses.Count) process(es)" }
+                "defender"      { "DEF  $(if($e.exclusionPaths){@($e.exclusionPaths).Count}else{0}) path(s), $(if($e.exclusionProcesses){@($e.exclusionProcesses).Count}else{0}) process(es)" }
                 "pagefile"      { "PGF  auto=$($e.automaticManaged) init=$($e.initialSize)MB max=$($e.maximumSize)MB" }
                 "dns"           { "DNS  $($e.adapterName): [$($e.originalDnsServers -join ', ')]" }
                 default         { "???  Unknown type '$($e.type)'" }
@@ -617,13 +642,15 @@ function Restore-StepChanges {
     Write-Step "Restoring $($entries.Count) setting(s) from: $StepTitle"
     $restoreOk = 0
     $restoreFail = 0
+    $failedEntries = [System.Collections.Generic.List[object]]::new()
     foreach ($e in $entries) {
+        $failBefore = $restoreFail
         try {
             switch ($e.type) {
                 "registry" {
                     # SECURITY: Validate registry path from backup.json — a tampered backup could
                     # inject writes to arbitrary registry locations (e.g., Run keys for persistence).
-                    if ($e.path -notmatch '^(HKLM:|HKCU:|HKCR:|HKU:|HKCC:|Microsoft\.PowerShell\.Core\\Registry::HK)') {
+                    if ($e.path -notmatch '^(HKLM:|HKCU:|HKCR:|HKU:|HKCC:|Microsoft\.PowerShell\.Core\\Registry::(HKLM|HKCU|HKCR|HKU|HKCC)\\)') {
                         Write-Warn "Registry restore: invalid path — rejected: $($e.path)"
                         $restoreFail++
                         continue
@@ -696,10 +723,13 @@ function Restore-StepChanges {
                     }
                     $startMap = @{ "Auto"="Automatic"; "Manual"="Manual"; "Disabled"="Disabled"; "Auto Delayed"="AutomaticDelayedStart" }
                     $mapped = if ($startMap[$e.originalStartType]) { $startMap[$e.originalStartType] } else { $e.originalStartType }
-                    # Boot/System/Unknown are kernel driver start types — Set-Service cannot change them
+                    # Boot/System/Unknown are kernel driver start types — Set-Service cannot change them.
+                    # These are not failures — kernel drivers manage their own start type and
+                    # no user action is needed, so count as handled (not failed).
                     if ($e.originalStartType -in @("Boot","System","Unknown")) {
-                        Write-Warn "Service $($e.name) has start type '$mapped' — cannot restore via Set-Service (kernel driver)."
-                        # Don't count kernel-driver skips as successful restores
+                        Write-Info "Service $($e.name) has start type '$($e.originalStartType)' — kernel driver, no restore needed."
+                        $restoreOk++
+                        continue
                     } else {
                         # Verify the service still exists before attempting restore — if it was
                         # uninstalled (e.g., Xbox services removed by system update), Set-Service
@@ -757,15 +787,24 @@ function Restore-StepChanges {
                     }
                     # Restore original power plan and delete the imported one
                     powercfg /setactive $e.originalGuid 2>&1 | Out-Null
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warn "Failed to restore power plan '$($e.originalName)' ($($e.originalGuid)) — plan may no longer exist."
+                        $restoreFail++
+                        continue
+                    }
                     Write-OK "Restored power plan: $($e.originalName) ($($e.originalGuid))"
                     # Delete any FPSHeaven/CS2 Optimized plans we created
                     $allPlans = powercfg /list 2>&1
                     foreach ($line in $allPlans) {
                         if ($line -match "([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})") {
                             $planGuid = $Matches[1]
-                            if (($line -match "FPSHeaven" -or $line -match "CS2 Optimized") -and $planGuid -ne $e.originalGuid) {
+                            if (($line -imatch "FPSHeaven" -or $line -imatch "CS2 Optimized") -and $planGuid -ne $e.originalGuid) {
                                 powercfg /delete $planGuid 2>&1 | Out-Null
-                                Write-OK "Deleted imported plan: $planGuid"
+                                if ($LASTEXITCODE -eq 0) {
+                                    Write-OK "Deleted imported plan: $planGuid"
+                                } else {
+                                    Write-Warn "Could not delete imported plan: $planGuid"
+                                }
                             }
                         }
                     }
@@ -913,23 +952,18 @@ function Restore-StepChanges {
                         # Resolve the current InterfaceIndex — the stored index may be stale
                         # if the adapter was re-plugged or the system was rebooted.
                         $ifIndex = $e.interfaceIndex
+                        # Validate InterfaceIndex non-destructively by checking adapter name
                         try {
-                            Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
-                                -ServerAddresses @("127.0.0.1") -ErrorAction Stop 2>$null
-                            # Revert the probe immediately
-                            Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
-                                -ResetServerAddresses -ErrorAction SilentlyContinue
-                        } catch {
-                            # Stored interfaceIndex is invalid — resolve by adapter name
-                            Write-Debug "DNS restore: stored InterfaceIndex $ifIndex invalid, resolving by adapter name '$($e.adapterName)'"
-                            $resolvedAdapter = Get-NetAdapter -Name $e.adapterName -ErrorAction SilentlyContinue |
+                            $currentAdapter = Get-NetAdapter -Name $e.adapterName -ErrorAction SilentlyContinue |
                                 Select-Object -First 1
-                            if ($resolvedAdapter) {
-                                $ifIndex = $resolvedAdapter.InterfaceIndex
-                                Write-Debug "DNS restore: resolved '$($e.adapterName)' to InterfaceIndex $ifIndex"
-                            } else {
-                                throw "Adapter '$($e.adapterName)' not found — cannot determine current InterfaceIndex"
+                            if ($currentAdapter -and $currentAdapter.InterfaceIndex -ne $ifIndex) {
+                                Write-Debug "DNS restore: InterfaceIndex changed from $ifIndex to $($currentAdapter.InterfaceIndex)"
+                                $ifIndex = $currentAdapter.InterfaceIndex
+                            } elseif (-not $currentAdapter) {
+                                Write-Debug "DNS restore: adapter '$($e.adapterName)' not found, using stored InterfaceIndex $ifIndex"
                             }
+                        } catch {
+                            Write-Debug "DNS restore: adapter lookup failed, using stored InterfaceIndex $ifIndex"
                         }
                         if ($e.originalDnsServers -and $e.originalDnsServers.Count -gt 0) {
                             Set-DnsClientServerAddress -InterfaceIndex $ifIndex `
@@ -955,45 +989,60 @@ function Restore-StepChanges {
             $restoreFail++
             Write-Warn "Restore failed for $($e.type) $(if($e.name){$e.name}elseif($e.profile){$e.profile}elseif($e.originalName){$e.originalName}elseif($e.taskName){$e.taskName}else{$e.type}): $_"
         }
+        if ($restoreFail -gt $failBefore) { $failedEntries.Add($e) }
     }
 
     if ($restoreFail -gt 0) {
         Write-Warn "Restore '$StepTitle': $restoreOk succeeded, $restoreFail failed — check warnings above."
     }
 
-    # Only remove entries when all restores succeeded — keep entries on failure so user can retry
-    if ($restoreFail -eq 0) {
-        $backup.entries = @($backup.entries | Where-Object { $_.step -ne $StepTitle })
-        Save-BackupData $backup
-    } else {
-        Write-Warn "Backup entries retained for '$StepTitle' — retry restore to complete."
+    # Remove successfully restored entries; keep only failed ones for retry
+    $backup.entries = @($backup.entries | Where-Object { $_.step -ne $StepTitle -or $_ -in $failedEntries })
+    Save-BackupData $backup
+    if ($restoreFail -gt 0) {
+        Write-Warn "$restoreFail failed entry/entries retained for '$StepTitle' — retry restore to complete."
     }
     return ($restoreFail -eq 0)
 }
 
 function Restore-AllChanges {
-    $backup = Get-BackupData
-    if (-not $backup.entries -or $backup.entries.Count -eq 0) {
-        Write-Info "No backups to restore."
+    # Drain any pending in-memory entries before restore to prevent re-pollution
+    Flush-BackupBuffer
+
+    # Acquire backup lock to prevent races with concurrent Flush-BackupBuffer
+    if (Test-BackupLock) {
+        Write-Warn "Another CS2 Optimization process is currently running (backup.json is locked)."
+        Write-Warn "Wait for it to finish, or close it manually before restoring."
         return
     }
+    Set-BackupLock
 
-    Show-BackupSummary
-    Write-Blank
-    Write-Warn "This will restore ALL $($backup.entries.Count) backed up setting(s)."
-    $r = Read-Host "  Proceed with full restore? [y/N]"
-    if ($r -notmatch "^[jJyY]$") { Write-Info "Cancelled."; return }
+    try {
+        $backup = Get-BackupData
+        if (-not $backup.entries -or $backup.entries.Count -eq 0) {
+            Write-Info "No backups to restore."
+            return
+        }
 
-    $stepNames = @(($backup.entries | Group-Object -Property step).Name)
-    $failures = 0
-    foreach ($stepName in $stepNames) {
-        $result = Restore-StepChanges -StepTitle $stepName
-        if (-not $result) { $failures++ }
-    }
-    if ($failures -eq 0) {
-        Write-OK "All settings restored to pre-optimization state."
-    } else {
-        Write-Warn "$failures step group(s) had restore failures — check output above."
+        Show-BackupSummary
+        Write-Blank
+        Write-Warn "This will restore ALL $($backup.entries.Count) backed up setting(s)."
+        $r = Read-Host "  Proceed with full restore? [y/N]"
+        if ($r -notmatch "^[jJyY]$") { Write-Info "Cancelled."; return }
+
+        $stepNames = @(($backup.entries | Group-Object -Property step).Name)
+        $failures = 0
+        foreach ($stepName in $stepNames) {
+            $result = Restore-StepChanges -StepTitle $stepName
+            if (-not $result) { $failures++ }
+        }
+        if ($failures -eq 0) {
+            Write-OK "All settings restored to pre-optimization state."
+        } else {
+            Write-Warn "$failures step group(s) had restore failures — check output above."
+        }
+    } finally {
+        Remove-BackupLock
     }
 }
 
@@ -1023,7 +1072,19 @@ function Restore-Interactive {
 
         $choice = Read-Host "  Choice"
         if ($choice -eq "0" -or [string]::IsNullOrWhiteSpace($choice)) { return }
-        if ($choice -match "^[aA]$") { Restore-AllChanges; return }
+        if ($choice -match "^[aA]$") {
+            # Lock is already held by Restore-Interactive — call inner restore logic directly
+            # (Restore-AllChanges would see the lock and abort)
+            $stepNames = @(($backup.entries | Group-Object -Property step).Name)
+            $failures = 0
+            foreach ($stepName in $stepNames) {
+                $result = Restore-StepChanges -StepTitle $stepName
+                if (-not $result) { $failures++ }
+            }
+            if ($failures -eq 0) { Write-OK "All settings restored to pre-optimization state." }
+            else { Write-Warn "$failures step group(s) had restore failures — check output above." }
+            return
+        }
 
         $idx = 0
         if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $grouped.Count) {

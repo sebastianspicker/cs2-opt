@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/nvidia-driver.ps1  —  NVIDIA Driver Download + Clean Install
 # ==============================================================================
 
@@ -10,7 +10,8 @@ function Get-LatestNvidiaDriver {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SpecificVersion',
         Justification = 'Reserved for future version-specific download support')]
     param(
-        [string]$SpecificVersion  # If set, tries to find this version instead of latest
+        [string]$SpecificVersion,  # If set, tries to find this version instead of latest
+        [string]$GpuName           # Fallback GPU name (from Phase 1 state) when driver is uninstalled
     )
 
     Write-Step "Detecting NVIDIA GPU for driver lookup..."
@@ -18,12 +19,15 @@ function Get-LatestNvidiaDriver {
     $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
 
-    if (-not $gpu) {
+    if (-not $gpu -and $GpuName) {
+        Write-Info "GPU not detected via CIM (driver uninstalled). Using saved GPU name: $GpuName"
+    } elseif (-not $gpu) {
         Write-Warn "No NVIDIA GPU detected."
         return $null
     }
 
-    Write-Info "GPU: $($gpu.Name)"
+    $gpuName = if ($gpu) { $gpu.Name } else { $GpuName }
+    Write-Info "GPU: $gpuName"
 
     # NVIDIA driver lookup API
     # psid = Product Series ID, pfid = Product Family ID
@@ -31,7 +35,6 @@ function Get-LatestNvidiaDriver {
 
     # Map common GPU series to NVIDIA product series/family IDs
     # [ordered] ensures deterministic match order (longest/newest series first)
-    $gpuName = $gpu.Name
     # Laptop entries MUST come before their desktop counterparts — [ordered]
     # iterates in insertion order and we break on first match. Laptop GPUs
     # contain "Laptop" in the name (e.g., "NVIDIA GeForce RTX 4060 Laptop GPU")
@@ -179,8 +182,17 @@ function Test-NvidiaDriverSignature {
 
 function Install-NvidiaDriverClean {
     <#
-    .SYNOPSIS  Extracts NVIDIA driver package and installs with only essential
-               components (no GFE, no telemetry). Replaces NVCleanstall.
+    .SYNOPSIS  Installs NVIDIA driver with only essential components (no NVIDIA App).
+               Uses extract → strip → setup.exe approach for a minimal install.
+    .DESCRIPTION
+        Strategy:
+          1. Extract the self-extracting .exe to a temp folder (-s -e"<path>")
+          2. Delete unwanted component folders (NVIDIA App, GFE, telemetry, NodeJS, etc.)
+          3. Run setup.exe from the extracted folder with -s -noreboot -clean
+        This avoids installing NVIDIA App / GeForce Experience entirely, rather than
+        installing everything and trying to clean up after the fact.
+        NVDisplay.ContainerLocalSystem is intentionally kept — it's required for the
+        NVIDIA Control Panel to function.
     #>
     param(
         [Parameter(Mandatory)]
@@ -188,11 +200,12 @@ function Install-NvidiaDriverClean {
     )
 
     if ($SCRIPT:DryRun) {
-        Write-Host "  [DRY-RUN] Would extract and install NVIDIA driver: $DriverExe" -ForegroundColor Magenta
-        Write-Host "  [DRY-RUN]   1. Extract driver package" -ForegroundColor Magenta
-        Write-Host "  [DRY-RUN]   2. Remove bloat components (GFE, telemetry)" -ForegroundColor Magenta
-        Write-Host "  [DRY-RUN]   3. Silent install with essential components only" -ForegroundColor Magenta
-        Write-Host "  [DRY-RUN]   4. Apply post-install registry tweaks" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] Would install NVIDIA driver (component-selective): $DriverExe" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   1. Extract driver package to temp folder" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   2. Remove bloat components (NVIDIA App, GFE, telemetry, NodeJS)" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   3. Run setup.exe -s -noreboot -clean (driver-only)" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   4. Disable telemetry services + scheduled tasks" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   5. Apply post-install registry tweaks" -ForegroundColor Magenta
         return $true
     }
 
@@ -204,13 +217,14 @@ function Install-NvidiaDriverClean {
     # SECURITY: Validate driver path — this file is passed to Start-Process.
     # state.json nvidiaDriverPath or user input could point to malware.
     # Verify: must be a real .exe file (not directory/symlink to non-file), no path traversal.
+    # Check for path traversal BEFORE resolving — after Get-Item, '..' is normalized away
+    if ($DriverExe -match '\.\.') {
+        Write-Err "Driver path contains path traversal: $DriverExe"
+        return $false
+    }
     $driverItem = Get-Item $DriverExe -ErrorAction SilentlyContinue
     if (-not $driverItem -or $driverItem.PSIsContainer) {
         Write-Err "Driver path is not a file: $DriverExe"
-        return $false
-    }
-    if ($DriverExe -match '\.\.') {
-        Write-Err "Driver path contains path traversal: $DriverExe"
         return $false
     }
     # Verify file has Authenticode signature (NVIDIA drivers are always signed)
@@ -232,94 +246,241 @@ function Install-NvidiaDriverClean {
         if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
     }
 
-    $tempDir = Join-Path $env:TEMP "NVDriver_$(New-Guid)"
-    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+    # ── 1. Extract driver package ───────────────────────────────────────────
+    # The NVIDIA .exe is a self-extracting archive. Use NVIDIA's native silent
+    # extraction flags: -s (silent) + -e"<path>" (extract only, no install).
+    # This replaces the legacy -x -gm2 -InstallDir approach which still spawns
+    # a GUI dialog on modern driver packages.
+    # NOTE: -e has NO space before the path — it's -e"C:\path", not -e "C:\path".
+    # IMPORTANT: Pass the full argument line as a single string, NOT an array.
+    # PowerShell's Start-Process can double-quote array elements, mangling the
+    # -e"path" flag and causing the extractor to fall back to a full silent install
+    # (which installs NVIDIA App, Control Panel, and other bloat).
+    $extractDir = Join-Path $env:TEMP "NVDriverExtract_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+    New-Item -ItemType Directory -Path $extractDir -Force -ErrorAction SilentlyContinue | Out-Null
+    Write-Step "Extracting driver package (silent)..."
+    Write-Info "Extracting to: $extractDir"
 
-    # ── 1. Extract driver package ────────────────────────────────────────────
-    Write-Step "Extracting NVIDIA driver package..."
-    Write-Info "This may take 1-2 minutes..."
+    $extractProcess = Start-Process -FilePath $DriverExe `
+        -ArgumentList "-s -e`"$extractDir`"" `
+        -PassThru
 
-    $extractProc = Start-Process -FilePath $DriverExe -ArgumentList "-extract:`"$tempDir`" -noeula" -Wait -PassThru -NoNewWindow
-    if ($extractProc.ExitCode -ne 0 -or -not (Test-Path "$tempDir\setup.exe")) {
-        # Clean partial extraction before retry
-        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-        # Try alternate extraction flags
-        $extractProc2 = Start-Process -FilePath $DriverExe -ArgumentList "-y -gm2 -InstallPath=`"$tempDir`"" -Wait -PassThru -NoNewWindow
-        if ($extractProc2.ExitCode -ne 0) {
-            Write-Err "Could not extract driver (exit codes: $($extractProc.ExitCode), $($extractProc2.ExitCode))"
-            Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-            return $false
-        }
-    }
-
-    if (-not (Test-Path "$tempDir\setup.exe")) {
-        Write-Err "Extraction failed — setup.exe not found in $tempDir"
-        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    # Wait up to 5 minutes for extraction — prevents indefinite hangs
+    $extractTimeout = 300000  # 5 minutes in ms
+    $completed = $extractProcess.WaitForExit($extractTimeout)
+    if (-not $completed) {
+        Write-Err "Extraction timed out after 5 minutes."
+        try { $extractProcess | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
         return $false
     }
 
-    Write-OK "Driver extracted to: $tempDir"
-
-    # ── 2. Remove unwanted components ────────────────────────────────────────
-    Write-Step "Removing bloat components..."
-    $removeComponents = @(
-        "GFExperience",
-        "GFExperience.NvStreamSrv",
-        "NvApp",
-        "NvTelemetry",
-        "Display.NvContainer",
-        "NvAbHub",
-        "NvBackend",
-        "NvCamera",
-        "NvVAD",
-        "ShadowPlay",
-        "ShieldWirelessController",
-        "Update.Core",
-        "EULA.txt",
-        "ListDevices.txt",
-        "license.txt"
-    )
-
-    $removedCount = 0
-    foreach ($comp in $removeComponents) {
-        $compPath = Join-Path $tempDir $comp
-        if (Test-Path $compPath) {
-            Remove-Item $compPath -Recurse -Force -ErrorAction SilentlyContinue
-            $removedCount++
+    # Find setup.exe — may be at root or in a subdirectory depending on driver version
+    $setupExe = $null
+    $packageRoot = $extractDir
+    if (Test-Path "$extractDir\setup.exe") {
+        $setupExe = "$extractDir\setup.exe"
+    } else {
+        # Some driver packages extract into a nested folder
+        $found = Get-ChildItem $extractDir -Recurse -Filter "setup.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($found) {
+            $setupExe = $found.FullName
+            $packageRoot = $found.DirectoryName
+            Write-Info "Found setup.exe in subdirectory: $($found.DirectoryName | Split-Path -Leaf)"
         }
     }
-    Write-OK "Removed $removedCount bloat components."
 
-    # ── 3. Install driver (silent) ───────────────────────────────────────────
-    Write-Step "Installing NVIDIA driver (silent install)..."
-    Write-Info "This takes 2-5 minutes. Screen may flicker."
-
-    $setup = Join-Path $tempDir "setup.exe"
-    $installProcess = Start-Process -FilePath $setup -ArgumentList "-s -noreboot" -Wait -PassThru -NoNewWindow
-
-    $installSuccess = $false
-    if ($installProcess.ExitCode -eq 0) {
-        Write-OK "NVIDIA driver installed successfully."
-        $installSuccess = $true
-    } elseif ($installProcess.ExitCode -eq 1) {
-        Write-OK "NVIDIA driver installed (exit code 1 — reboot required)."
-        Write-Info "Exit code 1 may indicate partial install or reboot needed. Verify in Device Manager."
-        $installSuccess = $true
+    $fullInstallDetected = $false
+    if (-not $setupExe) {
+        # The self-extractor may have performed a full install instead of extract-only.
+        # This happens when argument quoting is misinterpreted by the extractor.
+        # Detect by checking if NVIDIA driver appeared in WMI after extraction attempt.
+        $postGpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
+        if ($postGpu -and $postGpu.DriverVersion) {
+            Write-Warn "setup.exe not found, but NVIDIA driver is now detected."
+            Write-Warn "The installer performed a full install instead of extract-only."
+            Write-Info "Detected: $($postGpu.Name) — Driver $($postGpu.DriverVersion)"
+            Write-Info "Applying post-install cleanup (removing bloat, disabling telemetry)..."
+            $fullInstallDetected = $true
+            $installSuccess = $true
+            Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Err "Extraction failed — setup.exe not found in $extractDir"
+            Write-Info "Exit code: $($extractProcess.ExitCode)"
+            if (Test-Path $extractDir) {
+                $extractContents = Get-ChildItem $extractDir -ErrorAction SilentlyContinue | Select-Object -First 10
+                if ($extractContents) {
+                    Write-Info "Extraction folder contains: $($extractContents.Name -join ', ')"
+                } else {
+                    Write-Info "Extraction folder is empty."
+                }
+            }
+            return $false
+        }
     } else {
-        Write-Warn "Installer exited with code $($installProcess.ExitCode)."
-        Write-Info "This may still be OK — check Device Manager after restart."
-        # Non-zero exit (other than 1) indicates potential failure
-        $installSuccess = $false
+        Write-OK "Extraction complete."
     }
 
-    # ── 4. Post-install tweaks (only if install succeeded) ───────────────────
+    if (-not $fullInstallDetected) {
+        # ── 2. Strip bloat components ────────────────────────────────────────
+        # Remove component folders so setup.exe never installs them.
+        # NVDisplay.ContainerLocalSystem is NOT removed — it's required for NVCP.
+        Write-Step "Removing unwanted components from extracted package..."
+        $bloatFolders = @(
+            "GFExperience*",           # GeForce Experience (legacy)
+            "NvApp*",                  # NVIDIA App (GFE replacement)
+            "NvBackend*",              # GFE/App backend service
+            "NvTelemetry*",            # Telemetry container
+            "NvContainer\plugins\LocalSystem\NvTelemetry*",  # Telemetry plugin
+            "NvNodejs*",               # NodeJS runtime (used by GFE/App)
+            "nodejs*",                 # NodeJS alt location
+            "NvCamera*",               # ShadowPlay / Ansel
+            "ShadowPlay*",             # ShadowPlay standalone
+            "NvVAD*",                  # Virtual Audio Device (ShadowPlay)
+            "EULA.txt",                # Not needed for silent install
+            "ListDevices.txt",         # Not needed for silent install
+            "license.txt"              # Not needed for silent install
+        )
+        $removedCount = 0
+        foreach ($pattern in $bloatFolders) {
+            $items = Get-ChildItem (Join-Path $packageRoot $pattern) -ErrorAction SilentlyContinue
+            foreach ($item in $items) {
+                Remove-Item $item.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                $removedCount++
+                Write-Debug "Removed: $($item.Name)"
+            }
+        }
+        Write-ActionOK "Removed $removedCount bloat components from package."
+
+        # ── 3. Run setup.exe from stripped package ───────────────────────────
+        Write-Step "Installing NVIDIA driver (driver-only, silent)..."
+        Write-Info "This takes 3-7 minutes. Screen may flicker — do not touch the PC."
+
+        $installProcess = Start-Process -FilePath $setupExe `
+            -ArgumentList "-s -noreboot -clean" `
+            -Wait -PassThru -NoNewWindow
+
+        $installSuccess = $false
+        if ($installProcess.ExitCode -eq 0) {
+            Write-OK "NVIDIA driver installed successfully."
+            $installSuccess = $true
+        } elseif ($installProcess.ExitCode -eq 1) {
+            Write-OK "NVIDIA driver installed (exit code 1 — reboot required)."
+            $installSuccess = $true
+        } else {
+            Write-Warn "Installer exited with code $($installProcess.ExitCode)."
+            Write-Info "This may still be OK — check Device Manager after restart."
+            $installSuccess = $false
+        }
+
+        # Clean up extraction folder
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    } else {
+        # ── Full install detected — remove bloat that was installed ──────────
+        # The extractor ran a full install including NVIDIA App, GFE, etc.
+        # Remove the bloat software while keeping the display driver intact.
+        Write-Step "Removing NVIDIA bloat installed during full install..."
+
+        # Remove NVIDIA AppX packages (NVIDIA App, Control Panel from Store)
+        if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+            $nvAppx = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match "NVIDIA" -and $_.Name -notmatch "ControlPanel" }
+            foreach ($pkg in $nvAppx) {
+                try {
+                    Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
+                    Write-OK "Removed AppX: $($pkg.Name)"
+                } catch {
+                    Write-Debug "AppX removal: $($pkg.Name) — $_"
+                }
+            }
+        }
+
+        # Remove bloat directories (keep NVDisplay.Container for NVCP + driver core)
+        $bloatDirs = @(
+            "$env:ProgramFiles\NVIDIA Corporation\NVIDIA app",
+            "$env:ProgramFiles\NVIDIA Corporation\NvNode",
+            "$env:ProgramFiles\NVIDIA Corporation\NvBackend",
+            "$env:ProgramFiles\NVIDIA Corporation\NvCamera",
+            "$env:ProgramFiles\NVIDIA Corporation\NvTelemetry",
+            "$env:ProgramFiles\NVIDIA Corporation\ShadowPlay",
+            "$env:ProgramFiles\NVIDIA Corporation\GeForce Experience",
+            "$env:ProgramFiles\NVIDIA Corporation\NvContainer\plugins\LocalSystem\NvTelemetry",
+            "${env:ProgramFiles(x86)}\NVIDIA Corporation\NvNode",
+            "${env:ProgramFiles(x86)}\NVIDIA Corporation\NvBackend",
+            "${env:ProgramFiles(x86)}\NVIDIA Corporation\NvTelemetry"
+        )
+        $removedBloat = 0
+        foreach ($dir in $bloatDirs) {
+            if (Test-Path $dir) {
+                Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+                $removedBloat++
+                Write-Debug "Removed: $dir"
+            }
+        }
+        if ($removedBloat -gt 0) { Write-ActionOK "Removed $removedBloat NVIDIA bloat directories." }
+
+        # Remove bloat scheduled tasks
+        $bloatTaskPatterns = @("NvDriverUpdateCheckDaily*", "NVIDIA GeForce*", "NvNodeLauncher*", "NvBackend*", "NvTmRep*")
+        foreach ($pattern in $bloatTaskPatterns) {
+            $tasks = Get-ScheduledTask -TaskName $pattern -ErrorAction SilentlyContinue
+            foreach ($t in $tasks) {
+                try {
+                    Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false -ErrorAction Stop
+                    Write-Debug "Removed task: $($t.TaskName)"
+                } catch { Write-Debug "Task removal: $($t.TaskName) — $_" }
+            }
+        }
+        Write-ActionOK "Full-install bloat cleanup complete."
+    }
+
+    # ── 4. Disable telemetry services (if any survived the strip) ────────────
+    # NVDisplay.ContainerLocalSystem is intentionally NOT disabled — it's
+    # required for the NVIDIA Control Panel to start and function.
+    if ($installSuccess) {
+        Write-Step "Disabling telemetry services..."
+        $bloatServices = @(
+            "NvTelemetryContainer",
+            "NvContainerNetworkService"
+        )
+        foreach ($svc in $bloatServices) {
+            try {
+                $s = Get-Service -Name $svc -ErrorAction SilentlyContinue
+                if ($s) {
+                    Backup-ServiceState -ServiceName $svc -StepTitle "Driver Install Bloat Cleanup"
+                    Stop-Service $svc -Force -ErrorAction SilentlyContinue
+                    Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
+                    Write-ActionOK "Disabled: $svc"
+                }
+            } catch { Write-Debug "Bloat service ${svc}: $_" }
+        }
+
+        # Remove GFE / NVIDIA App scheduled tasks
+        $bloatTasks = @("NvDriverUpdateCheckDaily*", "NVIDIA GeForce*", "NvNodeLauncher*", "NvBackend*", "NvTmRep*")
+        foreach ($pattern in $bloatTasks) {
+            try {
+                $tasks = Get-ScheduledTask -TaskName $pattern -ErrorAction SilentlyContinue
+                foreach ($t in $tasks) {
+                    Disable-ScheduledTask -TaskName $t.TaskName -ErrorAction SilentlyContinue | Out-Null
+                    Write-ActionOK "Disabled task: $($t.TaskName)"
+                }
+            } catch { Write-Debug "Bloat task ${pattern}: $_" }
+        }
+    }
+
+    # ── 3. Post-install tweaks (MSI, telemetry, HDCP, MPO, etc.) ─────────────
     if ($installSuccess) {
         Apply-NvidiaPostInstallTweaks
     }
 
-    # ── 5. Cleanup ───────────────────────────────────────────────────────────
-    Write-Step "Cleaning up extraction folder..."
-    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    # ── 4. Cleanup NVIDIA temp extraction folders ────────────────────────────
+    Write-Step "Cleaning up NVIDIA temp folders..."
+    $nvTempPatterns = @("$env:TEMP\NVIDIA*", "$env:TEMP\NV*")
+    foreach ($p in $nvTempPatterns) {
+        Get-ChildItem $p -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
     Write-OK "Cleanup complete."
 
     return $installSuccess
@@ -331,9 +492,9 @@ function Apply-NvidiaPostInstallTweaks {
                "Expert Tweaks" would normally handle.
     #>
 
-    $origTitle = $SCRIPT:CurrentStepTitle
+    $origTitle = if (Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) { $SCRIPT:CurrentStepTitle } else { $null }
     try {
-        if (-not $SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle = "NVIDIA Post-Install Tweaks" }
+        if (-not (Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -or -not $SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle = "NVIDIA Post-Install Tweaks" }
 
         Write-Step "Applying post-install NVIDIA tweaks..."
 

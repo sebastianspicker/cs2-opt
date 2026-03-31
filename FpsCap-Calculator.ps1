@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS  FPS Cap Calculator — CS2 benchmark output -> FPS cap  [T1]
 
@@ -100,7 +100,7 @@ if (-not $result) {
 $avg  = $result.Avg
 $p1   = $result.P1
 $cap  = Calculate-FpsCap $avg
-$cut  = [math]::Round($avg * $CFG_FpsCap_Percent)
+$cut  = [math]::Round($avg - $cap)
 $pct  = [math]::Round($CFG_FpsCap_Percent * 100)
 
 Write-Blank
@@ -137,27 +137,28 @@ if ($p1 -gt 0) {
 Write-OK "FPS cap $cap copied to clipboard."
 Write-Debug "FPS cap calculated: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
 
-# Update state
-if (Test-Path $CFG_StateFile) {
-    try {
-        $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-        $st | Add-Member -NotePropertyName "fpsCap"  -NotePropertyValue $cap  -Force
-        $st | Add-Member -NotePropertyName "avgFps"  -NotePropertyValue $avg  -Force
-        $st | Add-Member -NotePropertyName "p1Fps"   -NotePropertyValue $p1   -Force
-        $st | Add-Member -NotePropertyName "capDate" -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm") -Force
-        Save-JsonAtomic -Data $st -Path $CFG_StateFile
-    } catch { Write-Debug "Could not persist FPS cap data: $_" }
-}
-# Record in benchmark history for tracking
-if ($p1 -gt 0) {
-    Add-BenchmarkResult -AvgFps $avg -P1Fps $p1 -Label "FpsCap-Calculator" -Runs $result.Runs | Out-Null
-    $bmHistory = Get-BenchmarkHistory
-    if ($bmHistory.Count -ge 2) {
-        Write-Blank
-        Show-BenchmarkComparison
+# Update state and record benchmark (skip in DRY-RUN)
+if (-not $SCRIPT:DryRun) {
+    if (Test-Path $CFG_StateFile) {
+        try {
+            $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $st | Add-Member -NotePropertyName "fpsCap"  -NotePropertyValue $cap  -Force
+            $st | Add-Member -NotePropertyName "avgFps"  -NotePropertyValue $avg  -Force
+            if ($p1 -gt 0) { $st | Add-Member -NotePropertyName "p1Fps" -NotePropertyValue $p1 -Force }
+            $st | Add-Member -NotePropertyName "capDate" -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm") -Force
+            Save-JsonAtomic -Data $st -Path $CFG_StateFile
+        } catch { Write-Debug "Could not persist FPS cap data: $_" }
     }
+    if ($p1 -gt 0) {
+        Add-BenchmarkResult -AvgFps $avg -P1Fps $p1 -Label "FpsCap-Calculator" -Runs $result.Runs | Out-Null
+        $bmHistory = @(Get-BenchmarkHistory)
+        if ($bmHistory.Count -ge 2) {
+            Write-Blank
+            Show-BenchmarkComparison
+        }
+    }
+    Add-Content $CFG_LogFile "[$(Get-Date -Format HH:mm:ss)][OK] FPS-Cap: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)" -Encoding UTF8 -ErrorAction SilentlyContinue
 }
-Add-Content $CFG_LogFile "[$(Get-Date -Format HH:mm:ss)][OK] FPS-Cap: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)" -Encoding UTF8 -ErrorAction SilentlyContinue
 
 # ── Guide to set cap ─────────────────────────────────────────────────────────
 Write-Blank

@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 # ==============================================================================
 #  CS2-Optimize-GUI.ps1  —  WPF Dashboard
 #  Launch via START-GUI.bat
@@ -36,6 +36,9 @@ function Invoke-Async {
     $capturedHandle = $handle
     $capturedRs     = $rs
     $capturedDone   = $OnDone
+    $capturedWindow = $Window
+    $capturedUISync = $Script:UISync
+    $capturedTimers = $Script:AsyncTimers
     $timer.Add_Tick({
         if ($Script:Closing) {
             $timer.Stop()
@@ -45,17 +48,17 @@ function Invoke-Async {
         if ($capturedHandle.IsCompleted) {
             $timer.Stop()
             $errorOccurred = $false
-            try { $capturedRs.EndInvoke($capturedHandle) } catch { $Script:UISync.AsyncError = $_.Exception.Message; $errorOccurred = $true }
+            try { $capturedRs.EndInvoke($capturedHandle) } catch { $capturedUISync.AsyncError = $_.Exception.Message; $errorOccurred = $true }
             finally { $capturedRs.Dispose() }
             if ($errorOccurred) {
-                $Window.Dispatcher.Invoke({
-                    [System.Windows.MessageBox]::Show("Background task error: $($Script:UISync.AsyncError)", "Error", "OK", "Error")
+                $capturedWindow.Dispatcher.Invoke({
+                    [System.Windows.MessageBox]::Show("Background task error: $($capturedUISync.AsyncError)", "Error", "OK", "Error")
                 })
-                $Script:UISync.AsyncError = $null
+                $capturedUISync.AsyncError = $null
             } else {
                 & $capturedDone
             }
-            $Script:AsyncTimers.Remove($timer)
+            $capturedTimers.Remove($timer)
         }
     }.GetNewClosure())
     $Script:AsyncTimers.Add($timer)
@@ -182,6 +185,12 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                 <Setter TargetName="Bd" Property="Background" Value="#2d2d2d"/>
                 <Setter TargetName="Bd" Property="BorderBrush" Value="#454545"/>
               </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Bd" Property="Background" Value="#1a1a1a"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#2a2a2a"/>
+                <Setter Property="Foreground" Value="#4a4a4a"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -220,6 +229,52 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
       <Setter Property="Padding"         Value="10,8"/>
       <Setter Property="FontSize"        Value="11"/>
       <Setter Property="FontWeight"      Value="SemiBold"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="DataGridColumnHeader">
+            <Border Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    Padding="{TemplateBinding Padding}">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ContentPresenter Grid.Column="0"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="Center"/>
+                <Path x:Name="SortArrow" Grid.Column="1"
+                      Fill="#6b7280" Margin="4,0,0,0"
+                      VerticalAlignment="Center" Visibility="Collapsed"/>
+                <Thumb x:Name="PART_RightHeaderGripper" Grid.Column="1"
+                       Width="2" HorizontalAlignment="Right" Cursor="SizeWE"
+                       Style="{x:Null}">
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                      <Border Background="Transparent" Width="2"/>
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="SortDirection" Value="Ascending">
+                <Setter TargetName="SortArrow" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="SortArrow" Property="Data" Value="M 0,5 L 4,0 L 8,5 Z"/>
+              </Trigger>
+              <Trigger Property="SortDirection" Value="Descending">
+                <Setter TargetName="SortArrow" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="SortArrow" Property="Data" Value="M 0,0 L 4,5 L 8,0 Z"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#161616"/>
+                <Setter Property="Foreground" Value="#d1d5db"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
 
     <Style TargetType="DataGridCell">
@@ -242,6 +297,24 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
       <Setter Property="CaretBrush"      Value="#e8520a"/>
     </Style>
 
+    <ControlTemplate x:Key="ComboBoxToggle" TargetType="ToggleButton">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition/>
+          <ColumnDefinition Width="20"/>
+        </Grid.ColumnDefinitions>
+        <Border x:Name="Border" Grid.ColumnSpan="2"
+                Background="#1c1c1c" BorderBrush="#3a3a3a" BorderThickness="1" CornerRadius="4"/>
+        <Path Grid.Column="1" Data="M 0,0 L 4,4 L 8,0 Z" Fill="#6b7280"
+              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Grid>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter TargetName="Border" Property="BorderBrush" Value="#555"/>
+        </Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+
     <Style TargetType="ComboBox">
       <Setter Property="Background"      Value="#1c1c1c"/>
       <Setter Property="Foreground"      Value="#e0e0e0"/>
@@ -249,6 +322,60 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Padding"         Value="8,5"/>
       <Setter Property="FontSize"        Value="12"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton Template="{StaticResource ComboBoxToggle}"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                            Focusable="False" ClickMode="Press"/>
+              <ContentPresenter IsHitTestVisible="False"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                Margin="10,4,24,4" VerticalAlignment="Center"
+                                HorizontalAlignment="Left"/>
+              <Popup x:Name="Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
+                     Placement="Bottom" Focusable="False" AllowsTransparency="True"
+                     PopupAnimation="Slide">
+                <Border x:Name="DropDown" Background="#1c1c1c" BorderBrush="#3a3a3a"
+                        BorderThickness="1" CornerRadius="4" Padding="0,4"
+                        MinWidth="{TemplateBinding ActualWidth}"
+                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                  <ScrollViewer SnapsToDevicePixels="True">
+                    <ItemsPresenter/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Background"  Value="Transparent"/>
+      <Setter Property="Foreground"  Value="#e0e0e0"/>
+      <Setter Property="Padding"     Value="10,6"/>
+      <Setter Property="FontSize"    Value="12"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#2a2a2a"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#333"/>
+                <Setter Property="Foreground" Value="#f0f0f0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
 
     <Style TargetType="CheckBox">
@@ -506,6 +633,16 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                   <ProgressBar Grid.Column="1" x:Name="ProgressP1" Minimum="0" Maximum="38" Value="0" Margin="10,0" VerticalAlignment="Center"/>
                   <TextBlock Grid.Column="2" x:Name="ProgressP1Txt" Text="0 / 38" FontSize="12" Foreground="#9ca3af" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
+                <Grid Margin="0,0,0,14">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="75"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="60"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Phase 2" FontSize="12" FontWeight="SemiBold" Foreground="#9ca3af" VerticalAlignment="Center"/>
+                  <ProgressBar Grid.Column="1" x:Name="ProgressP2" Minimum="0" Maximum="3" Value="0" Margin="10,0" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="2" x:Name="ProgressP2Txt" Text="0 / 3" FontSize="12" Foreground="#9ca3af" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
                 <Grid Margin="0,0,0,12">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="75"/>
@@ -551,14 +688,15 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
               </StackPanel>
             </Grid>
           </Border>
-          <DataGrid Grid.Row="1" x:Name="AnalysisGrid" SelectionUnit="FullRow">
+          <DataGrid Grid.Row="1" x:Name="AnalysisGrid" SelectionUnit="FullRow"
+                    CanUserSortColumns="True">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="Category"    Binding="{Binding Category}" Width="90"/>
-              <DataGridTextColumn Header="Group"       Binding="{Binding Group}"    Width="100"/>
-              <DataGridTextColumn Header="Item"        Binding="{Binding Item}"     Width="*"/>
-              <DataGridTextColumn Header="Current"     Binding="{Binding Current}"  Width="130"/>
-              <DataGridTextColumn Header="Recommended" Binding="{Binding Recommended}" Width="120"/>
-              <DataGridTemplateColumn Header="Status"  Width="85">
+              <DataGridTextColumn Header="Category"    Binding="{Binding Category}" Width="90"  SortDirection="{x:Null}"/>
+              <DataGridTextColumn Header="Group"       Binding="{Binding Group}"    Width="100" SortDirection="{x:Null}"/>
+              <DataGridTextColumn Header="Item"        Binding="{Binding Item}"     Width="170" SortDirection="{x:Null}"/>
+              <DataGridTextColumn Header="Current"     Binding="{Binding Current}"  Width="130" SortDirection="{x:Null}"/>
+              <DataGridTextColumn Header="Recommended" Binding="{Binding Recommended}" Width="120" SortDirection="{x:Null}"/>
+              <DataGridTemplateColumn Header="Status"  Width="85" SortMemberPath="Status" SortDirection="{x:Null}">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding StatusLabel}" Foreground="{Binding StatusColor}"
@@ -566,8 +704,8 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Step"   Binding="{Binding StepRef}" Width="65"/>
-              <DataGridTextColumn Header="Impact" Binding="{Binding Impact}"  Width="200"/>
+              <DataGridTextColumn Header="Step"   Binding="{Binding StepRef}" Width="65"  SortDirection="{x:Null}"/>
+              <DataGridTextColumn Header="Impact" Binding="{Binding Impact}"  Width="*"   SortDirection="{x:Null}"/>
             </DataGrid.Columns>
           </DataGrid>
           <Border Grid.Row="2" Background="#0d0d0d" BorderBrush="#1e1e1e" BorderThickness="0,1,0,0" Padding="28,12">
@@ -596,17 +734,24 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                 <ComboBox x:Name="OptFilterCat"    Width="120" Margin="0,0,8,0"/>
                 <ComboBox x:Name="OptFilterStatus" Width="120" Margin="0,0,12,0"/>
                 <Button x:Name="BtnOptPhase1" Content="▶  Phase 1" Style="{StaticResource AccBtn}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnBootSafeMode" Content="Boot to Safe Mode"
+                        ToolTip="Reboot into Safe Mode for GPU driver clean removal"
+                        Style="{StaticResource SecBtn}" Margin="0,0,8,0"/>
+                <Button x:Name="BtnOptPhase2" Content="Phase 2 (Safe Mode)"
+                        ToolTip="Phase 2 runs automatically in Safe Mode after Phase 1 completes"
+                        Style="{StaticResource SecBtn}" Margin="0,0,8,0"/>
                 <Button x:Name="BtnOptPhase3" Content="▶  Phase 3" Style="{StaticResource SecBtn}"/>
               </StackPanel>
             </Grid>
           </Border>
-          <DataGrid Grid.Row="1" x:Name="OptimizeGrid" SelectionUnit="FullRow">
+          <DataGrid Grid.Row="1" x:Name="OptimizeGrid" SelectionUnit="FullRow"
+                    CanUserSortColumns="True">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Ph"    Binding="{Binding PhLabel}"    Width="30"/>
               <DataGridTextColumn Header="Step"  Binding="{Binding StepLabel}"  Width="40"/>
               <DataGridTextColumn Header="Cat."  Binding="{Binding Category}"   Width="80"/>
               <DataGridTextColumn Header="Title" Binding="{Binding Title}"      Width="*"/>
-              <DataGridTemplateColumn Header="Tier" Width="38">
+              <DataGridTemplateColumn Header="Tier" Width="38" SortMemberPath="TierLabel">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding TierLabel}" Foreground="{Binding TierColor}"
@@ -614,7 +759,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Risk" Width="80">
+              <DataGridTemplateColumn Header="Risk" Width="80" SortMemberPath="Risk">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding Risk}" Foreground="{Binding RiskColor}"
@@ -622,7 +767,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="90">
+              <DataGridTemplateColumn Header="Status" Width="90" SortMemberPath="StatusLabel">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding StatusLabel}" Foreground="{Binding StatusColor}"
@@ -663,7 +808,8 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
               </StackPanel>
             </Grid>
           </Border>
-          <DataGrid Grid.Row="1" x:Name="BackupGrid" SelectionUnit="FullRow">
+          <DataGrid Grid.Row="1" x:Name="BackupGrid" SelectionUnit="FullRow"
+                    CanUserSortColumns="True">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Step"     Binding="{Binding Step}"      Width="160"/>
               <DataGridTextColumn Header="Type"     Binding="{Binding Type}"      Width="80"/>
@@ -698,24 +844,25 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
           <Border Grid.Row="1" Background="#141414" BorderBrush="#1e1e1e" BorderThickness="0,0,0,1">
             <Canvas x:Name="BenchChart" Margin="50,16,20,28"/>
           </Border>
-          <DataGrid Grid.Row="2" x:Name="BenchGrid" SelectionUnit="FullRow">
+          <DataGrid Grid.Row="2" x:Name="BenchGrid" SelectionUnit="FullRow"
+                    CanUserSortColumns="True">
             <DataGrid.Columns>
               <DataGridTextColumn Header="#"       Binding="{Binding Index}"    Width="35"/>
               <DataGridTextColumn Header="Date"    Binding="{Binding Date}"     Width="90"/>
               <DataGridTextColumn Header="Label"   Binding="{Binding Label}"    Width="*"/>
               <DataGridTextColumn Header="Avg FPS" Binding="{Binding AvgFps}"   Width="70"/>
               <DataGridTextColumn Header="1% Low"  Binding="{Binding P1Fps}"    Width="65"/>
-              <DataGridTemplateColumn Header="Δ Avg" Width="65">
+              <DataGridTemplateColumn Header="Δ Avg" Width="65" SortMemberPath="DeltaAvg">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding DeltaAvg}" Foreground="{Binding DeltaColor}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0"/>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Δ 1%" Width="65">
+              <DataGridTemplateColumn Header="Δ 1%" Width="65" SortMemberPath="DeltaP1">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <TextBlock Text="{Binding DeltaP1}" Foreground="{Binding DeltaColor}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0"/>
+                    <TextBlock Text="{Binding DeltaP1}" Foreground="{Binding DeltaP1Color}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0"/>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -764,12 +911,13 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
               </StackPanel>
             </Grid>
           </Border>
-          <DataGrid Grid.Row="1" x:Name="VideoGrid" SelectionUnit="FullRow">
+          <DataGrid Grid.Row="1" x:Name="VideoGrid" SelectionUnit="FullRow"
+                    CanUserSortColumns="True">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Setting"     Binding="{Binding Setting}"     Width="*"/>
               <DataGridTextColumn Header="Your Value"  Binding="{Binding YourValue}"   Width="120"/>
               <DataGridTextColumn Header="Recommended" Binding="{Binding Recommended}" Width="120"/>
-              <DataGridTemplateColumn Header="Status"  Width="80">
+              <DataGridTemplateColumn Header="Status"  Width="80" SortMemberPath="StatusLabel">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding StatusLabel}" Foreground="{Binding StatusColor}"
@@ -802,7 +950,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                     <TextBlock Text="Proven T1 tweaks only. Auto-applied. No risk." FontSize="11" Foreground="#6b7280" Margin="0,2,0,0"/>
                   </StackPanel>
                 </RadioButton>
-                <RadioButton x:Name="RadioRecommended" GroupName="Profile" Margin="0,0,0,12">
+                <RadioButton x:Name="RadioRecommended" GroupName="Profile" Margin="0,0,0,12" IsChecked="True">
                   <StackPanel>
                     <TextBlock Text="Recommended" FontWeight="SemiBold" FontSize="13" Foreground="#e8520a"/>
                     <TextBlock Text="T1 + T2 moderate tweaks with confirmation prompts." FontSize="11" Foreground="#6b7280" Margin="0,2,0,0"/>
@@ -814,10 +962,16 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                     <TextBlock Text="All tiers. Everything the suite offers." FontSize="11" Foreground="#6b7280" Margin="0,2,0,0"/>
                   </StackPanel>
                 </RadioButton>
-                <RadioButton x:Name="RadioCustom" GroupName="Profile">
+                <RadioButton x:Name="RadioCustom" GroupName="Profile" Margin="0,0,0,12">
                   <StackPanel>
                     <TextBlock Text="Custom" FontWeight="SemiBold" FontSize="13" Foreground="#9ca3af"/>
                     <TextBlock Text="Full detail card for every step. Manual approval." FontSize="11" Foreground="#6b7280" Margin="0,2,0,0"/>
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="RadioYolo" GroupName="Profile">
+                  <StackPanel>
+                    <TextBlock Text="YOLO" FontWeight="SemiBold" FontSize="13" Foreground="#ef4444"/>
+                    <TextBlock Text="Everything auto-executes. Zero prompts. GPU auto-detected." FontSize="11" Foreground="#6b7280" Margin="0,2,0,0"/>
                   </StackPanel>
                 </RadioButton>
               </StackPanel>
@@ -830,21 +984,6 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                   <TextBlock Text="Preview all changes without applying anything" FontSize="11" Foreground="#9ca3af" Margin="0,2,0,0"/>
                 </StackPanel>
               </CheckBox>
-            </Border>
-
-            <TextBlock Text="REGION" Style="{StaticResource SectionHeader}"/>
-            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,22">
-              <StackPanel>
-                <TextBlock Text="Affects mm_dedicated_search_maxping in optimization.cfg" FontSize="11" Foreground="#6b7280" Margin="0,0,0,12"/>
-                <RadioButton x:Name="RegEU"     GroupName="Region" Content="Europe (40 ms)"        Margin="0,0,0,8"/>
-                <RadioButton x:Name="RegNA"     GroupName="Region" Content="North America (80 ms)" Margin="0,0,0,8"/>
-                <RadioButton x:Name="RegAsia"   GroupName="Region" Content="Asia-Pacific (150 ms)" Margin="0,0,0,8"/>
-                <StackPanel Orientation="Horizontal">
-                  <RadioButton x:Name="RegCustom" GroupName="Region" Content="Custom:" VerticalAlignment="Center"/>
-                  <TextBox x:Name="RegCustomVal" Width="60" Margin="8,0,4,0" Text="80"/>
-                  <TextBlock Text=" ms" Foreground="#6b7280" VerticalAlignment="Center"/>
-                </StackPanel>
-              </StackPanel>
             </Border>
 
             <TextBlock Text="FIRST-TIME SETUP" Style="{StaticResource SectionHeader}"/>
@@ -928,7 +1067,7 @@ function Switch-Panel {
 # ── Sidebar status helpers ────────────────────────────────────────────────────
 function Update-SidebarStatus {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch {}
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch {}
     $prof = if ($state) { $state.profile } else { "—" }
     $isDry = ($state -and $state.mode -eq "DRY-RUN")
     $phaseText = "—"

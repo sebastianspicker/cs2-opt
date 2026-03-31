@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/debloat.Tests.ps1  --  Bloatware removal & telemetry disable
 # ==============================================================================
 
@@ -6,7 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 
     # Stub Windows-only cmdlets before loading the module
-    if (-not $IsWindows) {
+    if ($IsWindows -eq $false) {
         if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
             function global:Get-AppxPackage { param($Name, [switch]$AllUsers, $ErrorAction) $null }
         }
@@ -65,6 +65,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Get-ScheduledTask { $null }
             Mock Write-Step {}
             Mock Write-OK {}
+            Mock Write-Info {}
             Mock Write-Debug {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
@@ -172,6 +173,9 @@ Describe "Invoke-GamingDebloat" {
             Mock Get-AppxPackage { $null }
             Mock Get-AppxProvisionedPackage { $null }
             Mock Get-ScheduledTask { $null }
+            Mock Get-Service {
+                [PSCustomObject]@{ Name = $Name; StartType = "Automatic"; Status = "Running" }
+            }
             Mock Backup-ServiceState { throw "Service not found" }
             Mock Stop-Service {}
             Mock Set-Service {}
@@ -179,6 +183,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-OK {}
             Mock Write-Info {}
             Mock Write-Debug {}
+            Mock Write-Warn {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
 
@@ -193,10 +198,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Get-AppxPackage { $null }
             Mock Get-AppxProvisionedPackage { $null }
             Mock Get-ScheduledTask {
-                @(
-                    [PSCustomObject]@{ TaskName = "ProgramDataUpdater"; TaskPath = "\Microsoft\Windows\Application Experience\" },
-                    [PSCustomObject]@{ TaskName = "Consolidator"; TaskPath = "\Microsoft\Windows\Customer Experience Improvement Program\" }
-                )
+                @([PSCustomObject]@{ TaskName = "TestTask"; TaskPath = "\Microsoft\Windows\Test\"; State = "Ready" })
             }
             Mock Backup-ScheduledTask {}
             Mock Disable-ScheduledTask { $null }
@@ -212,6 +214,7 @@ Describe "Invoke-GamingDebloat" {
 
             Invoke-GamingDebloat
 
+            # 2 task paths × 1 task each = 2 disables
             Should -Invoke Disable-ScheduledTask -Times 2
         }
 
@@ -268,6 +271,8 @@ Describe "Invoke-GamingDebloat" {
     }
 
     Context "AppX cmdlets unavailable (Server Core / LTSC)" {
+
+        BeforeEach { Reset-TestState }
 
         It "skips AppX removal when cmdlets not available" {
             Mock Get-Command { $null } -ParameterFilter { $Name -eq "Get-AppxPackage" }

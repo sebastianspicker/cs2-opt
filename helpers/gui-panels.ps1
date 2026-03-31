@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/gui-panels.ps1  —  GUI Panel Functions & Event Handlers
 # ==============================================================================
 #
@@ -26,12 +26,15 @@ function Load-Dashboard {
             $p1Done = if ($prog.phase -ge 1) {
                 @($allDone | Where-Object { $_ -match "^P1:" }).Count
             } else { 0 }
+            $p2Done = @($allDone | Where-Object { $_ -match "^P2:" }).Count
             $p3Done = if ($prog.phase -ge 3) {
                 @($allDone | Where-Object { $_ -match "^P3:" }).Count
             } else { 0 }
             $Window.Dispatcher.Invoke({
                 (El "ProgressP1").Value   = $p1Done
                 (El "ProgressP1Txt").Text = "$p1Done / 38"
+                (El "ProgressP2").Value   = $p2Done
+                (El "ProgressP2Txt").Text = "$p2Done / 3"
                 (El "ProgressP3").Value   = $p3Done
                 (El "ProgressP3Txt").Text = "$p3Done / 13"
             })
@@ -40,7 +43,7 @@ function Load-Dashboard {
 
     # Benchmark history
     try {
-        $hist = Get-BenchmarkHistory
+        $hist = @(Get-BenchmarkHistory)
         if ($hist -and $hist.Count -ge 2) {
             $first = $hist[0]; $last = $hist[-1]
             $dAvg  = if ($first.avgFps -gt 0) { [math]::Round(($last.avgFps - $first.avgFps) / $first.avgFps * 100, 1) } else { 0 }
@@ -84,11 +87,11 @@ function Load-Dashboard {
             $optExists = if ($cs2) { Test-Path "$cs2\game\csgo\cfg\optimization.cfg" } else { $false }
             $UISync.Hw = @{
                 CpuName  = $cpu
-                GpuName  = $gpuN; GpuDriver = $gpuD
+                GpuName  = $gpuN; GpuDriver = $gpuD; GpuVendor = (Get-ChipsetVendor)
                 RamGb    = if ($ram) { "$($ram.TotalGB) GB" } else { "?" }
-                RamSpeed = if ($ram) { "$($ram.ActiveMhz) MHz$(if ($ram.XmpActive) {' XMP'} else {' (JEDEC)'})" } else { "" }
-                RamXmp   = if ($ram) { if ($ram.XmpActive) { "✓ XMP active" } else { "⚠ XMP not active" } } else { "" }
-                RamXmpOk = if ($ram) { $ram.XmpActive } else { $false }
+                RamSpeed = if ($ram) { "$($ram.ActiveMhz) MT/s$(if (-not $ram.AtRatedSpeed) {' (below rated)'})" } else { "" }
+                RamXmp   = if ($ram) { if ($ram.AtRatedSpeed) { "✓ Running at rated speed" } else { "⚠ Below rated speed — enable XMP/EXPO" } } else { "" }
+                RamXmpOk = if ($ram) { $ram.AtRatedSpeed } else { $false }
                 DualCh   = if ($dc) { $dc.Reason } else { "" }
                 DualChOk = if ($dc) { $dc.DualChannel } else { $false }
                 NicName  = if ($nic) { $nic.Name } else { "Not found" }
@@ -116,6 +119,7 @@ function Load-Dashboard {
         }
         (El "CardCpuName" ).Text = if ($hw.CpuName) { $hw.CpuName } else { "Unknown CPU" }
         (El "CardGpuName"  ).Text = if ($hw.GpuName) { $hw.GpuName } else { "Unknown GPU" }
+        (El "CardGpuVendor").Text = if ($hw.GpuVendor) { $hw.GpuVendor } else { "" }
         (El "CardGpuDriver").Text = $hw.GpuDriver
         (El "CardRamSize" ).Text = $hw.RamGb
         (El "CardRamSpeed").Text = $hw.RamSpeed
@@ -134,12 +138,12 @@ function Load-Dashboard {
         (El "CardCs2Cfg"  ).Foreground = if ($hw.OptOk)  { New-Brush "#22c55e" } else { New-Brush "#fbbf24" }
         (El "CardCs2Video").Text = $hw.VideoTxt
         (El "CardCs2Video").Foreground = if ($hw.VtxtOk) { New-Brush "#22c55e" } else { New-Brush "#fbbf24" }
-    }.GetNewClosure()
+    }
 }
 
 # Quick action buttons
 (El "BtnDashAnalyze"  ).Add_Click({ Switch-Panel "PanelAnalyze"; Start-Analysis })
-(El "BtnDashVerify"   ).Add_Click({ Launch-Terminal "Verify-Settings.ps1" })
+(El "BtnDashVerify"   ).Add_Click({ Switch-Panel "PanelOptimize"; Load-Optimize; Start-InlineVerify })
 (El "BtnDashBackup"   ).Add_Click({ Switch-Panel "PanelBackup"; Load-Backup })
 (El "BtnDashPhase1"   ).Add_Click({ Launch-Terminal "Run-Optimize.ps1" })
 (El "BtnDashLaunchCs2").Add_Click({ Start-Process "steam://rungameid/730" })
@@ -182,7 +186,7 @@ function Start-Analysis {
         # Clear for next run
         $Script:UISync.AnalysisError   = $null
         $Script:UISync.AnalysisResults = $null
-    }.GetNewClosure()
+    }
 }
 
 (El "BtnRunAnalysis"   ).Add_Click({ Start-Analysis })
@@ -193,7 +197,7 @@ function Start-Analysis {
     $dlg = [Microsoft.Win32.SaveFileDialog]::new()
     $dlg.Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*"
     $dlg.FileName = "cs2-analyze-$(Get-Date -Format 'yyyyMMdd-HHmm').csv"
-    if ($dlg.ShowDialog()) {
+    if ($dlg.ShowDialog() -eq $true) {
         try {
             $res | Export-Csv -Path $dlg.FileName -NoTypeInformation -Encoding UTF8
             [System.Windows.MessageBox]::Show("Exported to:`n$($dlg.FileName)", "Export Complete")
@@ -285,10 +289,174 @@ function Filter-OptimizeGrid {
     (El "OptimizeGrid").ItemsSource = @($filtered)
 }
 
+# ── Inline Verification ──────────────────────────────────────────────────────
+# Checks actual system state (registry/services) and updates progress.json
+# so the Optimize grid reflects which optimizations are actually applied,
+# even if progress.json was lost or corrupted.
+function Start-InlineVerify {
+    (El "BtnOptVerify").IsEnabled = $false
+    (El "BtnOptVerify").Content   = "Verifying…"
+
+    Invoke-Async -Work {
+        param($ScriptRoot, $UISync)
+        . "$ScriptRoot\config.env.ps1"
+        . "$ScriptRoot\helpers.ps1"
+
+        $verified = [System.Collections.Generic.List[string]]::new()
+
+        # ── Registry checks mapped to optimization steps ───────────────
+        # Each entry: stepKey -> array of @{P=Path; N=Name; E=Expected}
+        # Step is "verified" only if ALL checks pass.
+        $checks = [ordered]@{
+            # Phase 1
+            "P1:4"  = @( @{P="HKCU:\System\GameConfigStore"; N="GameDVR_DXGIHonorFSEWindowsCompatible"; E=1} )
+            "P1:11" = @( @{P="HKLM:\SOFTWARE\Microsoft\Windows\Dwm"; N="OverlayTestMode"; E=5} )
+            "P1:12" = @( @{P="HKCU:\SOFTWARE\Microsoft\GameBar"; N="AllowAutoGameMode"; E=1},
+                         @{P="HKCU:\SOFTWARE\Microsoft\GameBar"; N="AutoGameModeEnabled"; E=1} )
+            "P1:23" = @( @{P="HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"; N="HiberbootEnabled"; E=0} )
+            "P1:26" = @( @{P="HKCU:\System\GameConfigStore"; N="GameDVR_FSEBehavior"; E=2},
+                         @{P="HKCU:\System\GameConfigStore"; N="GameDVR_FSEBehaviorMode"; E=2},
+                         @{P="HKCU:\System\GameConfigStore"; N="GameDVR_HonorUserFSEBehaviorMode"; E=1} )
+            "P1:27" = @( @{P="HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"; N="SystemResponsiveness"; E=10},
+                         @{P="HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl"; N="Win32PrioritySeparation"; E=0x2A} )
+            "P1:28" = @( @{P="HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel"; N="GlobalTimerResolutionRequests"; E=1} )
+            "P1:29" = @( @{P="HKCU:\Control Panel\Mouse"; N="MouseSpeed"; E="0"},
+                         @{P="HKCU:\Control Panel\Mouse"; N="MouseThreshold1"; E="0"},
+                         @{P="HKCU:\Control Panel\Mouse"; N="MouseThreshold2"; E="0"} )
+            "P1:31" = @( @{P="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR"; N="AppCaptureEnabled"; E=0},
+                         @{P="HKCU:\SOFTWARE\Microsoft\GameBar"; N="UseNexusForGameBarEnabled"; E=0},
+                         @{P="HKCU:\System\GameConfigStore"; N="GameDVR_Enabled"; E=0} )
+            "P1:32" = @( @{P="HKCU:\Software\Valve\Steam"; N="GameOverlayDisabled"; E=1} )
+            "P1:33" = @( @{P="HKCU:\Software\Microsoft\Multimedia\Audio"; N="UserDuckingPreference"; E=3} )
+            "P1:36" = @( @{P="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"; N="VisualFXSetting"; E=2} )
+            # Phase 3
+            "P3:7"  = @( @{P="HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"; N="Enabled"; E=0} )
+            "P3:10" = @( @{P="HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\cs2.exe\PerfOptions"; N="CpuPriorityClass"; E=3} )
+        }
+
+        foreach ($stepKey in $checks.Keys) {
+            $allOk = $true
+            foreach ($c in $checks[$stepKey]) {
+                $r = Test-RegistryCheck $c.P $c.N $c.E "" -Quiet
+                if ($r.Status -ne "OK") { $allOk = $false; break }
+            }
+            if ($allOk) { $verified.Add($stepKey) }
+        }
+
+        # ── Service checks ─────────────────────────────────────────────
+        # P1:37 - Disable Bloat Services (SysMain + WSearch)
+        try {
+            $sm = Get-Service -Name "SysMain" -ErrorAction Stop
+            $ws = Get-Service -Name "WSearch" -ErrorAction Stop
+            if ($sm.StartType -eq 'Disabled' -and $ws.StartType -eq 'Disabled') { $verified.Add("P1:37") }
+        } catch {}
+
+        # ── NIC check (P1:25 - Disable Nagle) ─────────────────────────
+        try {
+            $nicGuid = Get-ActiveNicGuid
+            if ($nicGuid) {
+                $tcpBase = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$nicGuid"
+                $r = Test-RegistryCheck $tcpBase "TcpNoDelay" 1 "" -Quiet
+                if ($r.Status -eq "OK") { $verified.Add("P1:25") }
+            }
+        } catch {}
+
+        # ── NVIDIA GPU check (P3:4 - DRS Profile / PerfLevelSrc) ──────
+        try {
+            $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$CFG_GUID_Display"
+            if (Test-Path $classPath) {
+                $subkeys = Get-ChildItem $classPath -ErrorAction SilentlyContinue |
+                    Where-Object { $_.PSChildName -match "^\d{4}$" }
+                foreach ($key in $subkeys) {
+                    $props = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
+                    if ($props.ProviderName -match "NVIDIA" -or $props.DriverDesc -match "NVIDIA") {
+                        $r = Test-RegistryCheck $key.PSPath "PerfLevelSrc" 0x2222 "" -Quiet
+                        if ($r.Status -eq "OK") { $verified.Add("P3:4") }
+                        break
+                    }
+                }
+            }
+        } catch {}
+
+        $UISync.VerifyResults = @($verified)
+    } -WorkArgs @($Script:Root, $Script:UISync) -OnDone {
+        $verified = $Script:UISync.VerifyResults
+        if (-not $verified) { $verified = @() }
+
+        # Update progress.json with verified steps
+        $prog = Load-Progress
+        if (-not $prog) {
+            $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
+        }
+
+        $added = 0
+        foreach ($stepKey in $verified) {
+            if ($stepKey -notin @($prog.completedSteps)) {
+                $prog.completedSteps = @($prog.completedSteps) + $stepKey
+                $added++
+            }
+        }
+        if ($added -gt 0) {
+            $maxPhase = ($verified | ForEach-Object {
+                if ($_ -match "^P(\d+):") { [int]$Matches[1] } else { 0 }
+            } | Measure-Object -Maximum).Maximum
+            if ($maxPhase -gt $prog.phase) { $prog.phase = $maxPhase }
+            Save-Progress $prog
+        }
+
+        # Reload grid with updated progress
+        Load-Optimize
+
+        (El "BtnOptVerify").IsEnabled = $true
+        (El "BtnOptVerify").Content   = "✓  Verify All"
+
+        $total = @($verified).Count
+        $msg = if ($added -gt 0) {
+            "Verified: $total steps applied.`n$added step(s) recovered to progress."
+        } else {
+            "Verified: $total steps applied.`nProgress already up to date."
+        }
+        [System.Windows.MessageBox]::Show($msg, "Verification Complete")
+        $Script:UISync.VerifyResults = $null
+    }
+}
+
 (El "BtnOptPhase1"   ).Add_Click({ Launch-Terminal "Run-Optimize.ps1" })
+(El "BtnOptPhase2"   ).Add_Click({ Launch-Terminal "SafeMode-DriverClean.ps1" })
 (El "BtnOptPhase3"   ).Add_Click({ Launch-Terminal "PostReboot-Setup.ps1" })
 (El "BtnOptFullSetup").Add_Click({ Launch-Terminal "Run-Optimize.ps1" })
-(El "BtnOptVerify"   ).Add_Click({ Launch-Terminal "Verify-Settings.ps1" })
+(El "BtnOptVerify"   ).Add_Click({ Start-InlineVerify })
+
+# Phase 2 button: only enabled in Safe Mode (driver files are locked in Normal Mode)
+if (-not $env:SAFEBOOT_OPTION) {
+    (El "BtnOptPhase2").IsEnabled = $false
+    (El "BtnOptPhase2").ToolTip   = "Phase 2 requires Safe Mode (use 'Boot to Safe Mode' first)"
+}
+
+# Boot to Safe Mode / Normal Mode button — context-aware failsafe
+if ($env:SAFEBOOT_OPTION) {
+    # In Safe Mode: offer to exit back to Normal Mode
+    (El "BtnBootSafeMode").Content = "Boot to Normal Mode"
+    (El "BtnBootSafeMode").ToolTip = "Remove Safe Mode boot flag and restart into Normal Mode"
+    (El "BtnBootSafeMode").Add_Click({
+        $confirm = [System.Windows.MessageBox]::Show(
+            "This will remove the Safe Mode boot flag and restart into Normal Mode.`n`nRestart now?",
+            "Boot to Normal Mode", "YesNo", "Question")
+        if ($confirm -eq "Yes") {
+            Start-Process bcdedit -ArgumentList "/deletevalue safeboot" -Wait -NoNewWindow
+            shutdown /r /t 5 /f
+        }
+    })
+} else {
+    # In Normal Mode: offer to boot into Safe Mode
+    (El "BtnBootSafeMode").Add_Click({
+        try {
+            Launch-Terminal "Boot-SafeMode.ps1"
+        } catch {
+            [System.Windows.MessageBox]::Show("Boot-SafeMode failed: $_", "Error", "OK", "Error")
+        }
+    })
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # BACKUP
@@ -346,7 +514,7 @@ function Load-Backup {
     $dlg = [Microsoft.Win32.SaveFileDialog]::new()
     $dlg.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
     $dlg.FileName = "cs2-backup-$(Get-Date -Format 'yyyyMMdd-HHmm').json"
-    if ($dlg.ShowDialog()) { Copy-Item $src $dlg.FileName -Force; [System.Windows.MessageBox]::Show("Exported to:`n$($dlg.FileName)","Export Complete") }
+    if ($dlg.ShowDialog() -eq $true) { Copy-Item $src $dlg.FileName -Force; [System.Windows.MessageBox]::Show("Exported to:`n$($dlg.FileName)","Export Complete") }
 })
 
 (El "BtnRestoreAll").Add_Click({
@@ -412,7 +580,7 @@ function Load-Backup {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Benchmark {
     try {
-        $hist = Get-BenchmarkHistory
+        $hist = @(Get-BenchmarkHistory)
         if (-not $hist -or $hist.Count -eq 0) {
             (El "BenchGrid").ItemsSource = $null
             return
@@ -431,16 +599,18 @@ function Load-Benchmark {
                 if ($d -gt 0) { "+$d%" } else { "$d%" }
             }
             $dc = if ($i -eq 0 -or $dAvg -eq "—") { "#6b7280" } elseif ($dAvg.StartsWith("+")) { "#22c55e" } elseif ($dAvg -eq "0%" -or $dAvg -eq "0.0%") { "#6b7280" } else { "#ef4444" }
+            $dp1c = if ($i -eq 0 -or $dP1 -eq "—") { "#6b7280" } elseif ($dP1.StartsWith("+")) { "#22c55e" } elseif ($dP1 -eq "0%" -or $dP1 -eq "0.0%") { "#6b7280" } else { "#ef4444" }
             $dateStr = try { [datetime]::ParseExact($h.timestamp,"yyyy-MM-dd HH:mm:ss",$null).ToString("dd-MMM HH:mm") } catch { $h.timestamp }
             [PSCustomObject]@{
-                Index      = $h.index
-                Date       = $dateStr
-                Label      = $h.label
-                AvgFps     = [math]::Round($h.avgFps, 0)
-                P1Fps      = [math]::Round($h.p1Fps,  0)
-                DeltaAvg   = $dAvg
-                DeltaP1    = $dP1
-                DeltaColor = $dc
+                Index        = $i + 1
+                Date         = $dateStr
+                Label        = $h.label
+                AvgFps       = [math]::Round($h.avgFps, 0)
+                P1Fps        = [math]::Round($h.p1Fps,  0)
+                DeltaAvg     = $dAvg
+                DeltaP1      = $dP1
+                DeltaColor   = $dc
+                DeltaP1Color = $dp1c
             }
         }
         (El "BenchGrid").ItemsSource = $rows
@@ -538,7 +708,7 @@ function Draw-BenchChart {
     $raw = (El "BenchVprof").Text.Trim()
     if ($raw -match "Avg\s*=\s*([\d.]+)") {
         $avg = [double]$Matches[1]
-        $cap = [math]::Max($CFG_FpsCap_Min, [math]::Floor($avg - [math]::Round($avg * $CFG_FpsCap_Percent)))
+        $cap = [math]::Max($CFG_FpsCap_Min, [math]::Floor($avg - [math]::Floor($avg * $CFG_FpsCap_Percent)))
         (El "BenchCapLabel").Text = "→  Cap:"
         (El "BenchCapValue").Text = "$cap"
         $Script:UISync.LastCap = $cap
@@ -550,7 +720,10 @@ function Draw-BenchChart {
 
 (El "BtnBenchCopy").Add_Click({
     $cap = $Script:UISync.LastCap
-    if ($cap) { [System.Windows.Clipboard]::SetText("$cap") }
+    if ($cap) {
+        try { [System.Windows.Clipboard]::SetText("$cap") }
+        catch { Write-Debug "Clipboard copy failed: $_" }
+    }
 })
 
 (El "BtnBenchAdd").Add_Click({
@@ -718,7 +891,12 @@ $writeVideo = {
 
     try {
         $bakPath = "$Script:VideoTxtPath.bak"
-        if (Test-Path $Script:VideoTxtPath) { Copy-Item $Script:VideoTxtPath $bakPath -Force }
+        # Only create backup if one doesn't already exist — preserve the original
+        $bakMade = $false
+        if ((Test-Path $Script:VideoTxtPath) -and -not (Test-Path $bakPath)) {
+            Copy-Item $Script:VideoTxtPath $bakPath -Force
+            $bakMade = $true
+        }
 
         $dir = Split-Path $Script:VideoTxtPath
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force -ErrorAction SilentlyContinue | Out-Null }
@@ -736,7 +914,8 @@ $writeVideo = {
         $lines += "}"
         [System.IO.File]::WriteAllLines($Script:VideoTxtPath, [string[]]$lines, [System.Text.UTF8Encoding]::new($false))
 
-        [System.Windows.MessageBox]::Show("video.txt written ($tier tier).`nOriginal saved as video.txt.bak`n`n$Script:VideoTxtPath","Done")
+        $backupMsg = if ($bakMade) { "Original saved as video.txt.bak" } else { "Backup preserved as video.txt.bak (from first run)" }
+        [System.Windows.MessageBox]::Show("video.txt written ($tier tier).`n$backupMsg`n`n$Script:VideoTxtPath","Done")
         Load-Video
     } catch { [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)","Write Failed") }
 }
@@ -748,35 +927,36 @@ $writeVideo = {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Settings {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
 
     $prof = if ($state) { $state.profile } else { "RECOMMENDED" }
     switch ($prof) {
         "SAFE"        { (El "RadioSafe"       ).IsChecked = $true }
         "COMPETITIVE" { (El "RadioCompetitive").IsChecked = $true }
         "CUSTOM"      { (El "RadioCustom"     ).IsChecked = $true }
+        "YOLO"        { (El "RadioYolo"       ).IsChecked = $true }
         default       { (El "RadioRecommended").IsChecked = $true }
     }
 
     $dry = if ($state) { $state.mode -eq "DRY-RUN" } else { $false }
     (El "ChkDryRun").IsChecked = $dry
-    (El "RegNA").IsChecked = $true
 }
 
 function Save-SettingsToState {
     $prof = if ((El "RadioSafe").IsChecked)        { "SAFE"
+            } elseif ((El "RadioYolo").IsChecked)        { "YOLO"
             } elseif ((El "RadioCompetitive").IsChecked) { "COMPETITIVE"
             } elseif ((El "RadioCustom").IsChecked)      { "CUSTOM"
             } else                                        { "RECOMMENDED" }
     $dry  = (El "ChkDryRun").IsChecked -eq $true
     $mode = if ($dry) { "DRY-RUN" } else {
-        switch ($prof) { "SAFE" {"AUTO"} "RECOMMENDED" {"AUTO"} "COMPETITIVE" {"CONTROL"} "CUSTOM" {"INFORMED"} }
+        switch ($prof) { "SAFE" {"AUTO"} "RECOMMENDED" {"AUTO"} "COMPETITIVE" {"CONTROL"} "CUSTOM" {"INFORMED"} "YOLO" {"YOLO"} }
     }
     try {
         $state = $null
-        if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop }
+        if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop }
         # Skip write if nothing changed
-        if ($state -and $state.profile -eq $prof -and $state.mode -eq $mode) { return }
+        if ($state -and $state.PSObject.Properties['profile'] -and $state.PSObject.Properties['mode'] -and $state.profile -eq $prof -and $state.mode -eq $mode) { return }
         if (-not $state) { $state = [PSCustomObject]@{ mode = $mode; profile = $prof } }
         $state | Add-Member -NotePropertyName "profile" -NotePropertyValue $prof -Force
         $state | Add-Member -NotePropertyName "mode"    -NotePropertyValue $mode -Force
@@ -789,15 +969,16 @@ function Save-SettingsToState {
     }
 }
 
-foreach ($rb in @("RadioSafe","RadioRecommended","RadioCompetitive","RadioCustom")) {
+foreach ($rb in @("RadioSafe","RadioRecommended","RadioCompetitive","RadioCustom","RadioYolo")) {
     (El $rb).Add_Checked({
         $prof = if ((El "RadioSafe").IsChecked)        { "SAFE"
+                } elseif ((El "RadioYolo").IsChecked)        { "YOLO"
                 } elseif ((El "RadioCompetitive").IsChecked) { "COMPETITIVE"
                 } elseif ((El "RadioCustom").IsChecked)      { "CUSTOM"
                 } else                                        { "RECOMMENDED" }
         (El "SbProfile").Text = "Profile: $prof"
         Save-SettingsToState
-    }.GetNewClosure())
+    })
 }
 
 (El "ChkDryRun").Add_Checked({   (El "SbDryRun").Text = "DRY-RUN"; (El "SbDryRunBadge").Visibility = "Visible"; Save-SettingsToState })
@@ -810,5 +991,8 @@ foreach ($rb in @("RadioSafe","RadioRecommended","RadioCompetitive","RadioCustom
 # ══════════════════════════════════════════════════════════════════════════════
 function Launch-Terminal {
     param([string]$Script, [string]$ScriptArgs = "")
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$Script:Root\$Script`" $ScriptArgs" -Verb RunAs
+    $fileArg = "`"$Script:Root\$Script`""
+    $allArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File $fileArg"
+    if ($ScriptArgs) { $allArgs += " `"$ScriptArgs`"" }
+    Start-Process powershell -ArgumentList $allArgs
 }

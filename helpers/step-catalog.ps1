@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/step-catalog.ps1  —  Step metadata table for GUI display
 #  Each entry mirrors the Invoke-TieredStep call in the phase scripts.
 #  Does NOT contain executable logic — pure data for the Optimize panel.

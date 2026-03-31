@@ -1,9 +1,9 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/benchmark-history.ps1  —  Iterative Benchmark Tracking
 # ==============================================================================
 
 $CFG_BenchmarkFile    = "$CFG_WorkDir\benchmark_history.json"
-$CFG_BenchmarkMaxEntries = 200   # Cap history size — prevents unbounded JSON growth
+$script:CFG_BenchmarkMaxEntries = 200   # Cap history size — prevents unbounded JSON growth
 
 function Add-BenchmarkResult {
     <#
@@ -23,7 +23,10 @@ function Add-BenchmarkResult {
         [int]$Runs = 1
     )
 
-    $history = Get-BenchmarkHistory
+    # @() wrapper ensures $history is always an array, even when Get-BenchmarkHistory
+    # returns $null (empty/missing file). Without it, $null += $entry yields a bare
+    # Hashtable whose .Count equals its key count, causing the trim logic to misfire.
+    $history = @(Get-BenchmarkHistory)
 
     $entry = @{
         # Local time (timezone not tracked — acceptable for gaming benchmarks)
@@ -37,8 +40,8 @@ function Add-BenchmarkResult {
     $history += $entry
 
     # Trim oldest entries if history exceeds cap
-    if ($history.Count -gt $CFG_BenchmarkMaxEntries) {
-        $history = $history[($history.Count - $CFG_BenchmarkMaxEntries)..($history.Count - 1)]
+    if ($history.Count -gt $script:CFG_BenchmarkMaxEntries) {
+        $history = $history[($history.Count - $script:CFG_BenchmarkMaxEntries)..($history.Count - 1)]
     }
 
     Save-JsonAtomic -Data $history -Path $CFG_BenchmarkFile
@@ -66,7 +69,7 @@ function Show-BenchmarkComparison {
     .SYNOPSIS  Displays a comparison table of all benchmark results,
                showing improvement/degradation between each run.
     #>
-    $history = Get-BenchmarkHistory
+    $history = @(Get-BenchmarkHistory)
 
     if ($history.Count -eq 0) {
         Write-Info "No benchmark results recorded yet."
@@ -83,7 +86,7 @@ function Show-BenchmarkComparison {
     for ($i = 0; $i -lt $history.Count; $i++) {
         $entry = $history[$i]
         $num = ($i + 1).ToString().PadLeft(2)
-        $ts = $entry.timestamp
+        $ts = if ($null -ne $entry.timestamp) { [string]$entry.timestamp } else { "" }
         if ($ts.Length -ge 16) {
             $date = $ts.Substring(0, 10)
             $time = $ts.Substring(11, 5)
@@ -91,8 +94,8 @@ function Show-BenchmarkComparison {
             $date = $ts.PadRight(10)
             $time = "??:??"
         }
-        $avg = if ($entry.avgFps) { $entry.avgFps.ToString("F1", [System.Globalization.CultureInfo]::InvariantCulture).PadLeft(7) } else { "    N/A" }
-        $p1  = if ($entry.p1Fps) { $entry.p1Fps.ToString("F1", [System.Globalization.CultureInfo]::InvariantCulture).PadLeft(7) } else { "    N/A" }
+        $avg = if ($null -ne $entry.avgFps) { $entry.avgFps.ToString("F1", [System.Globalization.CultureInfo]::InvariantCulture).PadLeft(7) } else { "    N/A" }
+        $p1  = if ($null -ne $entry.p1Fps) { $entry.p1Fps.ToString("F1", [System.Globalization.CultureInfo]::InvariantCulture).PadLeft(7) } else { "    N/A" }
 
         $avgDiffStr = "   —  "
         $p1DiffStr  = "   —  "
@@ -100,11 +103,13 @@ function Show-BenchmarkComparison {
 
         if ($i -gt 0) {
             $prev = $history[$i - 1]
-            $avgDiff = [math]::Round($entry.avgFps - $prev.avgFps, 1)
-            $p1Diff  = [math]::Round($entry.p1Fps - $prev.p1Fps, 1)
-            $avgDiffStr = "$(if($avgDiff -ge 0){'+'}else{''})$($avgDiff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))".PadLeft(6)
-            $p1DiffStr  = "$(if($p1Diff -ge 0){'+'}else{''})$($p1Diff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))".PadLeft(6)
-            $color = if ($p1Diff -gt 0) { "Green" } elseif ($p1Diff -lt 0) { "Red" } else { "Yellow" }
+            if ($null -ne $entry.avgFps -and $null -ne $prev.avgFps -and $null -ne $entry.p1Fps -and $null -ne $prev.p1Fps) {
+                $avgDiff = [math]::Round($entry.avgFps - $prev.avgFps, 1)
+                $p1Diff  = [math]::Round($entry.p1Fps - $prev.p1Fps, 1)
+                $avgDiffStr = "$(if($avgDiff -ge 0){'+'}else{''})$($avgDiff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))".PadLeft(6)
+                $p1DiffStr  = "$(if($p1Diff -ge 0){'+'}else{''})$($p1Diff.ToString('F1', [System.Globalization.CultureInfo]::InvariantCulture))".PadLeft(6)
+                $color = if ($p1Diff -gt 0) { "Green" } elseif ($p1Diff -lt 0) { "Red" } else { "Yellow" }
+            }
         }
 
         $label = if ($entry.label) { "  $($entry.label)" } else { "" }
@@ -117,6 +122,10 @@ function Show-BenchmarkComparison {
     if ($history.Count -ge 2) {
         $first = $history[0]
         $last  = $history[-1]
+        if ($null -eq $last.avgFps -or $null -eq $first.avgFps -or $null -eq $last.p1Fps -or $null -eq $first.p1Fps) {
+            Write-Info "Cannot compute total change — some entries have missing FPS data."
+            return
+        }
         $totalAvgDiff = [math]::Round($last.avgFps - $first.avgFps, 1)
         $totalP1Diff  = [math]::Round($last.p1Fps - $first.p1Fps, 1)
         $totalColor = if ($totalP1Diff -gt 0) { "Green" } elseif ($totalP1Diff -lt 0) { "Red" } else { "Yellow" }
@@ -147,7 +156,9 @@ function Invoke-BenchmarkCapture {
         [string]$Label = ""
     )
 
-    $history = Get-BenchmarkHistory
+    # @() wrapper: PowerShell pipeline unwraps `return @()` to $null; with
+    # Set-StrictMode -Version Latest, $null.Count is a terminating error.
+    $history = @(Get-BenchmarkHistory)
 
     if ($history.Count -gt 0) {
         Write-Info "You have $($history.Count) previous benchmark result(s)."
@@ -188,6 +199,9 @@ function Invoke-BenchmarkCapture {
     # Show comparison with previous
     if ($history.Count -gt 0) {
         $prev = $history[-1]
+        if ($null -eq $prev.avgFps -or $null -eq $prev.p1Fps) {
+            Write-Info "Previous run has incomplete data — skipping comparison."
+        } else {
         $avgDiff = [math]::Round($result.Avg - $prev.avgFps, 1)
         $p1Diff  = [math]::Round($result.P1 - $prev.p1Fps, 1)
         $pColor = if ($p1Diff -gt 0) { "Green" } elseif ($p1Diff -lt 0) { "Red" } else { "Yellow" }
@@ -212,6 +226,7 @@ function Invoke-BenchmarkCapture {
         } else {
             Write-Info "No change. Within margin of error."
         }
+        } # end else (prev data valid)
     }
 
     return @{ Avg = $result.Avg; P1 = $result.P1; Cap = $cap }

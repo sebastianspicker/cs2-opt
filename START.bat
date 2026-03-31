@@ -39,12 +39,15 @@ echo.
 echo   [8]  Backup summary
 echo        (Show what was backed up before changes)
 echo.
+echo   [S]  Boot to Safe Mode (Phase 2)
+echo        (Skip Phase 1 — just reboot into driver clean)
+echo.
 echo   [P]  Post-Reboot Setup (Phase 3)
 echo        (Manual start if auto-start failed)
 echo.
 echo   [9]  Exit
 echo.
-set /p choice="  Choice [1-9/P]: "
+set /p choice="  Choice [1-9/S/P]: "
 
 if "%choice%"=="1" goto :phase1
 if "%choice%"=="2" goto :cleanup
@@ -54,6 +57,7 @@ if "%choice%"=="5" goto :resetprogress
 if "%choice%"=="6" goto :verify
 if "%choice%"=="7" goto :restore
 if "%choice%"=="8" goto :backupsummary
+if /i "%choice%"=="S" goto :safemode
 if /i "%choice%"=="P" goto :phase3
 if "%choice%"=="9" exit /b
 goto :menu
@@ -74,12 +78,7 @@ pause
 goto :menu
 
 :showlog
-if not exist "C:\CS2_OPTIMIZE\Logs\optimize_current.log" (
-    echo  No log found.
-    pause
-    goto :menu
-)
-powershell -Command "Get-Content 'C:\CS2_OPTIMIZE\Logs\optimize_current.log' | more"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; . \"%~dp0config.env.ps1\"; if (Test-Path $CFG_LogFile) { Get-Content $CFG_LogFile | more } else { Write-Host '  No log found.'; Read-Host '  Press Enter to continue' }"
 pause
 goto :menu
 
@@ -93,23 +92,28 @@ echo.
 echo  Progress file will be deleted.
 set /p confirm="  Are you sure? [y/N]: "
 if /i "%confirm%"=="y" (
-    if exist "C:\CS2_OPTIMIZE\progress.json" del "C:\CS2_OPTIMIZE\progress.json"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; . \"%~dp0config.env.ps1\"; . \"%~dp0helpers.ps1\"; Clear-Progress"
     echo  Reset complete.
 )
 if /i "%confirm%"=="j" (
-    if exist "C:\CS2_OPTIMIZE\progress.json" del "C:\CS2_OPTIMIZE\progress.json"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; . \"%~dp0config.env.ps1\"; . \"%~dp0helpers.ps1\"; Clear-Progress"
     echo  Reset complete.
 )
 pause
 goto :menu
 
 :restore
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'.TrimEnd('\'); . '%~dp0config.env.ps1'; . '%~dp0helpers.ps1'; Initialize-ScriptDefaults; Restore-Interactive"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'.TrimEnd('\'); . \"%~dp0config.env.ps1\"; . \"%~dp0helpers.ps1\"; Initialize-ScriptDefaults; Restore-Interactive"
 pause
 goto :menu
 
 :backupsummary
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'.TrimEnd('\'); . '%~dp0config.env.ps1'; . '%~dp0helpers.ps1'; Initialize-ScriptDefaults; Show-BackupSummary"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-StrictMode -Version Latest; $ScriptRoot='%~dp0'.TrimEnd('\'); . \"%~dp0config.env.ps1\"; . \"%~dp0helpers.ps1\"; Initialize-ScriptDefaults; Show-BackupSummary"
+pause
+goto :menu
+
+:safemode
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Boot-SafeMode.ps1"
 pause
 goto :menu
 

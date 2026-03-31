@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/integration/dryrun-compliance.Tests.ps1
 #  Verify DRY-RUN mode produces ZERO writes to system state.
 # ==============================================================================
@@ -205,12 +205,13 @@ Describe "Invoke-TieredStep DRY-RUN integration with write functions" {
         New-TestProgressFile -Phase 1 -LastStep 0
 
         Invoke-TieredStep -Tier 1 -Title "DRY-RUN No Progress" -Why "Testing" `
-            -Risk "SAFE" -Action { }
+            -Risk "SAFE" -EstimateKey "DryRunTestKey" -Action { }
 
-        # Complete-Step checks $SCRIPT:DryRun and skips
-        # But Invoke-TieredStep itself doesn't call Complete-Step - that's the caller's responsibility
-        # What we verify: AppliedSteps is not populated
-        $SCRIPT:AppliedSteps | Should -Not -Contain "DRY-RUN No Progress"
+        # EstimateKey should not be tracked in DRY-RUN
+        $SCRIPT:AppliedSteps | Should -Not -Contain "DryRunTestKey"
+        # progress.json should remain at lastStep 0 (not updated)
+        $prog = Get-Content $CFG_ProgressFile -Raw | ConvertFrom-Json
+        $prog.lastCompletedStep | Should -Be 0
     }
 
     It "DRY-RUN does not track EstimateKey" {
@@ -276,7 +277,9 @@ Describe "Set-RunOnce DRY-RUN compliance" {
         # Either way: zero writes to registry (the critical assertion).
         $SCRIPT:MockTracker.SetItemProperty.Count | Should -Be 0
 
-        if ($IsWindows) {
+        # $IsWindows is undefined (null) on Windows PowerShell 5.1; treat null as Windows.
+        $onWindows = ($IsWindows -ne $false)
+        if ($onWindows) {
             Should -Invoke Write-Host -ParameterFilter {
                 $Object -like "*DRY-RUN*"
             } -Times 1 -Scope It
@@ -331,7 +334,7 @@ Describe "DRY-RUN respects profile filtering" {
         $result = Invoke-TieredStep -Tier 3 -Title "T3 COMP DRY-RUN" -Why "Testing" `
             -Risk "MODERATE" -Action { $state.executed = $true }
 
-        $result | Should -Be $true
+        $result | Should -Be $false
         $state.executed | Should -Be $true
     }
 
@@ -376,8 +379,10 @@ Describe "Backup buffer stays empty in DRY-RUN" {
     }
 
     It "Backup-PowerPlan returns early in DRY-RUN" {
+        Mock Write-Host {}
         Backup-PowerPlan -StepTitle "Test"
 
         $SCRIPT:_backupPending.Count | Should -Be 0
+        Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN.*Would backup" }
     }
 }

@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/gpu-driver-clean.Tests.ps1  --  GPU driver removal (DDU replacement)
 # ==============================================================================
 
@@ -6,7 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 
     # Stub Windows-only cmdlets before loading the module
-    if (-not $IsWindows) {
+    if ($IsWindows -eq $false) {
         if (-not (Get-Command Stop-Service -ErrorAction SilentlyContinue)) {
             function global:Stop-Service { param($Name, [switch]$Force, $ErrorAction) $null }
         }
@@ -103,9 +103,10 @@ Describe "Remove-GpuDriverClean" {
 
     Context "INF filename validation (security)" {
 
-        It "validates oem*.inf pattern in source code" {
-            $source = Get-Content "$PSScriptRoot/../../helpers/gpu-driver-clean.ps1" -Raw
-            $source | Should -Match "notmatch.*oem\\d\+\\\.inf"
+        It "has INF filename validation guard in function body" {
+            $fn = Get-Command Remove-GpuDriverClean -ErrorAction SilentlyContinue
+            $fn | Should -Not -BeNullOrEmpty
+            $fn.ScriptBlock.ToString() | Should -Match 'notmatch.*oem.*inf'
         }
 
         It "rejects non-oem INF names in source validation" {

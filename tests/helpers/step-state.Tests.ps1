@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/step-state.Tests.ps1  --  Step progress & resume system tests
 # ==============================================================================
 
@@ -74,7 +74,7 @@ Describe "Complete-Step / Test-StepDone round-trip" {
         $ts = $prog.timestamps."1-7"
         $ts | Should -Not -BeNullOrEmpty
         # Should be a valid date string
-        { [datetime]::ParseExact($ts, "yyyy-MM-dd HH:mm:ss", $null) } | Should -Not -Throw
+        { [datetime]::ParseExact($ts, "yyyy-MM-dd HH:mm:ss", [System.Globalization.CultureInfo]::InvariantCulture) } | Should -Not -Throw
     }
 }
 
@@ -183,8 +183,8 @@ Describe "Clear-Progress" {
             $prog.completedSteps.Count | Should -Be 0
             $prog.lastCompletedStep    | Should -Be 0
         } else {
-            # null progress is also acceptable (treated as empty)
-            $true | Should -Be $true
+            # File was deleted — verify it no longer exists
+            Test-Path $CFG_ProgressFile | Should -Be $false
         }
     }
 
@@ -205,6 +205,8 @@ Describe "Clear-Progress" {
         $prog = Load-Progress
         if ($prog) {
             $prog.completedSteps.Count | Should -Be 0
+        } else {
+            Test-Path $CFG_ProgressFile | Should -Be $false
         }
     }
 

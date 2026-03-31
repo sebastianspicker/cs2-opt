@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/gpu-driver-clean.ps1  —  Safe Mode GPU Driver Removal (DDU replacement)
 # ==============================================================================
 
@@ -24,6 +24,7 @@ function Remove-GpuDriverClean {
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would perform complete GPU driver removal for $GpuVendor" -ForegroundColor Magenta
         Write-Host "  [DRY-RUN]   1. Stop + disable GPU services" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN]   1.5 Remove GPU software (AppX, program files, tasks, registry)" -ForegroundColor Magenta
         Write-Host "  [DRY-RUN]   2. Remove driver packages via pnputil" -ForegroundColor Magenta
         Write-Host "  [DRY-RUN]   3. Clean GPU class registry keys" -ForegroundColor Magenta
         Write-Host "  [DRY-RUN]   4. Remove DriverStore orphan folders" -ForegroundColor Magenta
@@ -71,6 +72,152 @@ function Remove-GpuDriverClean {
         }
     }
 
+    # ── 1.5. Remove GPU Software / Applications ────────────────────────────
+    # Remove vendor applications (NVIDIA App, Control Panel, GFE, PhysX, etc.)
+    # that persist separately from the display driver package.
+    # In Safe Mode, MSI service may not run — use direct file/registry removal.
+    Write-Step "Removing $GpuVendor software and applications..."
+
+    $removedApps = 0
+
+    if ($GpuVendor -eq "NVIDIA") {
+        # ── AppX / MSIX packages (NVIDIA App, NVIDIA Control Panel from Store) ──
+        if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+            # NOTE: Get-AppxPackage / Get-AppxProvisionedPackage throw terminating
+            # errors in Safe Mode because AppXSVC cannot start. -ErrorAction
+            # SilentlyContinue only suppresses non-terminating errors, so we must
+            # wrap these calls in try/catch.
+            try {
+                $nvAppx = Get-AppxPackage -AllUsers -ErrorAction Stop |
+                    Where-Object { $_.Name -match "NVIDIA" }
+            } catch {
+                Write-Debug "AppX enumeration unavailable (expected in Safe Mode): $_"
+                $nvAppx = @()
+            }
+            foreach ($pkg in $nvAppx) {
+                try {
+                    Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
+                    Write-OK "Removed AppX: $($pkg.Name)"
+                    $removedApps++
+                } catch {
+                    Write-Debug "AppX removal (expected in Safe Mode): $($pkg.Name) — $_"
+                }
+            }
+            # Remove provisioned packages to prevent reinstall on feature updates
+            try {
+                $nvProvisioned = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+                    Where-Object { $_.DisplayName -match "NVIDIA" }
+                foreach ($pkg in $nvProvisioned) {
+                    try {
+                        $pkg | Remove-AppxProvisionedPackage -Online -ErrorAction Stop | Out-Null
+                        Write-OK "Removed provisioned: $($pkg.DisplayName)"
+                    } catch {
+                        Write-Debug "Provisioned removal: $($pkg.DisplayName) — $_"
+                    }
+                }
+            } catch { Write-Debug "Provisioned package enumeration: $_" }
+        } else {
+            Write-Debug "AppX cmdlets not available — skipping AppX removal."
+        }
+
+        # ── NVIDIA scheduled tasks ──────────────────────────────────────────
+        $nvTaskPatterns = @("NvDriverUpdateCheckDaily*", "NVIDIA GeForce*", "NvNodeLauncher*",
+                            "NvBackend*", "NvTmRep*", "NvProfileUpdater*", "NvTelemetry*")
+        foreach ($pattern in $nvTaskPatterns) {
+            $tasks = Get-ScheduledTask -TaskName $pattern -ErrorAction SilentlyContinue
+            foreach ($t in $tasks) {
+                try {
+                    Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false -ErrorAction Stop
+                    Write-OK "Removed task: $($t.TaskName)"
+                } catch { Write-Debug "Task removal: $($t.TaskName) — $_" }
+            }
+        }
+        # Also check \NVIDIA\ task folder
+        $nvFolderTasks = Get-ScheduledTask -TaskPath "\NVIDIA\*" -ErrorAction SilentlyContinue
+        foreach ($t in $nvFolderTasks) {
+            try {
+                Unregister-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -Confirm:$false -ErrorAction Stop
+                Write-OK "Removed task: $($t.TaskPath)$($t.TaskName)"
+            } catch { Write-Debug "Task removal: $($t.TaskName) — $_" }
+        }
+
+        # ── NVIDIA program directories ──────────────────────────────────────
+        # Remove all NVIDIA application files. In Safe Mode, files are unlocked.
+        $nvDirs = @(
+            "$env:ProgramFiles\NVIDIA Corporation",
+            "${env:ProgramFiles(x86)}\NVIDIA Corporation",
+            "$env:ProgramData\NVIDIA Corporation",
+            "$env:ProgramData\NVIDIA",
+            "$env:LOCALAPPDATA\NVIDIA Corporation",
+            "$env:LOCALAPPDATA\NVIDIA"
+        )
+        foreach ($dir in $nvDirs) {
+            if (Test-Path $dir) {
+                try {
+                    Remove-Item $dir -Recurse -Force -ErrorAction Stop
+                    Write-OK "Removed: $dir"
+                    $removedApps++
+                } catch {
+                    # Some files may be locked even in Safe Mode (system-owned)
+                    Write-Warn "Partial removal: $dir — some files locked"
+                    $removedApps++
+                }
+            }
+        }
+
+        # ── Uninstall registry entries ──────────────────────────────────────
+        # Clean Programs & Features / Apps & Features entries for NVIDIA software
+        # so the system doesn't show stale NVIDIA app entries after driver reinstall.
+        $uninstallPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+        $cleanedEntries = 0
+        foreach ($regPath in $uninstallPaths) {
+            if (-not (Test-Path $regPath)) { continue }
+            Get-ChildItem $regPath -ErrorAction SilentlyContinue | ForEach-Object {
+                $props = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+                if (-not $props) { return }  # skip keys that can't be read
+                $pub = if ($props.PSObject.Properties['Publisher'])  { $props.Publisher }  else { "" }
+                $dn  = if ($props.PSObject.Properties['DisplayName']){ $props.DisplayName } else { "" }
+                if ($pub -match "NVIDIA" -or $dn -match "^NVIDIA ") {
+                    try {
+                        Remove-Item $_.PSPath -Recurse -Force -ErrorAction Stop
+                        Write-Debug "Cleaned uninstall entry: $dn"
+                        $cleanedEntries++
+                    } catch {
+                        Write-Debug "Failed to clean uninstall entry: $dn — $_"
+                    }
+                }
+            }
+        }
+        if ($cleanedEntries -gt 0) {
+            Write-OK "Cleaned $cleanedEntries NVIDIA uninstall registry entries."
+        }
+
+    } elseif ($GpuVendor -eq "AMD") {
+        # AMD software directories
+        $amdDirs = @(
+            "$env:ProgramFiles\AMD",
+            "${env:ProgramFiles(x86)}\AMD",
+            "$env:LOCALAPPDATA\AMD",
+            "$env:ProgramData\AMD"
+        )
+        foreach ($dir in $amdDirs) {
+            if (Test-Path $dir) {
+                try {
+                    Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-OK "Removed: $dir"
+                    $removedApps++
+                } catch {
+                    Write-Warn "Partial removal: $dir"
+                    $removedApps++
+                }
+            }
+        }
+    }
+    Write-Info "$removedApps $GpuVendor software items removed."
+
     # ── 2. Remove GPU Driver Packages via pnputil ────────────────────────────
     Write-Step "Enumerating GPU driver packages..."
 
@@ -113,7 +260,7 @@ function Remove-GpuDriverClean {
     # above is locale-independent and should be preferred.
     if ($driverPackages.Count -eq 0) {
         Write-Debug "Trying pnputil text parsing fallback..."
-        $pnpOutput = pnputil /enum-drivers 2>$null
+        $pnpOutput = pnputil /enum-drivers 2>&1
         $currentInf = $null
         $currentClass = $null
         $currentProvider = $null
@@ -204,14 +351,17 @@ function Remove-GpuDriverClean {
         foreach ($key in $subkeys) {
             try {
                 $props = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
+                if (-not $props) { continue }
+                $prov = if ($props.PSObject.Properties['ProviderName']) { $props.ProviderName } else { "" }
+                $desc = if ($props.PSObject.Properties['DriverDesc'])   { $props.DriverDesc }   else { "" }
                 $match = switch ($GpuVendor) {
-                    "NVIDIA" { $props.ProviderName -match "NVIDIA" -or $props.DriverDesc -match "NVIDIA" }
-                    "AMD"    { $props.ProviderName -match "AMD|ATI" -or $props.DriverDesc -match "AMD|Radeon" }
-                    "Intel"  { $props.ProviderName -match "Intel" -or $props.DriverDesc -match "Intel.*Graphics" }
+                    "NVIDIA" { $prov -match "NVIDIA" -or $desc -match "NVIDIA" }
+                    "AMD"    { $prov -match "AMD|ATI" -or $desc -match "AMD|Radeon" }
+                    "Intel"  { $prov -match "Intel"   -or $desc -match "Intel.*Graphics" }
                 }
                 if ($match) {
                     Remove-Item $key.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-OK "Registry cleaned: $($key.PSChildName) ($($props.DriverDesc))"
+                    Write-OK "Registry cleaned: $($key.PSChildName) ($desc)"
                 }
             } catch {
                 Write-Debug "Registry key $($key.PSChildName): $_"
@@ -219,8 +369,14 @@ function Remove-GpuDriverClean {
         }
     }
 
-    # Clean NVIDIA-specific registry paths
-    if ($GpuVendor -eq "NVIDIA") {
+    # Clean vendor registry paths only if at least one driver was actually removed.
+    # If all removals failed, the driver is still loaded and deleting its registry
+    # config would leave it in an inconsistent state.
+    if ($failedDrivers -gt 0 -and $removedDrivers -eq 0) {
+        Write-Warn "Skipping vendor registry cleanup — no drivers were successfully removed."
+    } elseif ($failedDrivers -gt 0) {
+        Write-Warn "Partial removal ($removedDrivers removed, $failedDrivers failed) — skipping vendor registry cleanup to avoid inconsistent state."
+    } elseif ($GpuVendor -eq "NVIDIA") {
         $nvRegPaths = @(
             "HKLM:\SOFTWARE\NVIDIA Corporation",
             "HKCU:\SOFTWARE\NVIDIA Corporation",
@@ -303,8 +459,12 @@ function Remove-GpuDriverClean {
         if (Test-Path $cp) {
             $items = @(Get-ChildItem $cp -Recurse -File -ErrorAction SilentlyContinue)
             $count = $items.Count
-            Remove-Item $cp -Recurse -Force -ErrorAction SilentlyContinue
-            Write-OK "Cache cleaned: $cp ($count items)"
+            try {
+                Remove-Item $cp -Recurse -Force -ErrorAction Stop
+                Write-OK "Cache cleaned: $cp ($count items)"
+            } catch {
+                Write-Warn "Partial cache clean: $cp — some files locked: $_"
+            }
         }
     }
 
@@ -314,6 +474,7 @@ function Remove-GpuDriverClean {
     Write-Host "  │  GPU DRIVER CLEAN REMOVAL COMPLETE                          │" -ForegroundColor Green
     Write-Host "  │                                                              │" -ForegroundColor Green
     Write-Host "  │  Vendor:          $GpuVendor$((' ' * (39 - $GpuVendor.Length)))│" -ForegroundColor White
+    Write-Host "  │  Software removed:$removedApps$((' ' * (39 - "$removedApps".Length)))│" -ForegroundColor White
     Write-Host "  │  Drivers removed: $removedDrivers$((' ' * (39 - "$removedDrivers".Length)))│" -ForegroundColor White
     Write-Host "  │  Folders cleaned: $cleanedFolders$((' ' * (39 - "$cleanedFolders".Length)))│" -ForegroundColor White
     Write-Host "  │                                                              │" -ForegroundColor Green

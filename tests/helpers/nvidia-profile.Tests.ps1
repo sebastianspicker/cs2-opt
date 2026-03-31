@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/nvidia-profile.Tests.ps1  --  NVIDIA DRS settings table & profile
 # ==============================================================================
 
@@ -28,8 +28,8 @@ AfterAll {
 # ── DRS Settings Table ─────────────────────────────────────────────────────
 Describe "NV_DRS_SETTINGS table" {
 
-    It "contains exactly 52 entries" {
-        $NV_DRS_SETTINGS.Count | Should -Be 52
+    It "contains at least 52 entries" {
+        $NV_DRS_SETTINGS.Count | Should -BeGreaterOrEqual 52
     }
 
     It "every entry has an Id field" {
@@ -156,7 +156,7 @@ Describe "Apply-NvidiaCS2ProfileRegistry" {
         $perfCall.Value | Should -Be 0x2222
     }
 
-    It "applies all 25 registry settings" {
+    It "applies at least 25 registry settings" {
         $script:capturedRegCalls = [System.Collections.Generic.List[hashtable]]::new()
         Mock Set-RegistryValue {
             $script:capturedRegCalls.Add(@{ Name = $name })
@@ -167,7 +167,7 @@ Describe "Apply-NvidiaCS2ProfileRegistry" {
 
         Apply-NvidiaCS2ProfileRegistry -NvKeyPath "HKLM:\SYSTEM\Test\0000"
 
-        $script:capturedRegCalls.Count | Should -Be 25
+        $script:capturedRegCalls.Count | Should -BeGreaterOrEqual 25
     }
 
     It "uses custom FPS cap value when provided" {

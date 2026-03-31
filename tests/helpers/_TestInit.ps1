@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/_TestInit.ps1  --  Common test setup for Pester 5.x tests
 # ==============================================================================
 #
@@ -37,6 +37,7 @@ $CFG_StateFile    = "$SCRIPT:TestTempRoot\state.json"
 $CFG_ProgressFile = "$SCRIPT:TestTempRoot\progress.json"
 $CFG_BackupFile   = "$SCRIPT:TestTempRoot\backup.json"
 $CFG_BackupLockFile = "$SCRIPT:TestTempRoot\backup.lock"
+$CFG_BenchmarkFile = "$SCRIPT:TestTempRoot\benchmark_history.json"
 
 # Ensure log directory exists (logging.ps1 functions reference it)
 New-Item -ItemType Directory -Path $CFG_LogDir -Force | Out-Null
@@ -52,7 +53,7 @@ $SCRIPT:CurrentStepTitle = $null
 # On macOS/Linux, cmdlets like Get-CimInstance, Get-Service, Get-ScheduledTask
 # do not exist. Define no-op stubs so that Pester Mock can intercept them.
 # These stubs are intentionally minimal — tests MUST mock them with real return values.
-if (-not $IsWindows) {
+if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $IsWindows -eq $false) {
     if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
         function global:Get-CimInstance { param($ClassName, $Filter) $null }
     }
@@ -196,9 +197,9 @@ function Reset-TestState {
 # Note: Pester 5.x AfterAll in the consuming test file handles per-file cleanup.
 # This global cleanup catches anything left behind.
 if ($SCRIPT:TestTempRoot -and (Test-Path $SCRIPT:TestTempRoot)) {
-    Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-        if (Test-Path $SCRIPT:TestTempRoot) {
-            Remove-Item $SCRIPT:TestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Register-EngineEvent -SourceIdentifier PowerShell.Exiting -MessageData $SCRIPT:TestTempRoot -Action {
+        if (Test-Path $Event.MessageData) {
+            Remove-Item $Event.MessageData -Recurse -Force -ErrorAction SilentlyContinue
         }
     } -SupportEvent | Out-Null
 }

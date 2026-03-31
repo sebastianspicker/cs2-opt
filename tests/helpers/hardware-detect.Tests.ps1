@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/hardware-detect.Tests.ps1  --  Hardware detection function tests
 # ==============================================================================
 
@@ -36,9 +36,10 @@ Describe "Get-IntelHybridCpuName" {
         }
     }
 
-    Context "Intel 14th gen (Raptor Lake Refresh)" {
+    Context "Intel 14th gen (Raptor Lake Refresh — WMI reports as 13th Gen)" {
         It "detects i7-14700K as hybrid" {
             Mock Get-CimInstance {
+                # WMI on 14th gen desktop reports "13th Gen" — matched by model number regex
                 [PSCustomObject]@{ Name = "13th Gen Intel(R) Core(TM) i7-14700K" }
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
@@ -76,8 +77,7 @@ Describe "Get-IntelHybridCpuName" {
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
             $result = Get-IntelHybridCpuName
-            $result | Should -BeNullOrEmpty
-            $result | Should -Not -Be $null  # empty string, not $null
+            $result | Should -Be ""
         }
 
         It "returns empty string for AMD 5800X" {
@@ -86,8 +86,7 @@ Describe "Get-IntelHybridCpuName" {
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
             $result = Get-IntelHybridCpuName
-            $result | Should -BeNullOrEmpty
-            $result | Should -Not -Be $null
+            $result | Should -Be ""
         }
     }
 
@@ -98,8 +97,7 @@ Describe "Get-IntelHybridCpuName" {
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
             $result = Get-IntelHybridCpuName
-            $result | Should -BeNullOrEmpty
-            $result | Should -Not -Be $null
+            $result | Should -Be ""
         }
 
         It "returns empty string for i7-10700K (Comet Lake)" {
@@ -108,8 +106,7 @@ Describe "Get-IntelHybridCpuName" {
             } -ParameterFilter { $ClassName -eq "Win32_Processor" }
 
             $result = Get-IntelHybridCpuName
-            $result | Should -BeNullOrEmpty
-            $result | Should -Not -Be $null
+            $result | Should -Be ""
         }
     }
 
@@ -194,6 +191,13 @@ Describe "Calculate-FpsCap" {
     It "returns integer (not float)" {
         $result = Calculate-FpsCap 333
         $result | Should -BeOfType [int]
+    }
+
+    It "uses CFG_FpsCap_Percent (not a hardcoded value)" {
+        # Verify the formula uses the variable: cap = max(min, floor(avg - floor(avg * pct)))
+        # At default 9%: floor(400 * 0.09) = 36, so 400 - 36 = 364
+        $result = Calculate-FpsCap 400
+        $result | Should -Be 364
     }
 }
 
@@ -308,8 +312,24 @@ Describe "Test-XmpActive" {
             })
         } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
 
-        # 2400 < 2800 * 0.9 = 2520 -> XMP inactive
+        # Floor(5600/2) * 0.95 = 2660; 2400 < 2660 -> XMP inactive
         Test-XmpActive | Should -Be $false
+    }
+
+    It "detects XMP inactive for DDR5 JEDEC baseline (Speed=4800, Config=2400)" {
+        Mock Get-CimInstance {
+            @([PSCustomObject]@{
+                Capacity             = 17179869184
+                Speed                = 4800
+                ConfiguredClockSpeed = 2400
+                SMBIOSMemoryType     = 34
+                BankLabel            = "BANK 0"
+            })
+        } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
+
+        # DDR5-4800 JEDEC baseline: config 2400 × 2 = 4800 MT/s = rated speed.
+        # Function returns $true ("at rated speed") — it cannot distinguish JEDEC from XMP.
+        Test-XmpActive | Should -Be $true
     }
 
     It "returns null when CIM query fails" {

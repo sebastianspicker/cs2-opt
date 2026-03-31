@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/debloat.ps1  —  Targeted Bloatware + Telemetry Removal
 # ==============================================================================
 
@@ -29,6 +29,7 @@ function Invoke-GamingDebloat {
         "Microsoft.WindowsFeedbackHub",
         "Microsoft.YourPhone",
         "Microsoft.Windows.PhoneLink",
+        "MicrosoftCorporationII.PhoneLink",
         "Microsoft.WindowsMaps",
         "Microsoft.ZuneMusic",
         "Microsoft.ZuneVideo",
@@ -66,7 +67,7 @@ function Invoke-GamingDebloat {
                             Remove-AppxProvisionedPackage -Online -ErrorAction Stop | Out-Null
                     }
                 } catch {
-                    Write-Debug "Failed to remove provisioned package $($pkg): $_"
+                    Write-Warn "Failed to remove provisioned package $($pkg): $_"
                 }
             } else {
                 Write-Host "  [DRY-RUN] Would remove AppX: $pkg" -ForegroundColor Magenta
@@ -74,7 +75,9 @@ function Invoke-GamingDebloat {
             }
         }
     }
-    if ($removedCount -eq 0) {
+    if ($removedCount -eq 0 -and -not $SCRIPT:DryRun) {
+        Write-Info "No bloatware packages found or removal failed for all packages."
+    } elseif ($removedCount -eq 0 -and $SCRIPT:DryRun) {
         Write-Info "No bloatware packages found (already clean)."
     } else {
         $verb = if ($SCRIPT:DryRun) { "would be removed" } else { "removed" }
@@ -87,12 +90,13 @@ function Invoke-GamingDebloat {
     Write-Step "Disabling telemetry services..."
     $telemetryServices = @(
         @{ Name = "DiagTrack";        Label = "Connected User Experiences and Telemetry" },
-        @{ Name = "dmwappushservice"; Label = "Device Management WAP Push" }
+        @{ Name = "dmwappushservice"; Label = "Device Management WAP Push"; Optional = $true }
     )
     foreach ($svc in $telemetryServices) {
         $svcObj = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
         if (-not $svcObj) {
-            Write-Warn "Service '$($svc.Name)' not found on this system — skipping."
+            if ($svc.Optional) { Write-Info "Service '$($svc.Name)' not present (removed in newer Windows) — skipping." }
+            else { Write-Warn "Service '$($svc.Name)' not found on this system — skipping." }
             continue
         }
         # Skip if already disabled (idempotent — avoids redundant backup entries on re-run)

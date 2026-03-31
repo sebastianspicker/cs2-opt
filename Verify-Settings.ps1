@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS  CS2 Optimization Suite — Settings Verifier (Read-Only)
 
@@ -54,7 +54,7 @@ try {
     $hagsVal = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -ErrorAction Stop).HwSchMode
     $hagsLabel = switch ($hagsVal) { 0 {"OFF"} 1 {"OFF (default)"} 2 {"ON"} default {"Unknown ($hagsVal)"} }
     Write-Host "  ✓  INFO      HAGS = $hagsLabel  (setup-dependent, no target value)" -ForegroundColor Cyan
-    $global:_verifyOkCount++
+    $global:_verifyInfoCount++
 } catch {
     Write-Host "  ?  MISSING   HAGS key not found" -ForegroundColor DarkGray
     $global:_verifyMissingCount++
@@ -80,7 +80,7 @@ if ($_nvKeyPath) {
     Test-RegistryCheck $_nvKeyPath "DisableDynamicPstate" 1 "NVIDIA DisableDynamicPstate (lock P0)"
 } else {
     Write-Host "  ✓  INFO      NVIDIA GPU class key: N/A (no NVIDIA GPU detected)" -ForegroundColor Cyan
-    $global:_verifyOkCount++
+    $global:_verifyInfoCount++
 }
 
 Write-Host "`n  ═══ SYSTEM PROFILE / GAMING ═══" -ForegroundColor Cyan
@@ -109,7 +109,7 @@ if ($null -eq $_intelHybridName) {
     Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" "PowerThrottlingOff" 1 "Intel Power Throttling disabled (E-core fix)"
 } else {
     Write-Host "  ✓  INFO      Power Throttling: N/A (not Intel 12th gen+)" -ForegroundColor Cyan
-    $global:_verifyOkCount++
+    $global:_verifyInfoCount++
 }
 
 Write-Host "`n  ═══ SYSTEM LATENCY TWEAKS ═══" -ForegroundColor Cyan
@@ -149,7 +149,7 @@ if ($nicGuid) {
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\QoS" "Do not use NLA" "1" "QoS NLA bypass (DSCP prerequisite)"
 # IPv6 intentionally left ENABLED (2026 reversal: Steam prefers IPv6 when faster; disabling forces CGNAT)
 Write-Host "  ✓  INFO      IPv6: enabled (intentional — Steam prefers IPv6 when faster)" -ForegroundColor Cyan
-$global:_verifyOkCount++
+$global:_verifyInfoCount++
 
 Write-Host "`n  ═══ FAST STARTUP ═══" -ForegroundColor Cyan
 
@@ -257,7 +257,7 @@ foreach ($_wuSvc in @("wuauserv", "UsoSvc", "WaaSMedicSvc")) {
     } elseif ($_wuObj) {
         # Not disabled = user likely skipped Step 15 (expected for most users)
         Write-Host "  ✓  INFO      $_wuSvc = $($_wuObj.StartType) (Step 15 skipped — normal)" -ForegroundColor Cyan
-        $global:_verifyOkCount++
+        $global:_verifyInfoCount++
     }
 }
 
@@ -269,7 +269,7 @@ $counts = Get-VerifyCounters
 $total = $counts.okCount + $counts.changedCount + $counts.missingCount
 Write-Blank
 Write-Host "  $([char]0x2550 * 60)" -ForegroundColor DarkGray
-Write-Host "  VERIFICATION RESULT:  $total settings checked" -ForegroundColor White
+Write-Host "  VERIFICATION RESULT:  $total settings checked$(if($counts.infoCount){", $($counts.infoCount) info"})" -ForegroundColor White
 Write-Host "  $([char]0x2714) OK:       $($counts.okCount)  — working as intended" -ForegroundColor Green
 Write-Host "  $([char]0x2718) CHANGED:  $($counts.changedCount)  — something reset these" -ForegroundColor Yellow
 Write-Host "  ?  MISSING:  $($counts.missingCount)  — not applied yet" -ForegroundColor Red

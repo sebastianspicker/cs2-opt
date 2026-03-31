@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/step-state.ps1  —  Step Progress / Resume System
 # ==============================================================================
 
@@ -35,7 +35,7 @@ function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     $prog.lastCompletedStep = $stepNum
     # Use composite key "P{phase}:{step}" to disambiguate Phase 1 vs Phase 3 step numbers
     $stepKey = "P${phase}:${stepNum}"
-    if ($stepKey -notin $prog.completedSteps) {
+    if ($stepKey -notin @($prog.completedSteps)) {
         $prog.completedSteps = @($prog.completedSteps) + $stepKey
     }
     # Ensure timestamps is a PSCustomObject for consistent Add-Member behavior.
@@ -58,7 +58,7 @@ function Skip-Step([int]$phase, [int]$stepNum, [string]$stepName) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
     }
     $stepKey = "P${phase}:${stepNum}"
-    if ($stepKey -notin $prog.skippedSteps) {
+    if ($stepKey -notin @($prog.skippedSteps)) {
         $prog.skippedSteps = @($prog.skippedSteps) + $stepKey
     }
     # Do NOT add to completedSteps — skippedSteps is a separate semantic.
@@ -84,28 +84,38 @@ function Test-StepDone([int]$phase, [int]$stepNum) {
     # because they would collide across phases (e.g., Phase 1 step 5 vs Phase 3 step 5).
     # Legacy progress files with bare numbers are treated as empty (user re-runs from step 1).
     $stepKey = "P${phase}:${stepNum}"
-    return ($stepKey -in $prog.completedSteps -or $stepKey -in $prog.skippedSteps)
+    return ($stepKey -in @($prog.completedSteps) -or $stepKey -in @($prog.skippedSteps))
 }
 
 function Show-ResumePrompt($phase, $totalSteps) {
     $prog = Load-Progress
     if (-not $prog -or $prog.phase -ne $phase) { return 1 }
-    $hasSkipped = $prog.skippedSteps -and $prog.skippedSteps.Count -gt 0
+    $hasSkipped = $prog.skippedSteps -and @($prog.skippedSteps).Count -gt 0
     if ($prog.lastCompletedStep -eq 0 -and -not $hasSkipped) { return 1 }
-    # Consider both completed and skipped steps for resume position
+    # Consider both completed and skipped steps for resume position.
+    # Use phase-scoped keys to find the highest step number in the current phase,
+    # not the raw lastSkippedStep scalar which may belong to a different phase.
     $lastProcessed = $prog.lastCompletedStep
-    if ($prog.PSObject.Properties['lastSkippedStep'] -and $prog.lastSkippedStep -gt $lastProcessed) {
-        $lastProcessed = $prog.lastSkippedStep
+    $phasePrefix = "P${phase}:"
+    $lastSkippedInPhase = 0
+    if ($prog.skippedSteps) {
+        @($prog.skippedSteps) | Where-Object { $_ -like "${phasePrefix}*" } | ForEach-Object {
+            if ($_ -match ':(\d+)$') { $lastSkippedInPhase = [math]::Max($lastSkippedInPhase, [int]$Matches[1]) }
+        }
+    }
+    if ($lastSkippedInPhase -gt $lastProcessed) {
+        $lastProcessed = $lastSkippedInPhase
     }
     $nextStep = $lastProcessed + 1
     if ($nextStep -gt $totalSteps) {
         Write-Info "All steps in this phase already completed."
+        if ($SCRIPT:Profile -eq "YOLO") { return ($totalSteps + 1) }
         $r = Read-Host "  Start over anyway? [y/N]"
         if ($r -match "^[jJyY]$") { Clear-Progress $phase; return 1 }
         return ($totalSteps + 1)  # Sentinel: callers use `for ($step = $startStep; $step -le $totalSteps; ...)` — this skips the loop
     }
-    if ($SCRIPT:Profile -eq "SAFE") {
-        Write-Info "SAFE profile: auto-resume from step $nextStep (of $totalSteps)."
+    if ($SCRIPT:Profile -in @("SAFE","YOLO")) {
+        Write-Info "$($SCRIPT:Profile) profile: auto-resume from step $nextStep (of $totalSteps)."
         return $nextStep
     }
     Write-Blank
@@ -119,7 +129,7 @@ function Show-ResumePrompt($phase, $totalSteps) {
         ForEach-Object { if ($_ -match ':(\d+)$') { $Matches[1] } else { $_ } })
     $doneList = ($doneNums -join ', ')
     $skipNums = @()
-    if ($prog.skippedSteps -and $prog.skippedSteps.Count -gt 0) {
+    if ($prog.skippedSteps -and @($prog.skippedSteps).Count -gt 0) {
         $skipNums = @($prog.skippedSteps | Where-Object { $_ -like "${phasePrefix}*" } |
             ForEach-Object { if ($_ -match ':(\d+)$') { $Matches[1] } else { $_ } })
     }
@@ -143,6 +153,7 @@ function Show-ResumePrompt($phase, $totalSteps) {
             $s = Read-Host "  From step (1-$totalSteps)"
             $sv = 1
             if ([int]::TryParse($s,[ref]$sv) -and $sv -ge 1 -and $sv -le $totalSteps) { return $sv }
+            Write-Warn "Invalid step '$s' — resuming from step $nextStep."
             return $nextStep
         }
         "3" { Clear-Progress $phase; return 1 }

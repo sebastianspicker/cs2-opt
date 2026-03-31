@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/integration/backup-restore-roundtrip.Tests.ps1
 #  End-to-end roundtrip for all 6 backup types.
 # ==============================================================================
@@ -262,8 +262,9 @@ Describe "BootConfig backup and restore roundtrip" {
     }
 
     It "BootConfig restore calls bcdedit /set for existing values" {
+        # bcdedit /enum /v outputs hex element IDs, not localized names
         Mock bcdedit {
-            return @("identifier  {current}", "disabledynamictick  No")
+            return @("identifier  {current}", "0x26000060  No")
         }
 
         Backup-BootConfig -Key "disabledynamictick" -StepTitle "Boot Test Step"
@@ -279,6 +280,9 @@ Describe "BootConfig backup and restore roundtrip" {
         Restore-StepChanges -StepTitle "Boot Test Step"
 
         $SCRIPT:MockTracker.Bcdedit.Count | Should -BeGreaterThan 0
+        # Verify it used /set (restoring an existing value)
+        $setCall = $SCRIPT:MockTracker.Bcdedit | Where-Object { ($_.Args -join " ") -match "/set" }
+        $setCall | Should -Not -BeNullOrEmpty
     }
 
     It "BootConfig restore calls bcdedit /deletevalue for non-existent values" {
@@ -298,6 +302,9 @@ Describe "BootConfig backup and restore roundtrip" {
         Restore-StepChanges -StepTitle "Boot Test Step"
 
         $SCRIPT:MockTracker.Bcdedit.Count | Should -BeGreaterThan 0
+        # Verify it used /deletevalue (removing a value that didn't originally exist)
+        $delCall = $SCRIPT:MockTracker.Bcdedit | Where-Object { ($_.Args -join " ") -match "/deletevalue" }
+        $delCall | Should -Not -BeNullOrEmpty
     }
 }
 

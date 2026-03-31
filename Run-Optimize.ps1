@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS  CS2 Optimization Suite — Full Optimization Run (38 steps)
 
@@ -76,7 +76,10 @@ Ensure-Dir $CFG_LogDir
 
 $TOTAL_STEPS = 38
 $SCRIPT:PhaseTotal = $TOTAL_STEPS
+$SCRIPT:CurrentPhase = 1
 $PHASE = 1
+$SCRIPT:DryRun = $false         # safe default; Setup-Profile.ps1 will override
+$SCRIPT:SafebootReady = $false  # set to $true by Step 38 if bcdedit safeboot confirmed
 
 try {
     Initialize-PhaseCounters
@@ -96,8 +99,51 @@ try {
         $nextAction = "-> Restart -> Safe Mode -> GPU driver clean`n-> Normal boot -> Phase 3 starts automatically"
         Write-PhaseSummary -PhaseLabel "PHASE 1" -NextAction $nextAction
 
-        if (Confirm-Risk "Restart now?" "Save all files!") {
-            Start-Sleep 5; Restart-Computer -Force
+        # Only offer restart if safeboot is actually set in BCD.
+        # $SCRIPT:SafebootReady is set by Step 38, but on resume (step 38 already
+        # completed) it stays $false — fall back to live BCD check.
+        $safebootConfirmed = $SCRIPT:SafebootReady -or (Test-BootConfigSet "safeboot")
+        if (-not $safebootConfirmed) {
+            Write-Blank
+            Write-Warn "Safe Mode boot flag was NOT set — restarting would boot into Normal Mode."
+            Write-Warn "Fix: open an admin cmd.exe and run:  bcdedit /set {current} safeboot minimal"
+            Write-Warn "Then restart manually to enter Safe Mode for Phase 2."
+        } else {
+            Write-Blank
+            $r = if (Test-YoloProfile) { "y" } else { Read-Host "  Restart into Safe Mode now? Save all work first! [y/N]" }
+            if ($r -match "^[jJyY]$") {
+                # ── Countdown with Safe Mode recovery instructions ────────────
+                $countdownSec = 10
+                Write-Host ""
+                Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+                Write-Host "  ║              RESTARTING INTO SAFE MODE                           ║" -ForegroundColor Yellow
+                Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor Yellow
+                Write-Host "  ║                                                                  ║" -ForegroundColor Yellow
+                Write-Host "  ║  If Safe Mode gets stuck or you need to return to Normal Mode:   ║" -ForegroundColor Yellow
+                Write-Host "  ║                                                                  ║" -ForegroundColor Yellow
+                Write-Host "  ║    1. In Safe Mode, open an admin Command Prompt (cmd.exe)       ║" -ForegroundColor White
+                Write-Host "  ║    2. Run:  bcdedit /deletevalue safeboot                        ║" -ForegroundColor Cyan
+                Write-Host "  ║    3. Run:  shutdown /r /t 0                                     ║" -ForegroundColor Cyan
+                Write-Host "  ║                                                                  ║" -ForegroundColor Yellow
+                Write-Host "  ║  Or: Hold SHIFT + click Restart in the Start menu to access      ║" -ForegroundColor White
+                Write-Host "  ║  Windows Recovery, then choose Normal Startup.                   ║" -ForegroundColor White
+                Write-Host "  ║                                                                  ║" -ForegroundColor Yellow
+                Write-Host "  ║  Phase 2 runs automatically in Safe Mode and removes the         ║" -ForegroundColor White
+                Write-Host "  ║  Safe Mode flag as its very first action — next boot after       ║" -ForegroundColor White
+                Write-Host "  ║  Phase 2 will be Normal Mode again.                              ║" -ForegroundColor White
+                Write-Host "  ║                                                                  ║" -ForegroundColor Yellow
+                Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "  Press Ctrl+C to cancel." -ForegroundColor DarkGray
+                Write-Host ""
+                for ($i = $countdownSec; $i -ge 1; $i--) {
+                    Write-Host "`r  Restarting in $i... " -NoNewline -ForegroundColor Yellow
+                    Start-Sleep 1
+                }
+                Write-Host "`r  Restarting now...     " -ForegroundColor Red
+                # Use shutdown.exe — more reliable than Restart-Computer on some builds
+                shutdown /r /t 0 /f
+            }
         }
     }
 } finally {

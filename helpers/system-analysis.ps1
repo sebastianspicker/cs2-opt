@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/system-analysis.ps1  —  Non-destructive system health checks
 #  Returns structured [PSCustomObject] results for GUI display.
 #  Safe to call from a RunSpace — does all its own registry reads.
@@ -70,6 +70,7 @@ function Invoke-CheckHardware {
     } catch { Write-Debug "WHEA check failed: $_" }
 
     # AMD X3D CPU base clock (informational — MaxClockSpeed is base, not boost)
+    $amdCpu = $null
     try {
         $amdCpu = Get-AmdCpuInfo
         if ($amdCpu -and $amdCpu.IsX3D -and $amdCpu.MaxClockSpeed -gt 0) {
@@ -102,9 +103,9 @@ function Invoke-CheckHardware {
     try {
         $ram = Get-RamInfo
         if ($ram) {
-            $xmpStr = if ($ram.XmpActive) { "Active ($($ram.ActiveMhz) MHz)" } else { "Inactive (running at $($ram.ActiveMhz) MHz, rated $($ram.SpeedMhz) MHz)" }
-            $st = if ($ram.XmpActive) { "OK" } else { "WARN" }
-            $results.Add((New-CheckItem "Hardware" "Memory" "XMP / EXPO" $xmpStr "Active" $st "P1-2" "RAM running below rated speed — enable XMP/EXPO in BIOS"))
+            $xmpStr = if ($ram.AtRatedSpeed) { "At rated speed ($($ram.ActiveMhz) MT/s)" } else { "Below rated ($($ram.ActiveMhz) MT/s, rated $($ram.SpeedMhz) MT/s)" }
+            $st = if ($ram.AtRatedSpeed) { "OK" } else { "WARN" }
+            $results.Add((New-CheckItem "Hardware" "Memory" "XMP / EXPO" $xmpStr "At rated speed" $st "P1-2" "RAM running below rated speed — enable XMP/EXPO in BIOS"))
         }
     } catch { Write-Debug "XMP/EXPO check failed: $_" }
 
@@ -178,8 +179,9 @@ function Invoke-CheckSystemLatency {
 
     # MMCSS SystemResponsiveness
     $sysResp = Get-RegVal "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "SystemResponsiveness"
+    $sysRespDisplay = if ($null -eq $sysResp) { "Not set (default: 20)" } else { "$sysResp" }
     $st = if ($sysResp -eq 10) { "OK" } else { "WARN" }
-    $r.Add((New-CheckItem "Windows" "MMCSS" "SystemResponsiveness" "$sysResp" "10" $st "P1-27" "Controls CPU% reserved for multimedia — lower = more for CS2"))
+    $r.Add((New-CheckItem "Windows" "MMCSS" "SystemResponsiveness" $sysRespDisplay "10" $st "P1-27" "Controls CPU% reserved for multimedia — lower = more for CS2"))
 
     # NoLazyMode
     $lazy = Get-RegVal "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "NoLazyMode"
@@ -242,11 +244,15 @@ function Invoke-CheckSystemLatency {
     # 0x26000060 = disabledynamictick, 0x26000092 = useplatformtick
     try {
         $bcdOutput = bcdedit /enum "{current}" /v 2>&1 | Out-String
-        $dynTick = if ($bcdOutput -match "0x26000060\s+\S+") { "OK" } else { "WARN" }
-        $r.Add((New-CheckItem "Windows" "Boot" "Dynamic Tick" $(if ($dynTick -eq "OK") {"Disabled"} else {"Active"}) "Disabled" $dynTick "P1-10" "Adaptive timer causes irregular CPU wakeups — frametime jitter"))
+        if ($LASTEXITCODE -ne 0) {
+            Write-Debug "bcdedit exited with code $LASTEXITCODE — skipping boot config checks"
+        } else {
+            $dynTick = if ($bcdOutput -match "0x26000060\s+\S+") { "OK" } else { "WARN" }
+            $r.Add((New-CheckItem "Windows" "Boot" "Dynamic Tick" $(if ($dynTick -eq "OK") {"Disabled"} else {"Active"}) "Disabled" $dynTick "P1-10" "Adaptive timer causes irregular CPU wakeups — frametime jitter"))
 
-        $platTick = if ($bcdOutput -match "0x26000092\s+\S+") { "OK" } else { "WARN" }
-        $r.Add((New-CheckItem "Windows" "Boot" "Platform Tick" $(if ($platTick -eq "OK") {"Active"} else {"Inactive"}) "Active" $platTick "P1-10" "Hardware timer instead of software timer"))
+            $platTick = if ($bcdOutput -match "0x26000092\s+\S+") { "OK" } else { "WARN" }
+            $r.Add((New-CheckItem "Windows" "Boot" "Platform Tick" $(if ($platTick -eq "OK") {"Active"} else {"Inactive"}) "Active" $platTick "P1-10" "Hardware timer instead of software timer"))
+        }
     } catch { Write-Debug "bcdedit check failed: $_" }
 
     return $r
@@ -351,7 +357,9 @@ function Invoke-CheckServices {
             if ($null -eq $s) {
                 $r.Add((New-CheckItem "Services" "Windows" $svc.Label "Not present" $svc.Target "OK" "P1-37" "Service not installed"))
             } else {
-                $rawStart = (Get-CimInstance Win32_Service -Filter "Name='$($svc.Name)'" -ErrorAction SilentlyContinue).StartMode
+                $escapedSvcName = $svc.Name -replace "'", "''"
+                $cimSvc = Get-CimInstance Win32_Service -Filter "Name='$escapedSvcName'" -ErrorAction SilentlyContinue
+                $rawStart = if ($cimSvc) { $cimSvc.StartMode } else { $s.StartType.ToString() }
                 $startType = switch ($rawStart) { "Auto" { "Automatic" } "Auto Delayed" { "AutomaticDelayedStart" } default { $rawStart } }
                 $st = if ($startType -eq $svc.Target -or $rawStart -eq $svc.Target) { "OK" } else { "WARN" }
                 $r.Add((New-CheckItem "Services" "Windows" $svc.Label $startType $svc.Target $st "P1-37" "Background service consuming CPU/memory during gaming"))
