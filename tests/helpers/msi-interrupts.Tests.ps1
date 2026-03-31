@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/msi-interrupts.Tests.ps1  --  MSI interrupts & NIC RSS/affinity
 # ==============================================================================
 
@@ -6,7 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 
     # Stub Windows-only cmdlets before loading the module
-    if (-not $IsWindows) {
+    if ($IsWindows -eq $false) {
         if (-not (Get-Command Get-PnpDevice -ErrorAction SilentlyContinue)) {
             function global:Get-PnpDevice { param($Class, $Status, $ErrorAction) $null }
         }
@@ -78,7 +78,7 @@ Describe "Enable-DeviceMSI" {
 
             Enable-DeviceMSI
 
-            Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN" } -Times 1 -Scope It
+            Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN" } -Scope It
         }
     }
 

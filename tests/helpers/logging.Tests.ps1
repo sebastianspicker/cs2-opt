@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/logging.Tests.ps1  --  Logging, console output, banners
 # ==============================================================================
 
@@ -19,10 +19,9 @@ Describe "Write-OK" {
     BeforeEach { Reset-TestState }
 
     It "produces console output" {
+        # Write-OK calls Write-Host internally, which goes to information stream (6)
         $output = Write-OK "test ok message" 6>&1
-        # Write-OK calls Write-Host internally, which goes to information stream
-        # Verify it doesn't throw
-        { Write-OK "test ok message" } | Should -Not -Throw
+        $output | Should -Not -BeNullOrEmpty
     }
 
     It "writes to log file" {
@@ -70,16 +69,13 @@ Describe "Write-Debug (custom)" {
 
     BeforeEach { Reset-TestState }
 
-    It "is suppressed at MINIMAL log level" {
+    It "writes to log file at MINIMAL level but does not throw" {
         $SCRIPT:LogLevel = "MINIMAL"
         Initialize-Log
-        Write-Debug "should not appear"
+        { Write-Debug "debug at minimal" } | Should -Not -Throw
+        # Write-Log always writes to file regardless of level; only console output is gated
         $logContent = Get-Content $CFG_LogFile -Raw
-        # The log file should contain the initial header but not the debug message
-        # (Write-Log still writes to file, but show=false means no console output)
-        # Actually, Write-Log writes to file regardless, then conditionally shows on console
-        # Let's verify it writes to file but verify console suppression
-        { Write-Debug "debug suppressed" } | Should -Not -Throw
+        $logContent | Should -Match "debug at minimal"
     }
 
     It "is shown at VERBOSE log level" {
@@ -222,12 +218,15 @@ Describe "Initialize-Log" {
         $content | Should -Match "CONTROL"
     }
 
-    It "rotates existing log file" {
+    It "rotates existing log file with original content preserved" {
         Initialize-Log
         Add-Content $CFG_LogFile "first run content" -Encoding UTF8
         Initialize-Log  # Second call should rotate
-        # The rotated file should exist
-        $rotatedFiles = Get-ChildItem $CFG_LogDir -Filter "optimize_*.log"
+        # The rotated file should exist — pick the newest one
+        $rotatedFiles = @(Get-ChildItem $CFG_LogDir -Filter "optimize_*.log" | Sort-Object LastWriteTime -Descending)
         $rotatedFiles.Count | Should -BeGreaterOrEqual 1
+        # Newest rotated file should contain the original content
+        $rotatedContent = Get-Content $rotatedFiles[0].FullName -Raw
+        $rotatedContent | Should -Match "first run content"
     }
 }

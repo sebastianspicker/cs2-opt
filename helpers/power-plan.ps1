@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/power-plan.ps1  —  Native CS2 Power Plan (Tiered, Vendor-Aware)
 # ==============================================================================
 #
@@ -123,8 +123,20 @@ function Set-PowerPlanValue {
         return
     }
     $ppOut = powercfg /setacvalueindex $PlanGuid $SubgroupGuid $SettingGuid $Value 2>&1
-    if ($LASTEXITCODE -ne 0) { Write-Warn "powercfg failed for '$Label': $ppOut" }
-    else { Write-Debug "Power plan: $Label = $Value" }
+    if ($LASTEXITCODE -ne 0) {
+        $msg = "$ppOut"
+        if ($msg -match "does not exist") {
+            # Setting GUID not exposed on this hardware (e.g., no Wi-Fi, no USB-C PD, no SATA).
+            # Expected and harmless — downgrade from warning to sub-message.
+            Write-Sub "$Label — not present on this hardware (skipped)"
+        } elseif ($msg -match "malformed|not within the range") {
+            # Value outside platform-supported range (e.g., AMD EPP2, boost mode max differs
+            # from Intel, perf decrease time cap varies). Expected on cross-vendor configs.
+            Write-Sub "$Label — value $Value not supported on this platform (skipped)"
+        } else {
+            Write-Warn "powercfg failed for '$Label': $ppOut"
+        }
+    } else { Write-Debug "Power plan: $Label = $Value" }
 }
 
 
@@ -139,14 +151,14 @@ function New-CS2PowerPlan {
     #>
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would remove existing CS2 Optimized plans and create fresh duplicate" -ForegroundColor Magenta
-        Write-Host "  [DRY-RUN] Would name plan: CS2 Optimized (FPSHeaven 2026)" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] Would name plan: CS2 Optimized" -ForegroundColor Magenta
         return "DRY-RUN-GUID"
     }
 
     # Remove any existing "CS2 Optimized" plans — idempotent re-run safety
     $existing = powercfg /list 2>&1
     foreach ($line in $existing) {
-        if ($line -match "CS2 Optimized" -and $line -match "([a-f0-9-]{36})") {
+        if ($line -match "CS2 Optimized" -and $line -match '\b([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\b') {
             $oldGuid = $Matches[1]
             Write-Debug "Removing existing CS2 Optimized plan: $oldGuid"
             powercfg /setactive SCHEME_BALANCED 2>&1 | Out-Null   # switch away first
@@ -156,19 +168,19 @@ function New-CS2PowerPlan {
 
     # Duplicate High Performance as base; fall back to Balanced on OEM systems where High Perf is removed
     $output = powercfg /duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>&1
-    if (-not ($output -match "([a-f0-9-]{36})")) {
+    if (-not ($output -match "([a-fA-F0-9-]{36})")) {
         Write-Warn "High Performance plan not found — falling back to Balanced as base."
         Write-Warn "The Balanced plan uses conservative defaults for some settings. All tiered"
         Write-Warn "settings (T1/T2/T3) will still be applied and override the Balanced defaults."
         $output = powercfg /duplicatescheme 381b4222-f694-41f0-9685-ff5bb260df2e 2>&1
     }
-    if ($output -match "([a-f0-9-]{36})") {
+    if ($output -match "([a-fA-F0-9-]{36})") {
         $guid = $Matches[1]
     } else {
         throw "Failed to create power plan (duplicatescheme returned no GUID). Output: $output"
     }
 
-    powercfg /changename $guid "CS2 Optimized (FPSHeaven 2026)" `
+    powercfg /changename $guid "CS2 Optimized" `
         "Tiered low-latency plan: T1 proven, T2 vendor-aware CPU/disk/USB, T3 C-states off" 2>&1 | Out-Null
 
     return $guid
@@ -193,8 +205,8 @@ function Apply-PowerPlan {
     $isAMD   = $chipVendor -eq "AMD"
     $isIntel = $chipVendor -eq "Intel"
     $vendor  = if ($isAMD) { "AMD" } elseif ($isIntel) { "Intel" } else { "Unknown" }
-    $applyT2 = $SCRIPT:Profile -in @("RECOMMENDED", "COMPETITIVE", "CUSTOM")
-    $applyT3 = $SCRIPT:Profile -in @("COMPETITIVE", "CUSTOM")
+    $applyT2 = $SCRIPT:Profile -in @("RECOMMENDED", "COMPETITIVE", "CUSTOM", "YOLO")
+    $applyT3 = $SCRIPT:Profile -in @("COMPETITIVE", "CUSTOM", "YOLO")
 
     # ── T1: Proven, always applied (SAFE+) ────────────────────────────────────
     Write-Step "T1: proven settings (always applied)..."
@@ -216,9 +228,11 @@ function Apply-PowerPlan {
     Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKIDLE 0 "Disk idle timeout (never)"
     $t1Count++
 
-    # AHCI HIPM only (T1 safe state) — T2 will set to 0 (fully off) for RECOMMENDED+
-    Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKPOWERMGMT 1 "AHCI LPM (HIPM-only, T1 safe)"
-    $t1Count++
+    # AHCI HIPM only (T1 safe state) — only apply if T2 won't override to fully-off
+    if (-not $applyT2) {
+        Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKPOWERMGMT 1 "AHCI LPM (HIPM-only, T1 safe)"
+        $t1Count++
+    }
 
     # Sleep/hibernate — never sleep during long gaming sessions
     Set-PowerPlanValue $PlanGuid $PP_SUB_SLEEP $PP_STANDBYIDLE 0 "Standby timeout (never)"
@@ -236,7 +250,8 @@ function Apply-PowerPlan {
     Set-PowerPlanValue $PlanGuid $PP_SUB_PCIE $PP_ASPM 0 "PCIe ASPM (off — prevents mid-frame link state exit)"
     $t1Count++
 
-    Write-OK "T1: $t1Count settings applied."
+    $t1Verb = if ($SCRIPT:DryRun) { "previewed" } else { "applied" }
+    Write-OK "T1: $t1Count settings $t1Verb."
 
     # ── T2: RECOMMENDED+ — setup-dependent, vendor-aware ──────────────────────
     if ($applyT2) {
@@ -289,7 +304,8 @@ function Apply-PowerPlan {
         Set-PowerPlanValue $PlanGuid $PP_SUB_GPUPREF $PP_GPUPREF 4 "GPU preference (high performance)"
 
         $t2Count = if ($isIntel) { 16 } else { 15 }
-        Write-OK "T2: $t2Count settings applied ($vendor config)."
+        $t2Verb = if ($SCRIPT:DryRun) { "previewed" } else { "applied" }
+        Write-OK "T2: $t2Count settings $t2Verb ($vendor config)."
     }
 
     # ── T3: COMPETITIVE+ — community consensus, thermal trade-offs ─────────────
@@ -320,6 +336,7 @@ function Apply-PowerPlan {
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFDECRTIME 250000 "Perf decrease time (250ms)"
 
         $t3Count = if ($skipCstateDisable) { 4 } else { 5 }
-        Write-OK "T3: $t3Count settings applied.$(if ($skipCstateDisable) { ' (C-states kept enabled — X3D single-CCD)' })"
+        $t3Verb = if ($SCRIPT:DryRun) { "previewed" } else { "applied" }
+        Write-OK "T3: $t3Count settings $t3Verb.$(if ($skipCstateDisable) { ' (C-states kept enabled — X3D single-CCD)' })"
     }
 }

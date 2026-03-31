@@ -55,6 +55,10 @@ progress.md
 # Test artifacts
 testResults.xml
 
+# Debug scripts
+debug-*.bat
+debug-*.ps1
+
 # Temp
 *.tmp
 *.bak

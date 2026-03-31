@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/hardware-detect.ps1  —  RAM, GPU, NIC, Chipset Detection
 # ==============================================================================
 
@@ -11,38 +11,41 @@ function Get-RamInfo {
         $totalGB = [math]::Round(($sticks | Measure-Object Capacity -Sum).Sum / 1GB, 0)
         $speedMhz = ($sticks | Select-Object -First 1).Speed
         $configMhz = ($sticks | Select-Object -First 1).ConfiguredClockSpeed
-        # DDR5 note: Win32_PhysicalMemory.Speed reports the module's rated MT/s (e.g., 5600)
-        # and ConfiguredClockSpeed reports the actual clock speed in MHz (e.g., 2800 for DDR5-5600).
-        # DDR5 is double-data-rate, so ConfiguredClockSpeed = Speed / 2 when XMP is active.
         # Detect DDR type from SMBIOSMemoryType: 34 = DDR5, 26 = DDR4, 24 = DDR3.
         $memType = ($sticks | Select-Object -First 1).SMBIOSMemoryType
         $isDDR5 = ($memType -eq 34)
-        # For DDR5: ConfiguredClockSpeed is the actual clock (half of transfer rate).
-        # XMP is active if ConfiguredClockSpeed >= 90% of (Speed / 2).
-        # For DDR4/DDR3: ConfiguredClockSpeed and Speed are both in MHz, use direct comparison.
-        # Use 95% threshold to reduce false positives on DDR5 where JEDEC
-        # speeds (e.g., 4800 MT/s) can be close to rated XMP speeds (e.g., 5200 MT/s).
-        # A 90% threshold would incorrectly flag JEDEC-only operation as "XMP active".
-        # Special case: DDR5 JEDEC baseline is 4800 MT/s. If the module reports
-        # <= 4800 MT/s, it's running at JEDEC spec, not XMP/EXPO — regardless of
-        # how close configMhz is to the threshold. Without this check, JEDEC-only
-        # DDR5-4800 sticks would be flagged as "XMP active".
-        $xmpActive = if ($configMhz -gt 0 -and $speedMhz -gt 0) {
-            if ($isDDR5 -and $speedMhz -le 4800) {
-                $false
-            } elseif ($isDDR5) {
-                $configMhz -ge ([math]::Floor($speedMhz / 2) * 0.95)
+
+        # Normalize ConfiguredClockSpeed to the same unit as Speed (MT/s for DDR5).
+        # Some systems report ConfiguredClockSpeed as clock MHz (half of MT/s),
+        # others report it in the same MT/s unit as Speed. Detect which by checking
+        # whether configMhz is roughly half of speedMhz or roughly equal.
+        $activeMTs = if ($isDDR5 -and $configMhz -gt 0 -and $speedMhz -gt 0) {
+            if ($configMhz -le ($speedMhz * 0.6)) {
+                $configMhz * 2   # clock MHz → MT/s
             } else {
-                $configMhz -ge ($speedMhz * 0.95)
+                $configMhz       # already MT/s
             }
+        } else {
+            $configMhz           # DDR4/DDR3: both values in MHz
+        }
+
+        # XMP/EXPO detection: WMI cannot reliably distinguish XMP from JEDEC when
+        # the module runs at its rated speed. We can only detect "below rated speed"
+        # (definitely not XMP) vs "at rated speed" (ambiguous — could be either).
+        # AtRatedSpeed=true means no action needed; AtRatedSpeed=false means the
+        # user should enable XMP/EXPO in BIOS to reach the module's rated speed.
+        $atRatedSpeed = if ($activeMTs -gt 0 -and $speedMhz -gt 0) {
+            $activeMTs -ge ($speedMhz * 0.95)
         } else { $false }
+
         return @{
-            TotalGB    = $totalGB
-            SpeedMhz   = $speedMhz        # Rated module frequency (MT/s for DDR5)
-            ActiveMhz  = $configMhz       # Actually active frequency (clock MHz)
-            Sticks     = $sticks.Count
-            IsDDR5     = $isDDR5
-            XmpActive  = $xmpActive
+            TotalGB      = $totalGB
+            SpeedMhz     = $speedMhz        # Rated module speed (MT/s for DDR5)
+            ActiveMhz    = $activeMTs        # Running speed, normalized to same unit as SpeedMhz
+            Sticks       = $sticks.Count
+            IsDDR5       = $isDDR5
+            XmpActive    = $atRatedSpeed     # Compat: true = at rated speed, false = below rated
+            AtRatedSpeed = $atRatedSpeed
         }
     } catch {
         Write-Debug "RAM info error: $_"
@@ -111,7 +114,7 @@ function Parse-BenchmarkOutput($text) {
 function Calculate-FpsCap($avgFps) {
     # Use [math]::Floor instead of [int] cast to avoid banker's rounding
     # (PowerShell [int] cast uses MidpointRounding.ToEven, e.g. [int]2.5 = 2, [int]3.5 = 4)
-    return [math]::Max($CFG_FpsCap_Min, [math]::Floor($avgFps - [math]::Round($avgFps * $CFG_FpsCap_Percent)))
+    return [math]::Max($CFG_FpsCap_Min, [math]::Floor($avgFps - [math]::Floor($avgFps * $CFG_FpsCap_Percent)))
 }
 
 # ── Steam + CS2 Install Path ─────────────────────────────────────────────────
@@ -175,8 +178,14 @@ function Get-ActiveNicAdapter {
         $filterPattern = "Wi-Fi|Wireless"
         # NOTE: $CFG_VirtualAdapterFilter is a regex alternation pattern (e.g., "Hyper-V|VPN|Virtual")
         # — metacharacters in adapter names would need escaping before inclusion here.
-        if ($CFG_VirtualAdapterFilter) {
-            $filterPattern = "$filterPattern|$CFG_VirtualAdapterFilter"
+        if ((Get-Variable -Name CFG_VirtualAdapterFilter -ErrorAction SilentlyContinue) -and $CFG_VirtualAdapterFilter) {
+            try {
+                $testPattern = "$filterPattern|$CFG_VirtualAdapterFilter"
+                $null = [regex]$testPattern
+                $filterPattern = $testPattern
+            } catch {
+                Write-Debug "CFG_VirtualAdapterFilter contains invalid regex — ignored: $_"
+            }
         }
         return Get-NetAdapter -ErrorAction Stop | Where-Object {
             $_.Status -eq "Up" -and

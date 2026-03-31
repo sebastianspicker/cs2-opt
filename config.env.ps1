@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  config.env.ps1  —  Central Configuration · CS2 Optimization Suite
 # ==============================================================================
 #
@@ -65,7 +65,7 @@ $CFG_Autostart_Remove = @(
     "OneDrive","Spotify","Discord","Teams","Skype",
     "AdobeUpdater","AdobeGCInvoker","CCleaner",
     "Dropbox","GoogleDriveFS","EpicGamesLauncher",
-    "NVDisplay.ContainerLocalSystem","RTSS"
+    "RTSS"
 )
 
 # ── Services to disable ───────────────────────────────────────────────────────
@@ -171,9 +171,9 @@ $CFG_CS2_Autoexec = [ordered]@{
     "cl_timeout"                                   = "30"
     "net_client_steamdatagram_enable_override"     = "1"
     # ── Engine / FPS ──────────────────────────────────────────────────────
-    "engine_low_latency_sleep_after_client_tick"   = "1"
+    "engine_low_latency_sleep_after_client_tick"   = "1"     # NOTE: no-op with fps_max 0 — activates when user sets fps_max via FPS Cap Calculator
     "engine_no_focus_sleep"                        = "0"
-    "fps_max"                                      = "0"
+    "fps_max"                                      = "0"     # Uncapped default — use FPS Cap Calculator to set optimal cap (enables low_latency_sleep above)
     "fps_max_ui"                                   = "200"
     "fps_max_tools"                                = "144"
     # ── Gameplay ──────────────────────────────────────────────────────────

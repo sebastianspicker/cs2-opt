@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/logging.ps1  —  Logging, Console Output, Banners
 # ==============================================================================
 
@@ -81,7 +81,7 @@ function Write-TierBadge($tier, $label) {
         3 { "$icon [T3 Community] Community Consensus" }
         default { "? [T?] Unknown Tier" }
     }
-    Write-Host "  $badge  —  $label" -ForegroundColor $color
+    Write-Host "  $badge  $([char]0x2014)  $label" -ForegroundColor $color
     Write-Log "T$tier" "$label"
 }
 
@@ -91,15 +91,15 @@ function Write-Section($title) {
     Write-Host "  $([char]0x2551)  $title  $([char]0x2551)" -ForegroundColor Cyan
     Write-Host "  $([char]0x255A)$pad$([char]0x255D)" -ForegroundColor DarkCyan
     # Show step progress when $SCRIPT:PhaseTotal is set and title contains "Step N"
-    if ($SCRIPT:PhaseTotal -and $title -match '^Step\s+(\d+)') {
+    if ((Get-Variable -Name PhaseTotal -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:PhaseTotal -and $title -match '^Step\s+(\d+)') {
         $stepNum = [int]$Matches[1]
         $pct = [math]::Round($stepNum / $SCRIPT:PhaseTotal * 100)
         $barLen = 30
         $filled = [math]::Round($pct / 100 * $barLen)
         $empty  = $barLen - $filled
         $bar = "$([char]0x2588)" * $filled + "$([char]0x2591)" * $empty
-        $phaseLabel = if ($SCRIPT:PhaseTotal -gt 20) { "Phase 1" } else { "Phase 3" }
-        Write-Host "  $bar  $phaseLabel  $([char]0x2502)  $stepNum / $($SCRIPT:PhaseTotal)  ($pct%)" -ForegroundColor DarkGray
+        $phaseLabel = if ((Get-Variable -Name CurrentPhase -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentPhase) { "Phase $($SCRIPT:CurrentPhase)" } else { "" }
+        Write-Host "  $bar  $phaseLabel  $([char]0x2502)  $stepNum / $($SCRIPT:PhaseTotal)  ($($pct)%)" -ForegroundColor DarkGray
     }
     Write-Log "SECTION" "=== $title ==="
 }
@@ -141,21 +141,23 @@ function Write-PhaseSummary {
         [switch]$DryRun
     )
 
+    if ($null -eq $global:_phaseApplied) { $global:_phaseApplied = 0 }
+    if ($null -eq $global:_phaseSkipped) { $global:_phaseSkipped = 0 }
+    if ($null -eq $global:_phaseFailed)  { $global:_phaseFailed  = 0 }
     $applied = [int]$global:_phaseApplied
     $skipped = [int]$global:_phaseSkipped
     $failed  = [int]$global:_phaseFailed
-    $total   = $applied + $skipped + $failed
 
     Write-Blank
     if ($DryRun) {
-        Write-Host "  $([char]0x2554)$([char]0x2550 * 58)$([char]0x2557)" -ForegroundColor Magenta
+        Write-Host "  $([char]0x2554)$("$([char]0x2550)" * 58)$([char]0x2557)" -ForegroundColor Magenta
         Write-Host "  $([char]0x2551)  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  $PhaseLabel PREVIEW COMPLETE$(' ' * [math]::Max(0, 32 - $PhaseLabel.Length))$([char]0x2551)" -ForegroundColor Magenta
         Write-Host "  $([char]0x2551)  No changes were applied. To run for real:$(' ' * 14)$([char]0x2551)" -ForegroundColor Magenta
         Write-Host "  $([char]0x2551)  START.bat -> [1] -> choose a live profile$(' ' * 13)$([char]0x2551)" -ForegroundColor Magenta
-        Write-Host "  $([char]0x255A)$([char]0x2550 * 58)$([char]0x255D)" -ForegroundColor Magenta
+        Write-Host "  $([char]0x255A)$("$([char]0x2550)" * 58)$([char]0x255D)" -ForegroundColor Magenta
     } else {
         $borderColor = if ($failed -gt 0) { "Yellow" } else { "Green" }
-        Write-Host "  $([char]0x2554)$([char]0x2550 * 58)$([char]0x2557)" -ForegroundColor $borderColor
+        Write-Host "  $([char]0x2554)$("$([char]0x2550)" * 58)$([char]0x2557)" -ForegroundColor $borderColor
         Write-Host "  $([char]0x2551)  $PhaseLabel COMPLETE$(' ' * [math]::Max(0, 44 - $PhaseLabel.Length))$([char]0x2551)" -ForegroundColor $borderColor
         Write-Host "  $([char]0x2551)$(' ' * 58)$([char]0x2551)" -ForegroundColor $borderColor
         Write-Host "  $([char]0x2551)  $([char]0x2714) Applied:  $applied$(' ' * [math]::Max(0, 46 - "$applied".Length))$([char]0x2551)" -ForegroundColor Green
@@ -173,7 +175,7 @@ function Write-PhaseSummary {
                 Write-Host "  $([char]0x2551)  $line$(' ' * [math]::Max(0, 56 - $line.Length))$([char]0x2551)" -ForegroundColor $borderColor
             }
         }
-        Write-Host "  $([char]0x255A)$([char]0x2550 * 58)$([char]0x255D)" -ForegroundColor $borderColor
+        Write-Host "  $([char]0x255A)$("$([char]0x2550)" * 58)$([char]0x255D)" -ForegroundColor $borderColor
     }
     Write-Info "Log: $CFG_LogFile"
 }
@@ -202,19 +204,20 @@ function Write-Banner($phase, $total, $subtitle) {
         "RECOMMENDED" { "T1 auto. T2 prompted. T3 skipped." }
         "COMPETITIVE" { "T1 auto. T2+T3 prompted (up to AGGRESSIVE)." }
         "CUSTOM"      { "Everything prompted with full detail cards." }
+        "YOLO"        { "ALL tiers auto-applied (up to AGGRESSIVE). Zero prompts." }
         default       { "" }
     }
     if ($profileDesc) {
         Write-Host "  Profile: $profileDesc" -ForegroundColor DarkGray
     }
     Write-Host "" ; Write-Host "  Tier Legend:" -ForegroundColor White
-    Write-Host "  $([char]0x2714) [T1 Safe]        Proven effect — auto-applied" -ForegroundColor Green
-    Write-Host "  $([char]0x25B2) [T2 Moderate]    Setup-dependent — prompted" -ForegroundColor Yellow
-    Write-Host "  $([char]0x25C6) [T3 Community]   Community tip — COMPETITIVE/CUSTOM only" -ForegroundColor DarkCyan
+    Write-Host "  $([char]0x2714) [T1 Safe]        Proven effect $([char]0x2014) auto-applied" -ForegroundColor Green
+    Write-Host "  $([char]0x25B2) [T2 Moderate]    Setup-dependent $([char]0x2014) prompted" -ForegroundColor Yellow
+    Write-Host "  $([char]0x25C6) [T3 Community]   Community tip $([char]0x2014) COMPETITIVE/CUSTOM only" -ForegroundColor DarkCyan
     Write-Host "  Risk: $([char]0x2714) SAFE  $([char]0x25B2) MODERATE  $([char]0x25C6) AGGRESSIVE  $([char]0x2718) CRITICAL" -ForegroundColor DarkGray
-    Write-Host "  $("─" * 60)" -ForegroundColor DarkGray
+    Write-Host "  $("$([char]0x2500)" * 60)" -ForegroundColor DarkGray
     Write-Host "  DISCLAIMER: Use at your own risk. We take no responsibility" -ForegroundColor DarkRed
     Write-Host "  for any damage whatsoever. Always create a restore point." -ForegroundColor DarkRed
-    Write-Host "  $("─" * 60)" -ForegroundColor DarkGray
+    Write-Host "  $("$([char]0x2500)" * 60)" -ForegroundColor DarkGray
     Write-Blank
 }

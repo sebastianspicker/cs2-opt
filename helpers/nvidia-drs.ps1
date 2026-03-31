@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/nvidia-drs.ps1  —  NVIDIA DRS (Driver Registry Store) via nvapi64.dll
 # ==============================================================================
 #
@@ -114,24 +114,31 @@ public class NvApiDrs
     //  NVDRS_APPLICATION_V1 (4104 bytes):
     //    version(4) + isPredefined(4) + appName(4096)
     //
+    //  NVDRS_APPLICATION_V3 (16392 bytes):
+    //    version(4) + isPredefined(4) + appName(4096) +
+    //    userFriendlyName(4096) + launcher(4096) + fileInFolder(4096)
+    //
     //  NOTE on NVDRS_APPLICATION versions:
-    //    V1 (4104 bytes, version tag 0x00011008) is the minimum supported struct.
-    //    Later versions (V3, V4) add fields like userFriendlyName, launcher, etc.
-    //    NVAPI is backward-compatible: passing a V1 struct to DRS_CreateApplication
-    //    and DRS_FindAppByName works on all driver versions. The driver reads the
-    //    version tag to determine which fields are present. V1 is sufficient for
-    //    binding cs2.exe to a profile — the extra V3/V4 fields are optional metadata.
+    //    V1 was the minimum supported struct, but NVIDIA drivers 595.xx+ (2026)
+    //    return INCOMPATIBLE_STRUCT_VERSION (-9) when V1 is passed to
+    //    DRS_CreateApplication and DRS_FindApplicationByName.
+    //    V3 (16392 bytes, version tag 0x00034008) is the standard version used
+    //    by NVIDIA Profile Inspector and NvAPIWrapper. Extra V3 fields
+    //    (userFriendlyName, launcher, fileInFolder) are left zeroed when creating
+    //    applications — the driver only requires appName.
     //
     private const int UNICODE_STR_BYTES = 4096;
 
     private const int SETTING_SIZE = 12320;
     private const int PROFILE_SIZE = 4116;
     private const int APP_V1_SIZE  = 4104;
+    private const int APP_V3_SIZE  = 16392;    // V3: V1 + userFriendlyName + launcher + fileInFolder
 
     // Version constants: sizeof(struct) | (version << 16)
     private const uint SETTING_VER1 = 0x00013020;   // 12320 | (1 << 16)
     private const uint PROFILE_VER1 = 0x00011014;   //  4116 | (1 << 16)
     private const uint APP_VER1     = 0x00011008;   //  4104 | (1 << 16)
+    private const uint APP_VER3     = 0x00034008;   // 16392 | (3 << 16)
 
     // ── Field offsets ──────────────────────────────────────────────────────
     // NVDRS_SETTING_V1
@@ -158,6 +165,7 @@ public class NvApiDrs
     // ── NVAPI status codes ─────────────────────────────────────────────────
     public const int OK                          =    0;
     public const int ERROR                       =   -1;
+    public const int INCOMPATIBLE_STRUCT_VERSION =   -9;
     public const int SETTING_NOT_FOUND           = -174;
     public const int PROFILE_NOT_FOUND           = -175;
     public const int EXECUTABLE_ALREADY_IN_USE   = -179;
@@ -287,13 +295,14 @@ public class NvApiDrs
     /// <summary>
     /// Find which profile an executable is bound to.
     /// Returns IntPtr.Zero if the exe is not in any profile.
+    /// Uses V3 APPLICATION struct (required by drivers 595.xx+).
     /// </summary>
     public static IntPtr FindApplicationProfile(IntPtr session, string exeName)
     {
         byte[] nameBuffer = new byte[UNICODE_STR_BYTES];
         WriteUnicodeString(nameBuffer, 0, exeName);
-        byte[] appBuffer = new byte[APP_V1_SIZE];
-        BitConverter.GetBytes(APP_VER1).CopyTo(appBuffer, APP_OFF_VERSION);
+        byte[] appBuffer = new byte[APP_V3_SIZE];
+        BitConverter.GetBytes(APP_VER3).CopyTo(appBuffer, APP_OFF_VERSION);
 
         GCHandle nameHandle = GCHandle.Alloc(nameBuffer, GCHandleType.Pinned);
         GCHandle appHandle  = GCHandle.Alloc(appBuffer, GCHandleType.Pinned);
@@ -313,13 +322,13 @@ public class NvApiDrs
     }
 
     /// <summary>
-    /// Bind an executable to a profile. Silently succeeds if already bound
-    /// to this profile (-179 = EXECUTABLE_ALREADY_IN_USE is suppressed).
+    /// Bind an executable to a profile.
+    /// Uses V3 APPLICATION struct (required by drivers 595.xx+).
     /// </summary>
     public static void AddApplication(IntPtr session, IntPtr profile, string exeName)
     {
-        byte[] app = new byte[APP_V1_SIZE];
-        BitConverter.GetBytes(APP_VER1).CopyTo(app, APP_OFF_VERSION);
+        byte[] app = new byte[APP_V3_SIZE];
+        BitConverter.GetBytes(APP_VER3).CopyTo(app, APP_OFF_VERSION);
         WriteUnicodeString(app, APP_OFF_NAME, exeName);
 
         GCHandle handle = GCHandle.Alloc(app, GCHandleType.Pinned);
@@ -396,8 +405,10 @@ function Initialize-NvApiDrs {
         Returns $false on AMD/Intel GPUs, missing DLL, or compilation failure.
         Result is cached — safe to call multiple times.
     #>
-    if ($SCRIPT:NvApiAvailable -eq $true) { return $true }
-    if ($SCRIPT:NvApiAvailable -eq $false) { return $false }  # Don't re-attempt after a failure
+    if ((Get-Variable -Name NvApiAvailable -Scope Script -ErrorAction SilentlyContinue)) {
+        if ($SCRIPT:NvApiAvailable -eq $true) { return $true }
+        if ($SCRIPT:NvApiAvailable -eq $false) { return $false }  # Don't re-attempt after a failure
+    }
 
     # Only attempt on x64 PowerShell — nvapi64.dll is a native x64 binary.
     # ARM64 PowerShell has [IntPtr]::Size == 8 but cannot load x64 DLLs via Add-Type P/Invoke.
@@ -454,6 +465,12 @@ function Invoke-DrsSession {
         [Parameter(Mandatory)][scriptblock]$Action,
         [switch]$NoSave
     )
+
+    # Guard against writes during dry-run — NVAPI bypasses Set-RegistryValue's dry-run interceptor
+    if (-not $NoSave -and (Get-Variable -Name DryRun -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would execute NVAPI DRS session (write mode)" -ForegroundColor Magenta
+        return
+    }
 
     $session = [IntPtr]::Zero
     try {

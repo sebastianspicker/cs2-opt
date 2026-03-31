@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/tier-system.Tests.ps1  --  Profile, tier, and risk system tests
 # ==============================================================================
 
@@ -68,6 +68,23 @@ Describe "Test-RiskAllowed" {
         }
     }
 
+    Context "YOLO profile (max risk = AGGRESSIVE)" {
+        BeforeEach { $SCRIPT:Profile = "YOLO" }
+
+        It "allows SAFE risk" {
+            Test-RiskAllowed -StepRisk "SAFE" | Should -Be $true
+        }
+        It "allows MODERATE risk" {
+            Test-RiskAllowed -StepRisk "MODERATE" | Should -Be $true
+        }
+        It "allows AGGRESSIVE risk" {
+            Test-RiskAllowed -StepRisk "AGGRESSIVE" | Should -Be $true
+        }
+        It "blocks CRITICAL risk" {
+            Test-RiskAllowed -StepRisk "CRITICAL" | Should -Be $false
+        }
+    }
+
     Context "CUSTOM profile (max risk = CRITICAL)" {
         BeforeEach { $SCRIPT:Profile = "CUSTOM" }
 
@@ -94,8 +111,9 @@ Describe "Test-RiskAllowed" {
         It "blocks unknown risk level for safety" {
             $SCRIPT:Profile = "CUSTOM"
             # Unknown risk should be blocked even in CUSTOM profile
-            Mock Write-Warn {} -Verifiable
+            Mock Write-Warn {}
             Test-RiskAllowed -StepRisk "UNKNOWN_LEVEL" | Should -Be $false
+            Should -Invoke Write-Warn -Times 1
         }
 
         It "is case-insensitive for profile names" {
@@ -122,6 +140,11 @@ Describe "Get-ProfileMaxRisk" {
 
     It "COMPETITIVE -> AGGRESSIVE" {
         $SCRIPT:Profile = "COMPETITIVE"
+        Get-ProfileMaxRisk | Should -Be "AGGRESSIVE"
+    }
+
+    It "YOLO -> AGGRESSIVE" {
+        $SCRIPT:Profile = "YOLO"
         Get-ProfileMaxRisk | Should -Be "AGGRESSIVE"
     }
 
@@ -258,7 +281,7 @@ Describe "Invoke-TieredStep" {
     }
 
     Context "DRY-RUN modifier" {
-        It "DRY-RUN runs action but marks as dry run" {
+        It "DRY-RUN runs action but returns false (preview only)" {
             $SCRIPT:Profile = "RECOMMENDED"
             $SCRIPT:DryRun = $true
             $state = @{ executed = $false }
@@ -266,7 +289,7 @@ Describe "Invoke-TieredStep" {
             $result = Invoke-TieredStep -Tier 1 -Title "Test DryRun" -Why "Testing" `
                 -Risk "SAFE" -Action { $state.executed = $true }
 
-            $result          | Should -Be $true
+            $result          | Should -Be $false
             $state.executed  | Should -Be $true
         }
 
@@ -345,6 +368,58 @@ Describe "Invoke-TieredStep" {
         }
     }
 
+    Context "YOLO profile (auto-execute all, no prompts)" {
+        It "T1 auto-runs in YOLO profile without Read-Host" {
+            $SCRIPT:Profile = "YOLO"
+            $state = @{ executed = $false }
+            Mock Read-Host { throw "Read-Host should not be called in YOLO" }
+
+            $result = Invoke-TieredStep -Tier 1 -Title "Test YOLO T1" -Why "Testing" `
+                -Risk "SAFE" -Action { $state.executed = $true }
+
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
+            Should -Not -Invoke Read-Host
+        }
+
+        It "T2 MODERATE auto-runs in YOLO profile without Read-Host" {
+            $SCRIPT:Profile = "YOLO"
+            $state = @{ executed = $false }
+            Mock Read-Host { throw "Read-Host should not be called in YOLO" }
+
+            $result = Invoke-TieredStep -Tier 2 -Title "Test YOLO T2" -Why "Testing" `
+                -Risk "MODERATE" -Action { $state.executed = $true }
+
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
+            Should -Not -Invoke Read-Host
+        }
+
+        It "T3 AGGRESSIVE auto-runs in YOLO profile without Read-Host" {
+            $SCRIPT:Profile = "YOLO"
+            $state = @{ executed = $false }
+            Mock Read-Host { throw "Read-Host should not be called in YOLO" }
+
+            $result = Invoke-TieredStep -Tier 3 -Title "Test YOLO T3" -Why "Testing" `
+                -Risk "AGGRESSIVE" -Action { $state.executed = $true }
+
+            $result          | Should -Be $true
+            $state.executed  | Should -Be $true
+            Should -Not -Invoke Read-Host
+        }
+
+        It "T2 CRITICAL is skipped in YOLO profile (exceeds AGGRESSIVE ceiling)" {
+            $SCRIPT:Profile = "YOLO"
+            $state = @{ executed = $false }
+
+            $result = Invoke-TieredStep -Tier 2 -Title "Test YOLO Critical" -Why "Testing" `
+                -Risk "CRITICAL" -Action { $state.executed = $true }
+
+            $result          | Should -Be $false
+            $state.executed  | Should -Be $false
+        }
+    }
+
     Context "SkipAction callback" {
         It "calls SkipAction when step is skipped" {
             $SCRIPT:Profile = "SAFE"
@@ -357,6 +432,21 @@ Describe "Invoke-TieredStep" {
 
             $state.skipCalled | Should -Be $true
         }
+    }
+}
+
+# ── Test-YoloProfile ─────────────────────────────────────────────────────────
+Describe "Test-YoloProfile" {
+    BeforeEach { Reset-TestState }
+
+    It "returns true when profile is YOLO" {
+        $SCRIPT:Profile = "YOLO"
+        Test-YoloProfile | Should -Be $true
+    }
+
+    It "returns false for other profiles" {
+        $SCRIPT:Profile = "RECOMMENDED"
+        Test-YoloProfile | Should -Be $false
     }
 }
 

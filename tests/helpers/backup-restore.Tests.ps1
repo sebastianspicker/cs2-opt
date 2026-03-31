@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/backup-restore.Tests.ps1  --  Backup & restore system tests
 # ==============================================================================
 
@@ -54,7 +54,7 @@ Describe "Initialize-Backup" {
 
         Initialize-Backup
 
-        Should -Invoke Write-Warn -Times 1 -Exactly:$false
+        Should -Invoke Write-Warn -Exactly -Times 1
     }
 }
 
@@ -491,7 +491,7 @@ Describe "Backup-ServiceState" {
 
         Mock Get-ItemProperty {
             [PSCustomObject]@{ DelayedAutostart = 0 }
-        }
+        } -ParameterFilter { $Name -eq "DelayedAutostart" -or $Path -like "*\Services\*" }
 
         Backup-ServiceState -ServiceName "TestSvc" -StepTitle "Service Step"
 
@@ -544,8 +544,9 @@ Describe "Backup lock system" {
     }
 
     It "Test-BackupLock cleans stale lock from dead process" {
-        # Write a lock with a PID that definitely doesn't exist
-        $fakeLock = @{ pid = 99999999; started = "2026-01-01 00:00:00" }
+        # Use a recent timestamp so the 4-hour expiry does NOT fire first
+        $recentTime = (Get-Date).AddMinutes(-10).ToString("yyyy-MM-dd HH:mm:ss")
+        $fakeLock = @{ pid = 99999999; started = $recentTime }
         $fakeLock | ConvertTo-Json | Set-Content $CFG_BackupLockFile -Encoding UTF8
 
         # Mock Get-Process to return null (process doesn't exist)
@@ -556,8 +557,9 @@ Describe "Backup lock system" {
     }
 
     It "Test-BackupLock detects PID reuse by non-PowerShell process" {
-        # Lock with a PID that is alive but NOT PowerShell (simulates PID reuse)
-        $fakeLock = @{ pid = 88888888; started = "2026-01-01 00:00:00" }
+        # Use a recent timestamp so the 4-hour expiry does NOT fire first
+        $recentTime = (Get-Date).AddMinutes(-10).ToString("yyyy-MM-dd HH:mm:ss")
+        $fakeLock = @{ pid = 88888888; started = $recentTime }
         $fakeLock | ConvertTo-Json | Set-Content $CFG_BackupLockFile -Encoding UTF8
 
         # Mock Get-Process to return a non-PowerShell process

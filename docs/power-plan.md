@@ -164,7 +164,7 @@ Disabling APST (`NVMe Power Management Off = 0`) keeps the drive in PS0 at all t
 powercfg /getactivescheme
 ```
 
-Should show "CS2 Optimized (FPSHeaven 2026)" with the plan's GUID.
+Should show "CS2 Optimized" with the plan's GUID.
 
 ### Check specific settings
 

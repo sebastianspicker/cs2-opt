@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/system-utils.Tests.ps1  --  JSON I/O, registry, boot config
 # ==============================================================================
 
@@ -49,9 +49,12 @@ Describe "Save-JsonAtomic" {
         Test-Path $path | Should -Be $true
     }
 
-    It "cleans up .tmp file on failure" {
+    It "cleans up .tmp file on failure and preserves existing target" {
         $path = "$SCRIPT:TestTempRoot\test-fail.json"
         $tmpPath = "$path.tmp"
+
+        # Pre-create target file to verify it survives a failed write
+        @{ original = "preserved" } | ConvertTo-Json | Set-Content $path -Encoding UTF8
 
         # Mock Move-Item to simulate failure after .tmp is written
         Mock Move-Item { throw "Simulated disk full" }
@@ -60,6 +63,10 @@ Describe "Save-JsonAtomic" {
 
         # .tmp file should be cleaned up
         Test-Path $tmpPath | Should -Be $false
+        # Original file should be preserved (atomic guarantee — no partial write)
+        Test-Path $path | Should -Be $true
+        $preserved = Get-Content $path -Raw | ConvertFrom-Json
+        $preserved.original | Should -Be "preserved"
     }
 
     It "preserves nested objects with default depth" {

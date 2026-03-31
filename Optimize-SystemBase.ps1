@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  Optimize-SystemBase.ps1  —  Steps 2-9: XMP, Shader, FSO, NVIDIA, Power,
 #                               HAGS, Pagefile, ReBAR
 # ==============================================================================
@@ -71,7 +71,7 @@ if ($startStep -le 2) {
                     Write-Host "  │  TM5 / HCI MemTest  (github.com/integrityhf/TM5)           │" -ForegroundColor DarkGray
                     Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
                     Write-Blank
-                    Read-Host "  [Enter] to continue (activate XMP in BIOS afterwards)"
+                    if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] to continue (activate XMP in BIOS afterwards)" }
                 }
             }
 
@@ -322,7 +322,7 @@ if ($startStep -le 5 -and $gpuInput -in @("1","2")) {
                     Write-OK "NVIDIA download page copied to clipboard."
                     if (-not $SCRIPT:DryRun) {
                         try {
-                            $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                            $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
                             $st | Add-Member -NotePropertyName "rollbackDriver" -NotePropertyValue $NVIDIA_STABLE_VERSION -Force
                             Save-JsonAtomic -Data $st -Path $CFG_StateFile
                         } catch { Write-Warn "Could not persist rollback flag: $_" }
@@ -369,17 +369,17 @@ if ($startStep -le 6) {
                 if (-not $SCRIPT:DryRun) {
                     powercfg /setactive $guid 2>&1 | Out-Null
                 } else {
-                    Write-Host "  [DRY-RUN] Would activate: CS2 Optimized (FPSHeaven 2026)" -ForegroundColor Magenta
+                    Write-Host "  [DRY-RUN] Would activate: CS2 Optimized" -ForegroundColor Magenta
                 }
 
                 $isAMD   = (Get-ChipsetVendor) -eq "AMD"
                 $vTag    = if ($isAMD) { "AMD" } else { "Intel" }
-                $applyT2 = $SCRIPT:Profile -in @("RECOMMENDED", "COMPETITIVE", "CUSTOM")
-                $applyT3 = $SCRIPT:Profile -in @("COMPETITIVE", "CUSTOM")
+                $applyT2 = $SCRIPT:Profile -in @("RECOMMENDED", "COMPETITIVE", "CUSTOM", "YOLO")
+                $applyT3 = $SCRIPT:Profile -in @("COMPETITIVE", "CUSTOM", "YOLO")
 
                 Write-Blank
                 Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Green
-                Write-Host "  │  CS2 Optimized (FPSHeaven 2026)  •  CPU vendor: $vTag$((' ' * (14 - $vTag.Length)))│" -ForegroundColor Green
+                Write-Host "  │  CS2 Optimized  •  CPU vendor: $vTag$((' ' * (31 - $vTag.Length)))│" -ForegroundColor Green
                 Write-Host "  ├──────────────────────────────────────────────────────────────┤" -ForegroundColor Green
                 Write-Host "  │  [T1] CPU max=100%, no parking, USB suspend off,             │" -ForegroundColor Green
                 Write-Host "  │       disk idle off, sleep/hibernate off, active cooling      │" -ForegroundColor Green
@@ -553,10 +553,12 @@ if ($startStep -le 8) {
             -Undo "Set AutomaticManagedPagefile = true in System Properties -> Advanced" `
             -Action {
                 Write-Info "Pagefile size: ${pfMB} MB (you can adjust)"
-                $pfIn = Read-Host "  Accept MB value? [Enter] or type new number"
-                if ($pfIn.Trim() -ne "") {
-                    $pfV = 0
-                    if ([int]::TryParse($pfIn,[ref]$pfV) -and $pfV -gt 0) { $pfMB = $pfV }
+                if (-not $SCRIPT:DryRun) {
+                    $pfIn = if (Test-YoloProfile) { "" } else { Read-Host "  Accept MB value? [Enter] or type new number" }
+                    if ($pfIn.Trim() -ne "") {
+                        $pfV = 0
+                        if ([int]::TryParse($pfIn,[ref]$pfV) -and $pfV -gt 0) { $pfMB = $pfV }
+                    }
                 }
                 if (-not $SCRIPT:DryRun) {
                     try {
@@ -631,7 +633,7 @@ if ($startStep -le 9) {
                 Write-Info "  4.  AMD specific: SAM / Smart Access Memory: ENABLED"
                 Write-Info "  5.  Save + restart"
                 Write-Info "  Verify: AMD Adrenalin -> System -> SmartAccess Memory: ON"
-                Read-Host "  [Enter] when done or to skip"
+                if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] when done or to skip" }
                 Complete-Step $PHASE 9 "ReBAR"
             } `
             -SkipAction { Skip-Step $PHASE 9 "ReBAR" }
@@ -652,7 +654,7 @@ if ($startStep -le 9) {
                 Write-Info "  3.  Advanced -> PCI Subsystem -> Re-Size BAR Support: ENABLED"
                 Write-Info "  4.  Save + restart"
                 Write-Info "  Verify: GPU-Z -> Advanced -> ReBAR: Yes"
-                Read-Host "  [Enter] when done or to skip"
+                if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] when done or to skip" }
                 Complete-Step $PHASE 9 "ReBAR"
             } `
             -SkipAction { Skip-Step $PHASE 9 "ReBAR" }

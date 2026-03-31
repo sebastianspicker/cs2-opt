@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/nvidia-driver.Tests.ps1  --  NVIDIA driver download & install
 # ==============================================================================
 
@@ -6,7 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 
     # Stub Windows-only cmdlets before loading the module
-    if (-not $IsWindows) {
+    if ($IsWindows -eq $false) {
         if (-not (Get-Command Start-Process -ErrorAction SilentlyContinue)) {
             function global:Start-Process { param($FilePath, $ArgumentList, [switch]$Wait, [switch]$PassThru, [switch]$NoNewWindow) $null }
         }
@@ -40,7 +40,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "detects RTX 40 series GPU" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 4090" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='https://us.download.nvidia.com/Windows/572.42/572.42-desktop-win10-win11-64bit-international-dch-whql.exe' Version: 572.42"
@@ -58,7 +58,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "detects RTX 30 series GPU" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 3080" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='https://us.download.nvidia.com/Windows/572.42/572.42.exe' Version: 572.42"
@@ -75,7 +75,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "detects GTX 16 series GPU" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce GTX 1660 Super" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='https://us.download.nvidia.com/Windows/572.42/572.42.exe' Version: 572.42"
@@ -92,7 +92,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "returns manual download for unrecognized series" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA Unknown Future GPU" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Write-Step {}
             Mock Write-Warn {}
             Mock Write-Info {}
@@ -106,7 +106,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "returns null when no NVIDIA GPU detected" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "AMD Radeon RX 7900 XTX" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Write-Step {}
             Mock Write-Warn {}
 
@@ -120,7 +120,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "rejects non-nvidia.com download URL" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 4090" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='https://evil.com/malware.exe' Version: 1.0"
@@ -138,7 +138,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "upgrades http to https" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 4090" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='http://us.download.nvidia.com/test.exe' Version: 1.0"
@@ -158,7 +158,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "prepends nvidia.com for relative URLs" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 4090" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='/Windows/572.42/driver.exe' Version: 572.42"
@@ -180,7 +180,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "extracts version number from response" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 4090" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest {
                 [PSCustomObject]@{
                     Content = "downloadURL='https://us.download.nvidia.com/Windows/572.42/driver.exe' Version: 572.42"
@@ -200,7 +200,7 @@ Describe "Get-LatestNvidiaDriver" {
         It "falls back to manual download on API error" {
             Mock Get-CimInstance {
                 [PSCustomObject]@{ Name = "NVIDIA GeForce RTX 4090" }
-            }
+            } -ParameterFilter { $ClassName -eq "Win32_VideoController" }
             Mock Invoke-WebRequest { throw "Connection timeout" }
             Mock Write-Step {}
             Mock Write-Warn {}
@@ -236,10 +236,11 @@ Describe "Install-NvidiaDriverClean" {
 
     It "rejects path with traversal sequences" {
         $SCRIPT:DryRun = $false
-        # Create a temporary file to pass the existence check
+        # Use a path with ".." that resolves outside the expected directory
         $tempFile = Join-Path $SCRIPT:TestTempRoot "..\..\evil.exe"
         Mock Write-Err {}
-        Mock Get-Item { [PSCustomObject]@{ PSIsContainer = $false } }
+        # Do NOT mock Get-Item — let the real path validation logic run.
+        # The function should reject the traversal before checking file existence.
 
         $result = Install-NvidiaDriverClean -DriverExe $tempFile
         $result | Should -Be $false

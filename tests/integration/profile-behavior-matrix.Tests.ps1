@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/integration/profile-behavior-matrix.Tests.ps1
 #  Test all profile x risk x tier combinations for correct behavior.
 # ==============================================================================
@@ -476,5 +476,71 @@ Describe "SkipAction callback fires correctly across profiles" {
             -Risk "SAFE" -Action { } -SkipAction { $state.skipCalled = $true }
 
         $state.skipCalled | Should -Be $false
+    }
+}
+
+# ── YOLO profile ────────────────────────────────────────────────────────────
+Describe "YOLO profile behavior matrix" {
+
+    BeforeEach {
+        Reset-TestState
+        $SCRIPT:Profile = "YOLO"
+        Mock Write-Blank {}
+        Mock Write-TierBadge {}
+        Mock Write-Host {}
+        Mock Write-Debug {}
+        Mock Write-Info {}
+        Mock Show-StepInfoCard {}
+        Mock Flush-BackupBuffer {}
+    }
+
+    It "T1/SAFE auto-executes without prompt" {
+        $state = @{ executed = $false }
+        Mock Read-Host { throw "YOLO should not prompt" }
+        Invoke-TieredStep -Tier 1 -Title "YOLO T1" -Why "Test" `
+            -Risk "SAFE" -Action { $state.executed = $true }
+        $state.executed | Should -Be $true
+        Should -Not -Invoke Read-Host
+    }
+
+    It "T2/MODERATE auto-executes without prompt" {
+        $state = @{ executed = $false }
+        Mock Read-Host { throw "YOLO should not prompt" }
+        Invoke-TieredStep -Tier 2 -Title "YOLO T2" -Why "Test" `
+            -Risk "MODERATE" -Action { $state.executed = $true }
+        $state.executed | Should -Be $true
+        Should -Not -Invoke Read-Host
+    }
+
+    It "T2/AGGRESSIVE auto-executes without prompt" {
+        $state = @{ executed = $false }
+        Mock Read-Host { throw "YOLO should not prompt" }
+        Invoke-TieredStep -Tier 2 -Title "YOLO T2 Agg" -Why "Test" `
+            -Risk "AGGRESSIVE" -Action { $state.executed = $true }
+        $state.executed | Should -Be $true
+        Should -Not -Invoke Read-Host
+    }
+
+    It "T3/MODERATE auto-executes without prompt" {
+        $state = @{ executed = $false }
+        Mock Read-Host { throw "YOLO should not prompt" }
+        Invoke-TieredStep -Tier 3 -Title "YOLO T3" -Why "Test" `
+            -Risk "MODERATE" -Action { $state.executed = $true }
+        $state.executed | Should -Be $true
+        Should -Not -Invoke Read-Host
+    }
+
+    It "T2/CRITICAL is SKIPPED (exceeds AGGRESSIVE ceiling)" {
+        $state = @{ executed = $false }
+        Invoke-TieredStep -Tier 2 -Title "YOLO Critical" -Why "Test" `
+            -Risk "CRITICAL" -Action { $state.executed = $true }
+        $state.executed | Should -Be $false
+    }
+
+    It "T3/CRITICAL is SKIPPED (exceeds AGGRESSIVE ceiling)" {
+        $state = @{ executed = $false }
+        Invoke-TieredStep -Tier 3 -Title "YOLO T3 Critical" -Why "Test" `
+            -Risk "CRITICAL" -Action { $state.executed = $true }
+        $state.executed | Should -Be $false
     }
 }

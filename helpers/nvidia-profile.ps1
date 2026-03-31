@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/nvidia-profile.ps1  —  NVIDIA CS2 Profile Settings (DRS + Registry)
 # ==============================================================================
 #
@@ -172,7 +172,7 @@ function Apply-NvidiaCS2Profile {
     # ── FPS cap override for FRL setting ────────────────────────────────────
     $frlValue = 500
     $frlLabel = "500 (effectively unlimited)"
-    if ($SCRIPT:fpsCap -and $SCRIPT:fpsCap -gt 0) {
+    if ((Get-Variable -Name fpsCap -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:fpsCap -gt 0) {
         $frlValue = $SCRIPT:fpsCap
         $frlLabel = "$($SCRIPT:fpsCap) (user FPS cap)"
     }
@@ -206,7 +206,9 @@ function Apply-NvidiaCS2Profile {
     $statusColor = if ($errorCount -eq 0) { "Green" } else { "Yellow" }
     $drsLabel = if ($errorCount -eq 0) { "$appliedCount DRS" } else { "$appliedCount/$settingCount DRS ($errorCount failed)" }
     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor $statusColor
-    Write-Host "  │  NVIDIA CS2 PROFILE — $drsLabel + 2 registry$((' ' * [math]::Max(0, 23 - $drsLabel.Length)))│" -ForegroundColor $statusColor
+    $contentStr = "  NVIDIA CS2 PROFILE — $drsLabel + 2 registry"
+    $padLen = [math]::Max(1, 64 - $contentStr.Length)
+    Write-Host "  │$contentStr$((' ' * $padLen))│" -ForegroundColor $statusColor
     Write-Host "  │                                                              │" -ForegroundColor Green
     Write-Host "  │  Method: DRS direct write (nvapi64.dll)                     │" -ForegroundColor White
     Write-Host "  │  Profile: Counter-strike 2  (cs2.exe / csgos2.exe)          │" -ForegroundColor White
@@ -245,6 +247,10 @@ function Apply-NvidiaCS2ProfileDrs {
         [string]$FrlLabel = "500"
     )
 
+    # Reset counters from any previous invocation in the same session
+    $SCRIPT:_drsApplied = 0
+    $SCRIPT:_drsErrors  = 0
+
     # Validate FRL value — prevent nonsensical caps from corrupting the DRS profile
     if ($FrlValue -le 0 -or $FrlValue -gt 1000) { $FrlValue = 500 }
 
@@ -282,21 +288,15 @@ function Apply-NvidiaCS2ProfileDrs {
             $drsProfile = [NvApiDrs]::FindApplicationProfile($session, "cs2.exe")
 
             if ($drsProfile -ne [IntPtr]::Zero) {
-                # cs2.exe found in a profile — verify it's not the Base Profile.
+                # cs2.exe found in a profile — check if it's the Base Profile.
                 # The Base Profile (aka "Global" / "_GLOBAL_DRIVER_PROFILE") is the
                 # default catch-all profile for all applications. Writing CS2-specific
                 # settings to it would affect EVERY application, not just CS2.
-                # Check by looking for a dedicated CS2 profile by name — if it doesn't
-                # exist but cs2.exe is registered, cs2.exe is in the Base Profile.
-                $dedicatedProfile = [IntPtr]::Zero
-                foreach ($name in @("Counter-strike 2", "Counter-Strike 2")) {
-                    $dedicatedProfile = [NvApiDrs]::FindProfileByName($session, $name)
-                    if ($dedicatedProfile -ne [IntPtr]::Zero) {
-                        $profileName = $name
-                        break
-                    }
-                }
-                if ($dedicatedProfile -eq [IntPtr]::Zero) {
+                # Detect the Base Profile by handle comparison, not by name search,
+                # so we always write to the profile that actually owns cs2.exe.
+                $baseProfile = [IntPtr]::Zero
+                try { $baseProfile = [NvApiDrs]::FindProfileByName($session, "_GLOBAL_DRIVER_PROFILE") } catch { }
+                if ($baseProfile -ne [IntPtr]::Zero -and $drsProfile -eq $baseProfile) {
                     # cs2.exe is in the Base Profile — create a dedicated profile and move it
                     Write-Debug "DRS: cs2.exe found in Base Profile — creating dedicated CS2 profile"
                     $profileName = "Counter-strike 2"
@@ -311,8 +311,10 @@ function Apply-NvidiaCS2ProfileDrs {
                         Write-Warn "DRS: AddApplication csgos2.exe to dedicated profile — $_"
                     }
                 } else {
-                    $drsProfile = $dedicatedProfile
-                    Write-Debug "DRS: Found existing dedicated profile '$profileName' for cs2.exe"
+                    # cs2.exe is in a non-Base profile — use that profile directly
+                    # (regardless of its name — it's the profile the driver reads for cs2.exe)
+                    $profileName = "(cs2.exe profile)"
+                    Write-Debug "DRS: cs2.exe found in dedicated profile (handle $drsProfile)"
                 }
             } else {
                 # cs2.exe not in any profile — search by known names
@@ -332,23 +334,29 @@ function Apply-NvidiaCS2ProfileDrs {
                     Write-Debug "DRS: Created profile '$profileName'"
                 }
 
-                # Bind applications
-                try { [NvApiDrs]::AddApplication($session, $drsProfile, "cs2.exe") } catch {
-                    Write-Warn "DRS: AddApplication cs2.exe — $_"
-                }
-                try { [NvApiDrs]::AddApplication($session, $drsProfile, "csgos2.exe") } catch {
-                    Write-Warn "DRS: AddApplication csgos2.exe — $_"
+                # Bind applications — only needed for newly created profiles.
+                # Predefined/existing profiles already have cs2.exe pre-bound
+                # in NVIDIA's shipped DRS database (nvdrs.dat).
+                if ($profileCreated) {
+                    try { [NvApiDrs]::AddApplication($session, $drsProfile, "cs2.exe") } catch {
+                        Write-Warn "DRS: AddApplication cs2.exe — $_"
+                    }
+                    try { [NvApiDrs]::AddApplication($session, $drsProfile, "csgos2.exe") } catch {
+                        Write-Warn "DRS: AddApplication csgos2.exe — $_"
+                    }
+                } else {
+                    Write-Debug "DRS: Profile '$profileName' found — cs2.exe pre-bound by NVIDIA, skipping AddApplication"
                 }
             }
 
             # ── Backup current DRS values ───────────────────────────────────
             # Backup failure must not abort the settings write — wrap separately
-            $effectiveTitle = if ($SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle } else { "NVIDIA CS2 DRS Profile" }
+            $effectiveTitle = if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle) { $SCRIPT:CurrentStepTitle } else { "NVIDIA CS2 DRS Profile" }
             try {
                 Backup-DrsSettings -Session $session -DrsProfile $drsProfile `
                     -SettingIds ($NV_DRS_SETTINGS | ForEach-Object { $_.Id }) `
                     -StepTitle $effectiveTitle `
-                    -ProfileName $(if ($profileName) { $profileName } else { $SCRIPT:DRS_FOUND_VIA_APP }) `
+                    -ProfileName $(if ($profileName) { $profileName } elseif ((Get-Variable -Name DRS_FOUND_VIA_APP -Scope Script -ErrorAction SilentlyContinue)) { $SCRIPT:DRS_FOUND_VIA_APP } else { "(found via cs2.exe)" }) `
                     -ProfileCreated $profileCreated
             } catch {
                 Write-Warn "DRS backup failed (settings will still be applied): $_"
@@ -357,6 +365,7 @@ function Apply-NvidiaCS2ProfileDrs {
             # ── Apply settings ──────────────────────────────────────────────
             $applied = 0
             $errors = 0
+            $failedIds = @()
             foreach ($s in $NV_DRS_SETTINGS) {
                 $writeValue = [uint32]$s.Value
 
@@ -371,11 +380,15 @@ function Apply-NvidiaCS2ProfileDrs {
                     $applied++
                 } catch {
                     Write-Debug "DRS: Failed to set $($s.Name) (0x$($s.Id.ToString('X'))): $_"
+                    $failedIds += "0x$($s.Id.ToString('X'))"
                     $errors++
                 }
             }
 
             Write-Debug "DRS: Applied $applied settings, $errors errors"
+            if ($failedIds.Count -gt 0) {
+                Write-Warn "DRS: $($failedIds.Count) setting(s) rejected by driver (non-fatal): $($failedIds -join ', ')"
+            }
             # Store counts for the caller's summary
             $SCRIPT:_drsApplied = $applied
             $SCRIPT:_drsErrors  = $errors

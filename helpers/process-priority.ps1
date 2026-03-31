@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/process-priority.ps1  —  Native Process Priority & CCD Affinity
 # ==============================================================================
 #
@@ -59,11 +59,12 @@ function Get-X3DCcdInfo {
             else { [math]::Floor($totalCores / 2) }
 
         # Build affinity mask for CCD0 (V-Cache CCD)
-        [long]$mask = 0
+        # Use [uint64] to avoid sign overflow on 64-core systems
+        [uint64]$mask = 0
         for ($i = 0; $i -lt $ccd0Cores; $i++) {
-            $mask = $mask -bor ([long]1 -shl $i)                     # First thread
-            if ($smtEnabled) {
-                $mask = $mask -bor ([long]1 -shl ($totalCores + $i))  # SMT partner
+            $mask = $mask -bor ([uint64]1 -shl $i)                     # First thread
+            if ($smtEnabled -and ($totalCores + $i) -lt 64) {
+                $mask = $mask -bor ([uint64]1 -shl ($totalCores + $i))  # SMT partner
             }
         }
 
@@ -135,7 +136,7 @@ function Set-CS2ProcessPriority {
                     Write-Host "  [DRY-RUN] Would set cs2.exe affinity to $($x3d.AffinityHex)" -ForegroundColor Magenta
                 } else {
                     try {
-                        $cs2 | ForEach-Object { $_.ProcessorAffinity = [IntPtr]$x3d.AffinityMask }
+                        $cs2 | ForEach-Object { $_.ProcessorAffinity = [IntPtr]::new([long]$x3d.AffinityMask) }
                         Write-OK "Applied CCD0 affinity to running cs2.exe ($($x3d.AffinityHex))"
                     } catch { Write-Warn "Could not set affinity on running cs2.exe: $_" }
                 }
@@ -165,7 +166,7 @@ function Install-CS2AffinityTask {
         A scheduled task runs this script every 2 minutes after logon.
         Each execution takes ~50ms and only modifies affinity if needed.
     #>
-    param([long]$AffinityMask, [string]$AffinityHex)
+    param([uint64]$AffinityMask, [string]$AffinityHex)
 
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would create scheduled task '$CS2_AffinityTaskName'" -ForegroundColor Magenta
@@ -190,6 +191,7 @@ function Install-CS2AffinityTask {
 # CS2 CCD Affinity Setter — created by CS2 Optimization Suite
 # Sets cs2.exe affinity to V-Cache CCD (mask: $AffinityHex)
 # Runs every 2 minutes via scheduled task. Each run takes ~50ms.
+`$global:_affinityErrors = 0
 [long]`$mask = $AffinityMask
 `$procs = Get-Process cs2 -ErrorAction SilentlyContinue
 if (`$procs) {
@@ -207,13 +209,14 @@ if (`$procs) {
     # Register scheduled task via XML for reliable logon trigger + repetition
     $escapedPath = [System.Security.SecurityElement]::Escape($CS2_AffinityScriptPath)
     $taskXml = @"
-<?xml version="1.0" encoding="UTF-16"?>
+<?xml version="1.0"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <Triggers>
     <LogonTrigger>
       <Enabled>true</Enabled>
       <Repetition>
         <Interval>PT2M</Interval>
+        <Duration>PT0S</Duration>
         <StopAtDurationEnd>false</StopAtDurationEnd>
       </Repetition>
     </LogonTrigger>

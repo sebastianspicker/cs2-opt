@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/process-priority.Tests.ps1  --  IFEO priority & X3D affinity
 # ==============================================================================
 
@@ -6,7 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 
     # Stub Windows-only cmdlets before loading the module
-    if (-not $IsWindows) {
+    if ($IsWindows -eq $false) {
         if (-not (Get-Command Get-Process -ErrorAction SilentlyContinue)) {
             function global:Get-Process { param($Name, $ErrorAction) $null }
         }
@@ -32,7 +32,7 @@ Describe "Get-X3DCcdInfo" {
     Context "Non-X3D CPUs" {
 
         It "returns null for Intel CPU" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "Intel Core i9-13900K"
                     NumberOfCores = 24
@@ -44,7 +44,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "returns null for AMD non-X3D CPU" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 7950X"
                     NumberOfCores = 16
@@ -56,7 +56,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "returns null when Get-CimInstance fails" {
-            Mock Get-CimInstance { throw "WMI unavailable" }
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } { throw "WMI unavailable" }
             $result = Get-X3DCcdInfo
             $result | Should -BeNullOrEmpty
         }
@@ -65,7 +65,7 @@ Describe "Get-X3DCcdInfo" {
     Context "Single-CCD X3D (no pinning needed)" {
 
         It "detects 7800X3D as single CCD" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 7 7800X3D"
                     NumberOfCores = 8
@@ -79,7 +79,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "detects 5800X3D as single CCD" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 7 5800X3D"
                     NumberOfCores = 8
@@ -92,7 +92,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "detects 9800X3D as single CCD" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 7 9800X3D"
                     NumberOfCores = 8
@@ -108,7 +108,7 @@ Describe "Get-X3DCcdInfo" {
     Context "Dual-CCD X3D (pinning required)" {
 
         It "detects 7950X3D as dual CCD" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 7950X3D"
                     NumberOfCores = 16
@@ -125,7 +125,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "detects 7900X3D as dual CCD" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 7900X3D"
                     NumberOfCores = 12
@@ -138,7 +138,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "detects 9950X3D as dual CCD" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 9950X3D"
                     NumberOfCores = 16
@@ -150,7 +150,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "detects 9900X3D as dual CCD with asymmetric 8+4 layout" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 9900X3D"
                     NumberOfCores = 12
@@ -164,7 +164,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "calculates correct affinity mask for 9900X3D with SMT (8+4 asymmetric)" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 9900X3D"
                     NumberOfCores = 12
@@ -178,7 +178,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "calculates correct affinity mask for 7950X3D with SMT" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 7950X3D"
                     NumberOfCores = 16
@@ -192,7 +192,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "calculates correct affinity mask for 7900X3D with SMT" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 7900X3D"
                     NumberOfCores = 12
@@ -206,7 +206,7 @@ Describe "Get-X3DCcdInfo" {
         }
 
         It "includes hex representation" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen 9 7950X3D"
                     NumberOfCores = 16
@@ -221,7 +221,7 @@ Describe "Get-X3DCcdInfo" {
     Context "Unknown X3D variant" {
 
         It "returns IsX3D=true with DualCCD=null for unknown model" {
-            Mock Get-CimInstance {
+            Mock Get-CimInstance -ParameterFilter { $ClassName -eq "Win32_Processor" } {
                 [PSCustomObject]@{
                     Name = "AMD Ryzen X3D Future Model"
                     NumberOfCores = 32

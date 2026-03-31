@@ -22,27 +22,7 @@ If you are not an administrator, the launcher automatically re-elevates via `Sta
 
 The first screen after launch. Shows the current state of your system at a glance.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   DASHBOARD                                              │
-│  ● Dashboard      │                                                          │
-│                   │  Hardware                              Phase Progress    │
-│  ○ Analyze        │  ┌────────────────┐ ┌──────────────┐                    │
-│  ○ Optimize       │  │ CPU            │ │ GPU          │  Phase 1  ▓▓▓▓▓▓▓▓ │
-│  ○ Backup         │  │ Ryzen 7950X3D  │ │ RTX 4090     │  Phase 2  ▓▓▓▓▓▓▓▓ │
-│  ○ Benchmark      │  │ 16C / 32T      │ │ 24 GB VRAM   │  Phase 3  ▓▓▓▓░░░░ │
-│  ○ Video          │  └────────────────┘ └──────────────┘                    │
-│  ○ Settings       │  ┌────────────────┐ ┌──────────────┐  Benchmark         │
-│                   │  │ RAM            │ │ OS           │  Avg FPS   387      │
-│                   │  │ 64 GB DDR5     │ │ Win 11 24H2  │  P1 FPS    312      │
-│                   │  │ 6000 MHz XMP   │ │ Build 26100  │  Ratio      0.81    │
-│                   │  └────────────────┘ └──────────────┘                    │
-│                   │                                                          │
-│  Profile: SAFE    │  [ ▶ Phase 1 ]  [ ▶ Phase 3 ]  [ 🗑 Cleanup ]           │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Dashboard](screenshots/01-dashboard.png)
 
 **Hardware cards** are populated asynchronously on first open (~1 second). They show CPU model, GPU model and VRAM, RAM size and detected speed, and Windows build.
 
@@ -58,32 +38,7 @@ The first screen after launch. Shows the current state of your system at a glanc
 
 Runs a non-destructive system health scan. No changes are made. Results take 5–15 seconds.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   ANALYZE  [Scan System]  [Export CSV]                  │
-│  ○ Dashboard      │                                                          │
-│  ○ Analyze ←      │  Category    Group      Setting              Status      │
-│  ○ Optimize       │  ─────────────────────────────────────────────────────  │
-│  ○ Backup         │  Hardware    Memory     Dual-Channel         ✓ OK        │
-│  ○ Benchmark      │  Hardware    Memory     XMP/EXPO Active      ✓ OK        │
-│  ○ Video          │  Hardware    Security   VBS/HVCI             ⚠ Enabled   │
-│  ○ Settings       │  Windows     Gaming     HAGS                 ✓ OK        │
-│                   │  Windows     Gaming     Game Mode            ✗ Off       │
-│                   │  Windows     Gaming     Game DVR             ✓ OK        │
-│                   │  Windows     Gaming     Fast Startup         ✗ On        │
-│                   │  Windows     Gaming     MPO                  ✓ OK        │
-│                   │  System      Scheduler  MMCSS Responsiveness ✗ Default   │
-│                   │  System      Scheduler  Win32PrioritySep     ✗ Default   │
-│                   │  Network     Stack      Nagle                ✓ OK        │
-│                   │  Network     Stack      IPv6                 ⚠ Active    │
-│                   │  CS2         Autoexec   m_rawinput           ✗ Missing   │
-│                   │  CS2         Video      Fullscreen           ✓ OK        │
-│                   │  ...                                                      │
-│                   │  12 issues found                                         │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Analyze](screenshots/02-analyze.png)
 
 **Status columns:**
 - `✓ OK` (green) — matches the recommended value
@@ -102,31 +57,7 @@ Each row includes a `StepRef` column showing which step addresses it (e.g., "Pha
 
 Shows the full step catalog — all 38 Phase 1 steps and all 13 Phase 3 steps — with their metadata. This is a read-only reference panel; steps run in the terminal.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   OPTIMIZE                                               │
-│  ○ Dashboard      │   Filter Phase: [All ▼]  Category: [All ▼]              │
-│  ○ Analyze        │   Risk: [All ▼]                                          │
-│  ○ Optimize ←     │                                                          │
-│  ○ Backup         │  Ph  Step  Category  Title                  Risk  Depth  │
-│  ○ Benchmark      │  ─────────────────────────────────────────────────────  │
-│  ○ Video          │  1   3     GPU       Clear Shader Cache      SAFE  FS    │
-│  ○ Settings       │  1   4     Display   Fullscreen Opts Off     SAFE  REG   │
-│                   │  1   6     System    CS2 Power Plan          MOD   REG   │
-│                   │  1   7     GPU       HAGS                    MOD   REG   │
-│                   │  1   16    Network   NIC Latency Stack       MOD   NET   │
-│                   │  1   27    System    MMCSS + Gaming Priority SAFE  REG   │
-│                   │  1   29    Input     Mouse Accel Off         SAFE  REG   │
-│                   │  1   34    CS2       Autoexec (74 CVars)     SAFE  APP   │
-│                   │  3   2     GPU       MSI Interrupts          MOD   DRV   │
-│                   │  3   4     GPU       NVIDIA DRS Profile      SAFE  DRV   │
-│                   │  3   10    CPU       Process Priority + X3D  SAFE  REG   │
-│                   │  ...                                                      │
-│                   │  [ ▶ Run Phase 1 Terminal ]  [ ▶ Run Phase 3 Terminal ]  │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Optimize](screenshots/03-optimize.png)
 
 **Filters** let you narrow by phase, category (GPU, System, Network, etc.), and risk level. Useful when you want to see only MODERATE+ steps or only Network-category steps.
 
@@ -140,30 +71,7 @@ The phase terminal buttons open a new elevated PowerShell window running `START.
 
 Shows everything the suite has backed up in `C:\CS2_OPTIMIZE\backup.json`, organized by step.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   BACKUP  [Export backup.json]                          │
-│  ○ Dashboard      │                                                          │
-│  ○ Analyze        │  Step                    Type       Date/Time            │
-│  ○ Optimize       │  ─────────────────────────────────────────────────────  │
-│  ○ Backup ←       │  Fullscreen Optimizations registry   2026-03-12 14:22   │
-│  ○ Benchmark      │  CS2 Power Plan          powerplan   2026-03-12 14:23   │
-│  ○ Video          │  HAGS                    registry    2026-03-12 14:25   │
-│  ○ Settings       │  NIC Latency Stack       registry    2026-03-12 14:31   │
-│                   │  MMCSS + Gaming Priority registry    2026-03-12 14:33   │
-│                   │  Mouse Acceleration Off  registry    2026-03-12 14:35   │
-│                   │  Disable Overlays        registry    2026-03-12 14:38   │
-│                   │  SysMain Disable         service     2026-03-12 14:41   │
-│                   │  MSI Interrupts          registry    2026-03-12 15:02   │
-│                   │  NVIDIA DRS Profile      drs         2026-03-12 15:08   │
-│                   │  Process Priority + X3D  registry    2026-03-12 15:11   │
-│                   │  ...                                                      │
-│                   │                                                          │
-│                   │  [ Restore Selected ]  [ Restore All ]                  │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Backup](screenshots/04-backup.png)
 
 **Restore Selected** — rolls back only the highlighted step(s). Registry keys are returned to their pre-suite values; services are returned to their original start type; power plans are re-activated; DRS settings are restored per-setting.
 
@@ -177,31 +85,7 @@ Shows everything the suite has backed up in `C:\CS2_OPTIMIZE\backup.json`, organ
 
 Tracks FPS measurements over time and calculates your optimal NVCP frame cap.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   BENCHMARK  [ + Add Result ]                           │
-│  ○ Dashboard      │                                                          │
-│  ○ Analyze        │  FPS  ▲                                                  │
-│  ○ Optimize       │  400 ┤                              ●                    │
-│  ○ Backup         │  350 ┤               ●                                   │
-│  ○ Benchmark ←    │  300 ┤    ●                                              │
-│  ○ Video          │  250 ┤                         ─ ─ ─(P1)                 │
-│  ○ Settings       │  200 ┤─────────────────────────────────────────► runs    │
-│                   │      Baseline    Post-P1    Post-P3                      │
-│                   │                                                          │
-│                   │  #   Label        Avg FPS   P1 FPS   Ratio   Date        │
-│                   │  ─────────────────────────────────────────────────────  │
-│                   │  1   Baseline     290       115       0.40    03-12 09:10│
-│                   │  2   Post-Phase1  341       201       0.59    03-12 14:45│
-│                   │  3   Post-Phase3  387       312       0.81    03-12 15:30│
-│                   │                                                          │
-│                   │  FPS Cap Calculator                                      │
-│                   │  Paste [VProf] line: [_________________________] [Calc]  │
-│                   │  Recommended cap: 352 FPS  (387 − 9%)   [Copy cap]      │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Benchmark](screenshots/05-benchmark.png)
 
 **Chart** — shows Avg FPS (solid line/dots) and P1 FPS (dashed line/dots) across all runs. The canvas is drawn programmatically — no external charting library.
 
@@ -215,32 +99,7 @@ Tracks FPS measurements over time and calculates your optimal NVCP frame cap.
 
 Compares your current `video.txt` against the recommended values for your hardware tier. Write the optimized file in one click.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   VIDEO SETTINGS              [HIGH ▼]  [Write video.txt]│
-│  ○ Dashboard      │   C:\...\userdata\12345678\730\local\cfg\video.txt       │
-│  ○ Analyze        │                                                          │
-│  ○ Optimize       │  Setting                  Your Value  Recommended  Status│
-│  ○ Backup         │  ─────────────────────────────────────────────────────  │
-│  ○ Benchmark      │  csm_enabled              1           1            ✓ OK  │
-│  ○ Video ←        │  fullscreen               0           1            ⚠ ←  │
-│  ○ Settings       │  mat_vsync                0           0            ✓ OK  │
-│                   │  msaa_samples             0           4            ⚠ ←  │
-│                   │  r_aoproxy_enable         1           0            ⚠ ←  │
-│                   │  r_csgo_cmaa_enable       0           0            ✓ OK  │
-│                   │  r_csgo_fsr_upsample      0           0            ✓ OK  │
-│                   │  r_low_latency            1           1            ✓ OK  │
-│                   │  r_particle_max_detail    2           0            ⚠ ←  │
-│                   │  r_texturefilteringquality 0          5            ⚠ ←  │
-│                   │  sc_hdr_enabled_override  0           3            ⚠ ←  │
-│                   │  shaderquality            1           1            ✓ OK  │
-│                   │                                                          │
-│                   │  6 setting(s) differ from HIGH-tier recommendation       │
-│                   │  [Write video.txt  (renames original → .bak)]            │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Video](screenshots/06-video.png)
 
 **Tier picker** — AUTO (detects NVIDIA GPU presence → HIGH), HIGH, MID, or LOW. The recommended values change based on tier. See [`docs/video-settings.md`](video-settings.md) for the full rationale.
 
@@ -252,40 +111,18 @@ Compares your current `video.txt` against the recommended values for your hardwa
 
 Configure how the terminal optimization phases behave. These settings persist in `C:\CS2_OPTIMIZE\state.json`.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  CS2 Optimize Suite  2026                                    —   □   ✕      │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│                   │   SETTINGS                                               │
-│  ○ Dashboard      │                                                          │
-│  ○ Analyze        │  Optimization Profile                                    │
-│  ○ Optimize       │  ○ SAFE         Auto-apply proven tweaks only            │
-│  ○ Backup         │  ● RECOMMENDED  Prompt on moderate tweaks  ← default     │
-│  ○ Benchmark      │  ○ COMPETITIVE  Prompt on all tweaks                     │
-│  ○ Video          │  ○ CUSTOM       Full detail card for every step          │
-│  ○ Settings ←     │                                                          │
-│                   │  DRY-RUN mode   ○ Off  ● On                              │
-│                   │  Preview changes without applying anything               │
-│                   │                                                          │
-│                   │  DNS Region                                              │
-│                   │  [EU (Cloudflare) ▼]                                     │
-│                   │  Applied in Phase 3 Step 9                               │
-│                   │                                                          │
-│                   │  Average FPS (for FPS cap)                               │
-│                   │  [387 ________________]                                   │
-│                   │  Used in Phase 3 Step 13 for cap calculation             │
-│                   │                                                          │
-│                   │  [ Save Settings ]                                       │
-└───────────────────┴─────────────────────────────────────────────────────────┘
-```
+![Settings](screenshots/07-settings.png)
 
-**Profile** — determines which steps run automatically vs. prompted vs. skipped in the terminal phases. See the [Profile System](../README.md#profile-system) section for the full behavior matrix.
+**Profiles:**
+- **SAFE** — Auto-apply proven tweaks only (T1 SAFE steps). Best for first-time users.
+- **RECOMMENDED** — Prompt on moderate tweaks. Default for most users.
+- **COMPETITIVE** — Prompt on all tweaks including T3/AGGRESSIVE. Dedicated gaming PCs.
+- **CUSTOM** — Full detail card for every step. Expert users.
+- **YOLO** — Everything auto-executes up to AGGRESSIVE risk. Zero prompts. GPU auto-detected via WMI, FPS cap defaults to unlimited, DNS defaults to Cloudflare. CRITICAL steps are still skipped for safety.
+
+See the [Profile System](../README.md#profile-system) section for the full behavior matrix.
 
 **DRY-RUN** — when on, all registry, boot config, and service writes are replaced by preview messages. The full terminal flow runs but nothing is changed. Safe to use on any profile to preview what would happen.
-
-**DNS Region** — applies in Phase 3 Step 9. Cloudflare `1.1.1.1/1.0.0.1` is the default; `8.8.8.8/8.8.4.4` (Google) is the alternative. Use your nearest regional option.
-
-**Average FPS** — if you already know your average FPS from a previous benchmark, set it here. Phase 3 uses it for FPS cap calculation.
 
 ---
 
@@ -295,7 +132,7 @@ The GUI is a management dashboard, not a replacement for the terminal phases. Th
 
 | Task | Why terminal only |
 |------|------------------|
-| Phase 1 (38-step optimization) | Requires reboot into Safe Mode at the end; interactive confirmation at each step |
+| Phase 1 (38-step optimization) | Requires reboot into Safe Mode at the end; interactive confirmation at each step (unless YOLO profile) |
 | Phase 2 (GPU driver removal in Safe Mode) | Runs automatically from RunOnce in Safe Mode — no GUI is available in Safe Mode |
 | Phase 3 (driver install + final steps) | Runs automatically after Phase 2 |
 | Cleanup (Quick / Full / Driver Refresh) | Driver Refresh involves Safe Mode reboot |

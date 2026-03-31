@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  Optimize-Hardware.ps1  —  Steps 10-22: Timer, MPO, Game Mode, Debloat,
 #                             Autostart, WU Blocker, NIC, Baseline Benchmark,
 #                             Driver Prep, NVIDIA Driver, Profile, MSI, Affinity
@@ -478,13 +478,13 @@ if ($startStep -le 17) {
             "https://capframex.com" | Set-ClipboardSafe
             Write-OK "CapFrameX download URL copied to clipboard."
 
-            $r = Read-Host "  Have you completed the baseline benchmark? [y/N]"
+            $r = if ($SCRIPT:DryRun -or (Test-YoloProfile)) { "n" } else { Read-Host "  Have you completed the baseline benchmark? [y/N]" }
             if ($r -match "^[jJyY]$") {
                 $result = Invoke-BenchmarkCapture -Label "Baseline (before optimizations)"
                 if ($result) {
                     if (-not $SCRIPT:DryRun) {
                         try {
-                            $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
+                            $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
                             $st | Add-Member -NotePropertyName "baselineAvg" -NotePropertyValue $result.Avg -Force
                             $st | Add-Member -NotePropertyName "baselineP1" -NotePropertyValue $result.P1 -Force
                             Save-JsonAtomic -Data $st -Path $CFG_StateFile
@@ -525,8 +525,20 @@ if ($startStep -le 19) {
             -SideEffects "Downloads ~600 MB driver file to C:\CS2_OPTIMIZE" `
             -Undo "Delete downloaded file" `
             -Action {
+                # Persist GPU name to state.json so Phase 3 can identify the GPU
+                # after the driver is uninstalled in Phase 2 (Safe Mode).
+                $gpuForState = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
+                if ($gpuForState -and -not $SCRIPT:DryRun) {
+                    try {
+                        $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
+                        $st | Add-Member -NotePropertyName "nvidiaGpuName" -NotePropertyValue $gpuForState.Name -Force
+                        Save-JsonAtomic -Data $st -Path $CFG_StateFile
+                    } catch { Write-Debug "Could not persist GPU name to state: $_" }
+                }
+
                 $driverInfo = $null
-                if ($state.rollbackDriver) {
+                if ($state -and $state.PSObject.Properties['rollbackDriver'] -and $state.rollbackDriver) {
                     Write-Info "Rollback requested: driver $($state.rollbackDriver)"
                     Write-Info "Download manually from: https://www.nvidia.com/en-us/drivers/"
                     "https://www.nvidia.com/en-us/drivers/" | Set-ClipboardSafe
@@ -551,7 +563,7 @@ if ($startStep -le 19) {
                                 Write-Err "Downloaded driver failed signature verification. File removed."
                             } else {
                                 try {
-                                    $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
+                                    $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
                                     $st | Add-Member -NotePropertyName "nvidiaDriverPath" -NotePropertyValue $driverDest -Force
                                     $st | Add-Member -NotePropertyName "nvidiaDriverVersion" -NotePropertyValue $driverInfo.Version -Force
                                     Save-JsonAtomic -Data $st -Path $CFG_StateFile

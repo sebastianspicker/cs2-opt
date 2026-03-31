@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  Optimize-RegistryTweaks.ps1  —  Steps 23-33: Fast Startup, RAM, Nagle,
 #                                   FSE, Scheduler, Timer, Mouse, GPU Pref,
 #                                   Game DVR, Overlay, Audio
@@ -63,7 +63,7 @@ if ($startStep -le 24) {
                 Write-Host "  │  -> Typical: Slot A2 + B2 for dual-channel                 │" -ForegroundColor White
                 Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Red
                 Write-Blank
-                Read-Host "  [Enter] to continue"
+                if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] to continue" }
             }
             Complete-Step $PHASE 24 "DualChannel"
         }
@@ -148,7 +148,7 @@ if ($startStep -le 27) {
         -Risk "SAFE" -Depth "REGISTRY" -EstimateKey "Win32PrioritySeparation" `
         -Improvement "Foreground 3x scheduler quantum; MMCSS realtime scheduling; kernel in RAM; Intel E-core fix; FTH heap slowdown prevented; no 12-14% maintenance CPU spikes mid-game; NTFS metadata write elimination" `
         -SideEffects "Background media apps get slightly less priority. NoLazyMode: marginally higher CPU cycles. FTH disabled: rare heap errors may not be silently suppressed. Maintenance won't run automatically. NTFS: 8.3 filename aliases removed (breaks legacy 16-bit app compatibility)." `
-        -Undo "Set SystemResponsiveness=20, Win32PrioritySeparation=2, delete Games/NoLazyMode keys; FTH\Enabled=1; MaintenanceDisabled=0; NtfsDisableLastAccessUpdate=0; NtfsDisable8dot3NameCreation=0; DisableCoInstallers=0" `
+        -Undo "Set SystemResponsiveness=20, Win32PrioritySeparation=2, delete Games/NoLazyMode keys; FTH\Enabled=1; MaintenanceDisabled=0; Delete NtfsDisableLastAccessUpdate or set to 2 (system-managed enabled); NtfsDisable8dot3NameCreation=0; DisableCoInstallers=0" `
         -Action {
             $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
             Set-RegistryValue $mmPath "SystemResponsiveness" 10 "DWord" "Less CPU reserved for MMCSS"
@@ -217,6 +217,10 @@ if ($startStep -le 27) {
             $fsPath = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
             # 0x80000001 = user-managed + disabled. On Win10 1803+, value 1 alone means
             # "user-managed + ENABLED" (the opposite of intent). The high bit signals user-managed mode.
+            # NOTE: Do NOT cast to [uint32] — in Windows PowerShell 5.1, 0x80000001 is parsed
+            # as Int32 (-2147483647) and [uint32] rejects negative values. Passing the raw hex
+            # literal works: Set-ItemProperty -Type DWord writes the correct bit pattern regardless
+            # of signed/unsigned interpretation.
             Set-RegistryValue $fsPath "NtfsDisableLastAccessUpdate" 0x80000001 "DWord" `
                 "NTFS: disable last-access timestamp writes on file reads"
             Set-RegistryValue $fsPath "NtfsDisable8dot3NameCreation" 1 "DWord" `
@@ -243,7 +247,9 @@ if ($startStep -le 28) {
         -SideEffects "Minimal CPU power increase (CPU wakes more frequently)" `
         -Undo "Delete GlobalTimerResolutionRequests from kernel registry key" `
         -Action {
-            $build = [int](Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "CurrentBuildNumber" -ErrorAction SilentlyContinue).CurrentBuildNumber
+            $buildRaw = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "CurrentBuildNumber" -ErrorAction SilentlyContinue).CurrentBuildNumber
+            $build = 0
+            if ($buildRaw) { try { $build = [int]$buildRaw } catch { $build = 0 } }
             if ($build -ge 19041) {
                 Set-RegistryValue "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" `
                     "GlobalTimerResolutionRequests" 1 "DWord" "Timer resolution: allow highest request"
@@ -408,7 +414,7 @@ if ($startStep -le 32) {
             Write-Host "  │  NOTE: Re-enable Steam Overlay for screenshots:             │" -ForegroundColor DarkGray
             Write-Host "  │  Steam -> Settings -> In-Game -> Enable Overlay             │" -ForegroundColor DarkGray
             Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
-            Read-Host "  [Enter] when overlays disabled"
+            if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] when overlays disabled" }
             Complete-Step $PHASE 32 "Overlay"
         } `
         -SkipAction { Skip-Step $PHASE 32 "Overlay" }
@@ -463,7 +469,7 @@ if ($startStep -le 33) {
             Write-Host "  │  5.  Audio enhancements: OFF                                 │" -ForegroundColor White
             Write-Host "  │  6.  Exclusive mode: check BOTH boxes                        │" -ForegroundColor White
             Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
-            Read-Host "  [Enter] when done"
+            if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] when done" }
             Complete-Step $PHASE 33 "Audio"
         } `
         -SkipAction { Skip-Step $PHASE 33 "Audio" }

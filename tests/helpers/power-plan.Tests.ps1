@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/power-plan.Tests.ps1  --  Power plan creation & tiered settings
 # ==============================================================================
 
@@ -6,7 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/_TestInit.ps1"
 
     # Stub powercfg and Windows-only cmdlets before loading the module
-    if (-not $IsWindows) {
+    if ($IsWindows -eq $false) {
         if (-not (Get-Command powercfg -ErrorAction SilentlyContinue)) {
             function global:powercfg { return "" }
         }
@@ -137,17 +137,18 @@ Describe "Apply-PowerPlan" {
 
     Context "T1 settings (SAFE profile)" {
 
-        It "applies 9 T1 settings for SAFE profile" {
+        It "applies T1 settings for SAFE profile" {
             $SCRIPT:Profile = "SAFE"
             $SCRIPT:DryRun = $true
             Mock Get-ChipsetVendor { return "Intel" }
             Mock Write-Step {}
             Mock Write-OK {}
+            Mock Set-PowerPlanValue {}
 
             Apply-PowerPlan "DRY-RUN-GUID"
 
-            # Should NOT invoke T2 or T3 settings. T1 has 9 Set-PowerPlanValue calls.
-            # In DRY-RUN mode each call prints rather than executes.
+            # T1 settings: verify Set-PowerPlanValue was called at least once (count varies as T1 set evolves)
+            Should -Invoke Set-PowerPlanValue -Scope It
         }
     }
 
@@ -198,6 +199,7 @@ Describe "Apply-PowerPlan" {
             $SCRIPT:Profile = "COMPETITIVE"
             $SCRIPT:DryRun = $true
             Mock Get-ChipsetVendor { return "Intel" }
+            Mock Get-AmdCpuInfo { return $null }
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Host {}
@@ -217,6 +219,7 @@ Describe "Apply-PowerPlan" {
             $SCRIPT:Profile = "RECOMMENDED"
             $SCRIPT:DryRun = $true
             Mock Get-ChipsetVendor { return "Intel" }
+            Mock Get-AmdCpuInfo { return $null }
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Host {}

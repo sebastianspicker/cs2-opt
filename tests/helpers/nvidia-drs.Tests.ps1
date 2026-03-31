@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/nvidia-drs.Tests.ps1  --  NvApiDrs C# interop layer
 # ==============================================================================
 
@@ -51,6 +51,10 @@ Describe "NvApiDrsCode C# source" {
         $NvApiDrsCode | Should -Match 'APP_V1_SIZE\s*=\s*4104'
     }
 
+    It "defines correct APP_V3_SIZE constant (16392 bytes)" {
+        $NvApiDrsCode | Should -Match 'APP_V3_SIZE\s*=\s*16392'
+    }
+
     It "defines UNICODE_STR_BYTES as 4096" {
         $NvApiDrsCode | Should -Match 'UNICODE_STR_BYTES\s*=\s*4096'
     }
@@ -59,10 +63,12 @@ Describe "NvApiDrsCode C# source" {
         $NvApiDrsCode | Should -Match 'SETTING_VER1\s*=\s*0x00013020'
         $NvApiDrsCode | Should -Match 'PROFILE_VER1\s*=\s*0x00011014'
         $NvApiDrsCode | Should -Match 'APP_VER1\s*=\s*0x00011008'
+        $NvApiDrsCode | Should -Match 'APP_VER3\s*=\s*0x00034008'
     }
 
     It "defines NVAPI status codes" {
         $NvApiDrsCode | Should -Match 'public const int OK\s*=\s*0'
+        $NvApiDrsCode | Should -Match 'INCOMPATIBLE_STRUCT_VERSION\s*=\s*-9'
         $NvApiDrsCode | Should -Match 'SETTING_NOT_FOUND\s*=\s*-174'
         $NvApiDrsCode | Should -Match 'PROFILE_NOT_FOUND\s*=\s*-175'
         $NvApiDrsCode | Should -Match 'EXECUTABLE_ALREADY_IN_USE\s*=\s*-179'
@@ -91,11 +97,13 @@ Describe "Initialize-NvApiDrs" {
     }
 
     It "returns false on non-Windows (no nvapi64.dll)" {
-        if (-not $IsWindows) {
+        # $IsWindows is undefined (null) on Windows PowerShell 5.1; treat null as Windows.
+        $onWindows = ($IsWindows -ne $false)
+        if ($onWindows) {
+            Set-ItResult -Skipped -Because "Test only applicable on non-Windows"
+        } else {
             $result = Initialize-NvApiDrs
             $result | Should -Be $false
-        } else {
-            Set-ItResult -Skipped -Because "Test only applicable on non-Windows"
         }
     }
 
@@ -111,21 +119,23 @@ Describe "Initialize-NvApiDrs" {
         $result | Should -Be $false
     }
 
-    It "returns false for 32-bit PowerShell" {
-        # Can only test if we can mock [IntPtr]::Size
-        # Instead, verify the code checks for it
-        $source = Get-Content "$PSScriptRoot/../../helpers/nvidia-drs.ps1" -Raw
-        $source | Should -Match '\[IntPtr\]::Size -ne 8'
+    It "has guard for 32-bit PowerShell" {
+        # Cannot mock [IntPtr]::Size at runtime; verify guard exists in function body
+        $fn = Get-Command Initialize-NvApiDrs -ErrorAction SilentlyContinue
+        $fn | Should -Not -BeNullOrEmpty
+        $fn.ScriptBlock.ToString() | Should -Match '\[IntPtr\]::Size\s*-ne\s*8'
     }
 
-    It "returns false for ARM64 architecture" {
-        $source = Get-Content "$PSScriptRoot/../../helpers/nvidia-drs.ps1" -Raw
-        $source | Should -Match 'PROCESSOR_ARCHITECTURE.*ARM64'
+    It "has guard for ARM64 architecture" {
+        $fn = Get-Command Initialize-NvApiDrs -ErrorAction SilentlyContinue
+        $fn | Should -Not -BeNullOrEmpty
+        $fn.ScriptBlock.ToString() | Should -Match 'PROCESSOR_ARCHITECTURE.*ARM64'
     }
 
-    It "returns false under Constrained Language Mode" {
-        $source = Get-Content "$PSScriptRoot/../../helpers/nvidia-drs.ps1" -Raw
-        $source | Should -Match 'ConstrainedLanguage'
+    It "has guard for Constrained Language Mode" {
+        $fn = Get-Command Initialize-NvApiDrs -ErrorAction SilentlyContinue
+        $fn | Should -Not -BeNullOrEmpty
+        $fn.ScriptBlock.ToString() | Should -Match 'ConstrainedLanguage'
     }
 }
 
@@ -160,6 +170,11 @@ Describe "NvApiDrs Struct Size Calculations" {
         $calculated | Should -Be 4104
     }
 
+    It "APP_V3_SIZE = 4 + 4 + 4096*4 = 16392" {
+        $calculated = 4 + 4 + (4096 * 4)
+        $calculated | Should -Be 16392
+    }
+
     It "SETTING_VER1 encodes size 12320 with version 1" {
         # Version encoding: size | (version << 16) = 12320 | 0x10000 = 0x13020
         $encoded = 12320 -bor (1 -shl 16)
@@ -174,5 +189,10 @@ Describe "NvApiDrs Struct Size Calculations" {
     It "APP_VER1 encodes size 4104 with version 1" {
         $encoded = 4104 -bor (1 -shl 16)
         "0x{0:X8}" -f $encoded | Should -Be "0x00011008"
+    }
+
+    It "APP_VER3 encodes size 16392 with version 3" {
+        $encoded = 16392 -bor (3 -shl 16)
+        "0x{0:X8}" -f $encoded | Should -Be "0x00034008"
     }
 }

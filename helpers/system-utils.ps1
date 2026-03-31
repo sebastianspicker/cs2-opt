@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/system-utils.ps1  —  Download, Registry, Boot Config, Filesystem
 # ==============================================================================
 
@@ -86,9 +86,10 @@ function Save-JsonAtomic {
     if ($parentDir -and -not (Test-Path $parentDir)) {
         New-Item -ItemType Directory -Path $parentDir -Force -ErrorAction Stop | Out-Null
     }
-    $tmp = "$Path.tmp"
+    $tmp = "$Path.$PID.$([System.IO.Path]::GetRandomFileName()).tmp"
     try {
-        $Data | ConvertTo-Json -Depth $Depth | Set-Content $tmp -Encoding UTF8 -ErrorAction Stop
+        $json = $Data | ConvertTo-Json -Depth $Depth
+        [System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
         # Move-Item is atomic on NTFS when source and destination are on the same volume
         # (it performs a metadata-only rename operation). This guarantees that $Path is
         # either the old complete file or the new complete file — never a partial write.
@@ -147,13 +148,16 @@ function Initialize-ScriptDefaults {
     }
 }
 
-function Set-RunOnce($name, $scriptPath) {
+function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
     # SECURITY: Validate RunOnce name — alphanumeric + underscore only.
     # Prevents injection into the HKLM RunOnce key namespace.
     if ($name -notmatch '^[a-zA-Z0-9_]+$') {
         Write-Warn "Set-RunOnce: invalid name '$name' — rejected (security: registry injection prevention)"
         return
     }
+    # Windows RunOnce entries prefixed with '*' execute even in Safe Mode.
+    # Without the prefix, Safe Mode deletes them without running.
+    if ($SafeMode) { $name = "*$name" }
     # SECURITY: Validate script path — must be under C:\CS2_OPTIMIZE\ and end in .ps1.
     # RunOnce executes at boot as the logged-on user with admin elevation (HKLM).
     # If an attacker could set $scriptPath to an arbitrary location, they get code execution.
@@ -194,29 +198,70 @@ function Set-BootConfig($key, $val, $why) {
     # bcdedit keys are alphanumeric identifiers; values are alphanumeric, hex, or simple tokens.
     if ($key -notmatch '^[a-zA-Z][a-zA-Z0-9_]*$') {
         Write-Warn "Set-BootConfig: invalid key format '$key' — rejected (security: command injection prevention)"
-        return
+        return $false
     }
     if ($val -notmatch '^[a-zA-Z0-9_.{}\-]+$') {
         Write-Warn "Set-BootConfig: invalid value format '$val' — rejected (security: command injection prevention)"
-        return
+        return $false
     }
 
     # Auto-backup before modification
-    if ($SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
+    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
         Backup-BootConfig -Key $key -StepTitle $SCRIPT:CurrentStepTitle
     }
     if ($SCRIPT:DryRun) {
         Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Would set: bcdedit /set $key $val  ($why)" -ForegroundColor Magenta
-        return
+        return $true
     }
     Write-Step "bcdedit /set $key $val  ($why)"
     $output = bcdedit /set $key $val 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $bcdeditExit = $LASTEXITCODE
+    $outputStr = $output | Out-String
+    if ($bcdeditExit -ne 0) {
         Write-Warn "Boot config change failed: bcdedit /set $key $val"
         Write-Host "  $([char]0x2139) This is usually fine — Windows may not support this setting on your PC." -ForegroundColor Cyan
-        Write-Debug "bcdedit exit $LASTEXITCODE — $output"
+        Write-Debug "bcdedit exit $bcdeditExit — $outputStr"
+        return $false
     }
-    else { Write-OK "Set: $key = $val" }
+    Write-OK "Set: $key = $val"
+    return $true
+}
+
+function Test-BootConfigSet($key) {
+    <#  Verifies a bcdedit value is present in the current BCD entry.
+        Uses hex element IDs via /v for locale-independent matching.
+        Returns $true if the key exists, $false otherwise.  #>
+    $bcdElementMap = @{
+        "safeboot"           = "0x26000081"
+        "disabledynamictick" = "0x26000060"
+        "useplatformtick"    = "0x26000092"
+        "useplatformclock"   = "0x26000091"
+    }
+    $hexId = if ($bcdElementMap.ContainsKey($key)) { $bcdElementMap[$key] } else { $null }
+    try {
+        # Run bcdedit and capture output — stringify each line to avoid ErrorRecord
+        # objects from 2>&1 that would fail regex matching.
+        $bcdOutput = bcdedit /enum "{current}" /v 2>&1
+        $bcdExit = $LASTEXITCODE
+        if ($bcdExit -ne 0) {
+            # Fallback: try without /v (some builds return non-zero with /v)
+            $bcdOutput = bcdedit /enum "{current}" 2>&1
+            $bcdExit = $LASTEXITCODE
+            if ($bcdExit -ne 0) { return $false }
+            # Without /v, match the friendly key name instead of hex ID
+            foreach ($line in $bcdOutput) {
+                $s = "$line"
+                if ($s -match "^\s*$([regex]::Escape($key))\s+") { return $true }
+            }
+            return $false
+        }
+        foreach ($line in $bcdOutput) {
+            $s = "$line"   # force to string (ErrorRecords from 2>&1 won't match otherwise)
+            if ($hexId -and $s -match "^\s*$hexId\s+") { return $true }
+            elseif (-not $hexId -and $s -match "^\s*$([regex]::Escape($key))\s+") { return $true }
+        }
+    } catch { Write-Debug "Test-BootConfigSet: bcdedit enum failed for '$key': $_" }
+    return $false
 }
 
 function Set-RegistryValue($path, $name, $value, $type, $why) {
@@ -234,7 +279,7 @@ function Set-RegistryValue($path, $name, $value, $type, $why) {
     }
 
     # Auto-backup before modification
-    if ($SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
+    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
         Backup-RegistryValue -Path $path -Name $name -StepTitle $SCRIPT:CurrentStepTitle
     }
     if ($SCRIPT:DryRun) {
@@ -269,12 +314,12 @@ function Set-ClipboardSafe {
 }
 
 function Clear-Dir($path, $label) {
-    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Clear-Dir skipped for $Path"; return 0 }
+    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Clear-Dir skipped for $path"; return 0 }
     if (-not (Test-Path $path)) { Write-Debug "${label}: not found ($path)"; return 0 }
     $items = Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue
     $files = @($items | Where-Object { -not $_.PSIsContainer })
     $n = $files.Count
-    $mb = [math]::Round(($files | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum / 1MB, 1)
+    $mb = [math]::Round(([int64]($files | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum) / 1MB, 1)
     Write-Step "$label  ($n files · $mb MB)"
     $items | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     $remaining = @(Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
@@ -347,6 +392,7 @@ function Initialize-VerifyCounters {
     $global:_verifyOkCount      = 0
     $global:_verifyChangedCount = 0
     $global:_verifyMissingCount = 0
+    $global:_verifyInfoCount    = 0
 }
 
 function Get-VerifyCounters {
@@ -354,6 +400,7 @@ function Get-VerifyCounters {
         okCount      = [int]$global:_verifyOkCount
         changedCount = [int]$global:_verifyChangedCount
         missingCount = [int]$global:_verifyMissingCount
+        infoCount    = [int]$global:_verifyInfoCount
     }
 }
 
@@ -412,7 +459,8 @@ function Test-ServiceCheck {
         $svc = Get-Service -Name $ServiceName -ErrorAction Stop
         # Escape single quotes in the service name to prevent WQL injection
         $escapedName = $ServiceName -replace "'", "''"
-        $rawStartType = (Get-CimInstance Win32_Service -Filter "Name='$escapedName'").StartMode
+        $cimSvc = Get-CimInstance Win32_Service -Filter "Name='$escapedName'" -ErrorAction SilentlyContinue
+        $rawStartType = if ($cimSvc) { $cimSvc.StartMode } else { $svc.StartType.ToString() }
         # WMI returns "Auto" but Set-Service uses "Automatic" — normalize for comparison
         $startType = switch ($rawStartType) {
             "Auto"         { "Automatic" }

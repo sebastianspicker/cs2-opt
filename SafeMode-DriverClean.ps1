@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <# CS2 Optimization Suite — Safe Mode · GPU Driver Clean Removal
 
     CRASH RECOVERY SCENARIOS — this script is safety-critical.
@@ -50,7 +50,7 @@ try {
     Write-Host "                bcdedit /deletevalue safeboot" -ForegroundColor White
     Write-Host "                shutdown /r /t 0" -ForegroundColor White
     Write-Host ""
-    $r = Read-Host "  Continue with defaults? [y/N]"
+    $r = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue with defaults? [y/N]" }
     if ($r -notmatch "^[jJyY]$") { exit 1 }
     $detectedGpu = "2"  # Default to NVIDIA RTX 4000
     try {
@@ -58,8 +58,8 @@ try {
                Where-Object { $_.Status -eq "OK" } | Select-Object -First 1
         if ($gpu.Name -match "AMD|Radeon") { $detectedGpu = "3" }
         elseif ($gpu.Name -match "Intel") { $detectedGpu = "4" }
-    } catch {}
-    $state = [PSCustomObject]@{ gpuInput=$detectedGpu; mode="CONTROL"; profile="RECOMMENDED"; rollbackDriver=$null; nvidiaDriverPath=$null }
+    } catch { Write-Debug "GPU auto-detection via WMI failed in Safe Mode: $_" }
+    $state = [PSCustomObject]@{ gpuInput=$detectedGpu; mode="CONTROL"; logLevel="NORMAL"; profile="RECOMMENDED"; fpsCap=0; avgFps=0; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }
 Initialize-Log
@@ -80,7 +80,7 @@ try {
         Write-Host "  $([char]0x2139) Why it matters: Your GPU driver files are in use right now and cannot" -ForegroundColor Cyan
         Write-Host "    be cleanly removed. This could cause a black screen after restart." -ForegroundColor Cyan
         Write-Host "  $([char]0x2139) Recommended: Go back to START.bat and let it boot into Safe Mode." -ForegroundColor Cyan
-        $confirm = Read-Host "  Continue anyway? [y/N]"
+        $confirm = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue anyway? [y/N]" }
         if ($confirm -notmatch "^[jJyY]$") {
             Write-Info "Aborted. Boot into Safe Mode first (START.bat -> [1])."
             exit 0
@@ -96,6 +96,12 @@ try {
     if ($SCRIPT:DryRun -and $env:SAFEBOOT_OPTION) {
         Write-Warn "DRY-RUN mode active, but Safe Mode detected. Overriding DRY-RUN for bcdedit"
         Write-Warn "to prevent being stuck in Safe Mode on next boot."
+        Write-Host ""
+        $confirm = if (Test-YoloProfile) { "Y" } else { Read-Host "  Proceed with removing Safe Mode boot flag? (Y/n)" }
+        if ($confirm -and $confirm -notmatch "^[jJyY]") {
+            Write-Warn "Aborted — Safe Mode boot flag NOT removed. You MUST manually run: bcdedit /deletevalue safeboot"
+            exit 1
+        }
     }
     if ($SCRIPT:DryRun -and -not $env:SAFEBOOT_OPTION) {
         Write-Host "  [DRY-RUN] Would run: bcdedit /deletevalue safeboot" -ForegroundColor Magenta
@@ -123,7 +129,7 @@ try {
                 Write-Err "MANUAL FIX (run in elevated cmd.exe):"
                 Write-Err "  bcdedit /deletevalue safeboot"
                 Write-Err "  shutdown /r /t 0"
-                $smConfirm = Read-Host "  Continue anyway? [y/N]"
+                $smConfirm = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue anyway? [y/N]" }
                 if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
             } else {
                 # BCD element 0x26000081 = BcdOSLoaderInteger_SafeBoot (safeboot type).
@@ -138,7 +144,7 @@ try {
                     Write-Err "MANUAL FIX (run in elevated cmd.exe):"
                     Write-Err "  bcdedit /deletevalue safeboot"
                     Write-Err "  shutdown /r /t 0"
-                    $smConfirm = Read-Host "  Continue anyway? [y/N]"
+                    $smConfirm = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue anyway? [y/N]" }
                     if ($smConfirm -notmatch "^[jJyY]$") { exit 1 }
                 }
             }
@@ -158,9 +164,9 @@ try {
     Write-Info "Equivalent to DDU — stops services, removes drivers, cleans registry."
 
     # Check if rollback was requested
-    if ($state.rollbackDriver) {
+    if ($state.PSObject.Properties['rollbackDriver'] -and $state.rollbackDriver) {
         Write-Blank
-        $drvLabel = $state.rollbackDriver
+        $drvLabel = $state.rollbackDriver.Substring(0, [math]::Min(30, $state.rollbackDriver.Length))
         $pad = [math]::Max(0, 30 - $drvLabel.Length)
         Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
         Write-Host "  ║  ROLLBACK REQUESTED: Driver $drvLabel$((' ' * $pad))║" -ForegroundColor Yellow
@@ -170,14 +176,14 @@ try {
     }
 
     Write-Blank
-    $r = Read-Host "  Proceed with GPU driver removal? [Y/n]"
+    $r = if (Test-YoloProfile) { "Y" } else { Read-Host "  Proceed with GPU driver removal? [Y/n]" }
     if ($r -match "^[nN]$") {
         Write-Warn "Skipped GPU driver removal."
         Skip-Step $PHASE 2 "DriverClean"
 
         # Ask whether to still proceed with Phase 3
         Write-Blank
-        $rPhase3 = Read-Host "  Still register Phase 3 for next boot? [y/N]"
+        $rPhase3 = if (Test-YoloProfile) { "y" } else { Read-Host "  Still register Phase 3 for next boot? [y/N]" }
         if ($rPhase3 -match "^[jJyY]$") {
             Write-Section "Step 3 — Register Phase 3 for next boot"
             Set-RunOnce "CS2_Phase3" "$CFG_WorkDir\PostReboot-Setup.ps1"
@@ -201,8 +207,8 @@ try {
     if ($SCRIPT:DryRun) {
         Write-Host "  [DRY-RUN] Would prompt for restart" -ForegroundColor Magenta
     } else {
-        $r2 = Read-Host "  Restart now? [Y/n]"
-        if ($r2 -notmatch "^[nN]$") { Restart-Computer -Force }
+        $r2 = if (Test-YoloProfile) { "Y" } else { Read-Host "  Restart now? [Y/n]" }
+        if ($r2 -notmatch "^[nN]$") { shutdown /r /t 0 /f }
     }
 } catch {
     # Unhandled exception — display recovery instructions so user isn't stuck.
@@ -212,6 +218,20 @@ try {
     Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Red
     Write-Host "  Error: $_" -ForegroundColor Red
     if ($_.ScriptStackTrace) { Write-Host "  Stack: $($_.ScriptStackTrace)" -ForegroundColor DarkGray }
+
+    # Best-effort: register Phase 3 RunOnce so the user isn't left with no autostart.
+    # Step 1 (bcdedit) already ran, so next boot is Normal Mode — Phase 3 should fire.
+    try {
+        if (-not (Test-StepDone $PHASE 3)) {
+            Set-RunOnce "CS2_Phase3" "$CFG_WorkDir\PostReboot-Setup.ps1"
+            Write-Host "" -ForegroundColor Green
+            Write-Host "  $([char]0x2714) Phase 3 registered — it will start automatically on next boot." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  $([char]0x26A0) Could not register Phase 3 for next boot." -ForegroundColor Yellow
+    }
+
     Write-Host "" -ForegroundColor Yellow
     Write-Host "  RECOVERY:" -ForegroundColor Yellow
     Write-Host "  Step 1 (bcdedit) runs first. If it completed, next boot = Normal Mode." -ForegroundColor White
@@ -220,10 +240,11 @@ try {
     Write-Host "    shutdown /r /t 0" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor White
     Write-Host "  If GPU driver was partially removed, Windows will load Basic Display" -ForegroundColor White
-    Write-Host "  Adapter on next boot. Install your GPU driver manually or run" -ForegroundColor White
-    Write-Host "  Phase 3 from START.bat -> [P] Post-Reboot Setup (Phase 3)." -ForegroundColor White
+    Write-Host "  Adapter on next boot. Phase 3 will handle clean driver installation." -ForegroundColor White
+    Write-Host "  If Phase 3 does not start automatically, run it from" -ForegroundColor White
+    Write-Host "  START.bat -> [P] Post-Reboot Setup (Phase 3)." -ForegroundColor White
     Write-Host "" -ForegroundColor White
-    Read-Host "  Press Enter to exit"
+    if (-not (Test-YoloProfile)) { Read-Host "  Press Enter to exit" }
 } finally {
     # Release backup lock — acquired by Initialize-Backup at the top of this script.
     # In try/finally to ensure release on crash, Ctrl+C, or normal exit.

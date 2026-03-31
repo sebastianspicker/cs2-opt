@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  tests/helpers/benchmark-history.Tests.ps1  --  Benchmark history & FPS cap tests
 # ==============================================================================
 
@@ -98,9 +98,9 @@ Describe "Calculate-FpsCap" {
 
     It "handles fractional FPS values" {
         $cap = Calculate-FpsCap 333.3
-        # 333.3 - Round(333.3 * 0.09) = 333.3 - 30 = 303 (int truncation)
+        # Floor(333.3 - Floor(333.3 * 0.09)) = Floor(333.3 - 29) = 304
         $cap | Should -BeOfType [int]
-        $cap | Should -BeGreaterThan 0
+        $cap | Should -Be 304
     }
 }
 
@@ -184,9 +184,9 @@ Describe "Add-BenchmarkResult" {
     }
 
     It "trims oldest entries when exceeding max" {
-        # Set a small max for testing
-        $originalMax = $CFG_BenchmarkMaxEntries
-        $CFG_BenchmarkMaxEntries = 3
+        # Use $script: scope to match how the function reads the variable
+        $originalMax = $script:CFG_BenchmarkMaxEntries
+        $script:CFG_BenchmarkMaxEntries = 3
         try {
             Add-BenchmarkResult -AvgFps 100 -P1Fps 50 -Label "entry1"
             Add-BenchmarkResult -AvgFps 200 -P1Fps 100 -Label "entry2"
@@ -197,7 +197,7 @@ Describe "Add-BenchmarkResult" {
             # Oldest entry (100 FPS) should be trimmed
             $h[0].label | Should -Be "entry2"
         } finally {
-            $CFG_BenchmarkMaxEntries = $originalMax
+            $script:CFG_BenchmarkMaxEntries = $originalMax
         }
     }
 

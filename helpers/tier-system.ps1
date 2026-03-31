@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/tier-system.ps1  —  Profile & Tier-Aware Step Execution
 # ==============================================================================
 #
@@ -7,6 +7,7 @@
 #    RECOMMENDED   Safe + moderate tweaks. Moderate steps prompted.
 #    COMPETITIVE   Everything incl. community tips. All prompted.
 #    CUSTOM        Full detail card for every step. Nothing auto.
+#    YOLO          Everything auto-executes (up to AGGRESSIVE). Zero prompts.
 #
 #  TIER SYSTEM (internal):
 #    T1  Proven, measurable effect on 1%/0.1% lows.
@@ -37,11 +38,12 @@
 #  │ RECOMMENDED  │ auto     │ ≤MODERATE→prompted, else skip│ skip             │
 #  │ COMPETITIVE  │ auto     │ ≤AGGRESSIVE→prompted         │ ≤AGGRESSIVE→ask  │
 #  │ CUSTOM       │ prompted │ prompted (full card)         │ prompted         │
+#  │ YOLO         │ auto     │ ≤AGGRESSIVE→auto             │ ≤AGGRESSIVE→auto │
 #  └──────────────┴──────────┴──────────────────────────────┴──────────────────┘
 #  DRY-RUN is a modifier that can be combined with any profile.
 
-if (-not $SCRIPT:RiskOrder) { $SCRIPT:RiskOrder = @{ "SAFE"=1; "MODERATE"=2; "AGGRESSIVE"=3; "CRITICAL"=4 } }
-if (-not $SCRIPT:AppliedSteps) { $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new() }
+if (-not (Get-Variable -Name RiskOrder -Scope Script -ErrorAction SilentlyContinue)) { $SCRIPT:RiskOrder = @{ "SAFE"=1; "MODERATE"=2; "AGGRESSIVE"=3; "CRITICAL"=4 } }
+if (-not (Get-Variable -Name AppliedSteps -Scope Script -ErrorAction SilentlyContinue)) { $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new() }
 
 function Save-AppliedSteps {
     <#  Persists $SCRIPT:AppliedSteps to state.json so Phase 3 can read Phase 1 estimates.  #>
@@ -66,6 +68,8 @@ function Load-AppliedSteps {
     } catch { Write-Debug "Could not load AppliedSteps: $_" }
 }
 
+function Test-YoloProfile { return $SCRIPT:Profile -eq "YOLO" }
+
 function Get-ProfileMaxRisk {
     # Normalize profile to uppercase for case-insensitive matching
     $p = if ($SCRIPT:Profile) { $SCRIPT:Profile.ToUpper() } else { "" }
@@ -73,6 +77,7 @@ function Get-ProfileMaxRisk {
         "SAFE"        { return "SAFE" }
         "RECOMMENDED" { return "MODERATE" }
         "COMPETITIVE" { return "AGGRESSIVE" }
+        "YOLO"        { return "AGGRESSIVE" }
         "CUSTOM"      { return "CRITICAL" }
         default       { return "MODERATE" }
     }
@@ -193,8 +198,8 @@ function Invoke-TieredStep {
     $showCard = ($SCRIPT:Profile -eq "CUSTOM") -or
                 ($SCRIPT:DryRun) -or
                 ($SCRIPT:LogLevel -eq "VERBOSE") -or
-                ($Tier -gt 1 -and $SCRIPT:Profile -ne "SAFE") -or
-                ($Risk -in @("AGGRESSIVE","CRITICAL"))
+                ($Tier -gt 1 -and $SCRIPT:Profile -notin @("SAFE","YOLO")) -or
+                ($Risk -in @("AGGRESSIVE","CRITICAL") -and $SCRIPT:Profile -ne "YOLO")
 
     if ($showCard -and ($Risk -or $Improvement -or $SideEffects)) {
         Show-StepInfoCard -Tier $Tier -Title $Title -Why $Why `
@@ -216,7 +221,7 @@ function Invoke-TieredStep {
         switch ($SCRIPT:Profile) {
             "SAFE"        { if ($Tier -ge 3 -or ($Tier -eq 2 -and $Risk -notin @("SAFE","",$null))) { $wouldSkip = $true } }
             "RECOMMENDED" { if ($Tier -ge 3 -or ($Tier -eq 2 -and $Risk -and -not (Test-RiskAllowed $Risk))) { $wouldSkip = $true } }
-            # COMPETITIVE/CUSTOM: intentionally preview all steps in DRY-RUN
+            # COMPETITIVE/CUSTOM/YOLO: intentionally preview all steps in DRY-RUN
         }
         if ($wouldSkip) {
             Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Would SKIP: $Title (filtered by $($SCRIPT:Profile) profile)" -ForegroundColor DarkGray
@@ -233,7 +238,7 @@ function Invoke-TieredStep {
         # manually calls Backup-* without a DryRun guard, entries would be orphaned.
         try { Flush-BackupBuffer } catch { Write-Debug "Flush-BackupBuffer failed after DRY-RUN '$Title': $_" }
         $SCRIPT:CurrentStepTitle = $null
-        return $true
+        return $false
     }
 
     # ── Decide whether to run based on profile + tier ───────────────
@@ -250,7 +255,8 @@ function Invoke-TieredStep {
                 Write-Debug "SAFE/T2(SAFE): Auto-Execute '$Title'"
                 $run = $true
             } else {
-                # Should not reach here due to risk filter, but safety net
+                # T2 without Risk="SAFE" or unexpected tier — skip with debug message
+                Write-Debug "SAFE profile: Skipping '$Title' (Tier=$Tier, Risk=$Risk)"
                 $run = $false
             }
         }
@@ -295,7 +301,7 @@ function Invoke-TieredStep {
                 # T3: prompt in COMPETITIVE
                 Write-Blank
                 $rTag = if ($Risk) { " [$Risk]" } else { "" }
-                Write-Host "  $([char]0x25C6) [T3$rTag] Community tip — no hard benchmark proof." -ForegroundColor DarkCyan
+                Write-Host "  $([char]0x25C6) [T3$rTag] Community tip $([char]0x2014) no hard benchmark proof." -ForegroundColor DarkCyan
                 if ($Improvement) {
                     Write-Host "       Expected: $Improvement" -ForegroundColor Cyan
                 }
@@ -327,6 +333,12 @@ function Invoke-TieredStep {
             }
         }
 
+        "YOLO" {
+            # Everything auto-executes. No prompts. Risk ceiling enforced above.
+            Write-Debug "YOLO/T${Tier}: Auto-Execute '$Title'"
+            $run = $true
+        }
+
         default {
             # Fallback: treat as RECOMMENDED
             $run = ($Tier -eq 1)
@@ -344,7 +356,7 @@ function Invoke-TieredStep {
         try { & $Action } catch {
             Write-Err "Step '$Title' failed: $_"
             Write-Host "  $([char]0x2139) What to do: This step was skipped safely. Your system is not affected." -ForegroundColor Cyan
-            Write-Host "  $([char]0x2139) You can retry later via START.bat, or continue — remaining steps still work." -ForegroundColor Cyan
+            Write-Host "  $([char]0x2139) You can retry later via START.bat, or continue $([char]0x2014) remaining steps still work." -ForegroundColor Cyan
             $actionOk = $false
         }
         # Track applied steps for improvement estimation (only on success)
@@ -377,6 +389,9 @@ function Get-ImprovementEstimate {
     $totalAvgMin = 0; $totalAvgMax = 0
     $steps = [System.Collections.Generic.List[object]]::new()
 
+    if (-not $CFG_ImprovementEstimates) {
+        return @{ P1LowMin=0; P1LowMax=0; AvgMin=0; AvgMax=0; Steps=@(); Count=0 }
+    }
     foreach ($key in $SCRIPT:AppliedSteps) {
         if ($CFG_ImprovementEstimates.ContainsKey($key)) {
             $est = $CFG_ImprovementEstimates[$key]
@@ -453,19 +468,19 @@ function Show-ImprovementEstimate {
         Write-Host "  │" -ForegroundColor DarkGray
 
         # Verdict
-        if ($actualP1Pct -ge $est.P1LowMin -and $actualP1Pct -lt ($est.P1LowMax * 1.5)) {
+        if ($actualP1Pct -ge $est.P1LowMin -and $actualP1Pct -le $est.P1LowMax) {
             Write-Host "  │  $([char]0x2714) WITHIN EXPECTED RANGE" -ForegroundColor Green
             Write-Host "  │  Estimated +$($est.P1LowMin)-$($est.P1LowMax)%, got $(if($actualP1Pct -ge 0){'+'})$actualP1Pct%" -ForegroundColor Green
-        } elseif ($actualP1Pct -ge ($est.P1LowMax * 1.5)) {
+        } elseif ($actualP1Pct -gt $est.P1LowMax) {
             Write-Host "  │  $([char]0x2714) BETTER THAN EXPECTED" -ForegroundColor Green
-            Write-Host "  │  Estimated +$($est.P1LowMin)-$($est.P1LowMax)%, got +$actualP1Pct% — great result!" -ForegroundColor Green
+            Write-Host "  │  Estimated +$($est.P1LowMin)-$($est.P1LowMax)%, got +$actualP1Pct% $([char]0x2014) great result!" -ForegroundColor Green
         } elseif ($actualP1Pct -ge 0 -and $actualP1Pct -lt $est.P1LowMin) {
             Write-Host "  │  $([char]0x25B2) BELOW ESTIMATE" -ForegroundColor Yellow
             Write-Host "  │  Estimated +$($est.P1LowMin)-$($est.P1LowMax)%, got +$actualP1Pct%" -ForegroundColor Yellow
             Write-Host "  │  Some steps may not apply to your setup. Run 3x to confirm." -ForegroundColor DarkGray
         } else {
             Write-Host "  │  $([char]0x2718) REGRESSION" -ForegroundColor Red
-            Write-Host "  │  Estimated improvement, got $actualP1Pct% — investigate!" -ForegroundColor Red
+            Write-Host "  │  Estimated improvement, got $actualP1Pct% $([char]0x2014) investigate!" -ForegroundColor Red
             Write-Host "  │  Consider reverting recent changes: START.bat -> [7] Restore" -ForegroundColor DarkGray
         }
     } else {
@@ -487,6 +502,7 @@ function Show-ImprovementEstimate {
 
 # Backward-compatible wrapper
 function Confirm-Risk($msg, $warning) {
+    if (Test-YoloProfile) { return $true }
     Write-Blank
     Write-Warn $warning
     $r = Read-Host "  $msg [y/N]"

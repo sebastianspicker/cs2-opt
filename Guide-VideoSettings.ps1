@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  Guide-VideoSettings.ps1  —  CS2 Video Settings Guide (Feb 2026 Meta)
 # ==============================================================================
 
@@ -8,6 +8,12 @@ function Show-CS2SettingsGuide {
         [int] $avgFps,
         [string] $gpuInput
     )
+
+    # DRY-RUN: skip interactive guide entirely — it has multiple Read-Host loops
+    if ($SCRIPT:DryRun) {
+        Write-Host "  [DRY-RUN] Would show CS2 video settings guide (interactive)" -ForegroundColor Magenta
+        return
+    }
 
     # ── REFLEX DECISION (conflicting data) ─────────────────────────────────
     Write-Blank
@@ -111,8 +117,9 @@ function Show-CS2SettingsGuide {
     }
 
     # ── WINDOWS 11: Optimizations for windowed games ─────────────────────
-    $buildRaw = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" `
-        -Name "CurrentBuildNumber" -ErrorAction SilentlyContinue).CurrentBuildNumber
+    $buildProps = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" `
+        -Name "CurrentBuildNumber" -ErrorAction SilentlyContinue
+    $buildRaw = if ($buildProps) { $buildProps.CurrentBuildNumber } else { $null }
     $build = 0
     if ($buildRaw) { try { $build = [int]$buildRaw } catch { $build = 0 } }
     if ($build -ge 22000) {

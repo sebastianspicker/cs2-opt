@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS  CS2 Optimization Suite — Cleanup / Soft-Reset
 
@@ -183,13 +183,13 @@ if ($doFull) {
     Write-TierBadge 3 "Clear Event Logs  (no 1%-low effect)"
     if (-not $SCRIPT:DryRun) {
         try {
-            foreach ($l in @("Application","System","Security","Setup")) {
-                wevtutil cl $l 2>$null
+            foreach ($l in @("Application","System","Setup")) {
+                wevtutil cl $l 2>&1 | Out-Null
             }
             Write-OK "Event Logs cleared."
         } catch { Write-Warn "Event Logs partially not cleared." }
     } else {
-        Write-Host "  [DRY-RUN] Would clear: Application, System, Security, Setup event logs" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] Would clear: Application, System, Setup event logs" -ForegroundColor Magenta
     }
 
     # Steam Verification  [T2]
@@ -244,7 +244,7 @@ if ($doDriver) {
     $gpuVendorOk = $false
     if (Test-Path $CFG_StateFile) {
         try {
-            $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
+            $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
             if ($st.gpuInput -in @("1","2","3","4")) { $gpuVendorOk = $true }
         } catch { Write-Debug "State file read failed: $_" }
     }
@@ -258,7 +258,7 @@ if ($doDriver) {
         # Persist to state for SafeMode-DriverClean.ps1
         try {
             if (Test-Path $CFG_StateFile) {
-                $st = Get-Content $CFG_StateFile -ErrorAction Stop | ConvertFrom-Json
+                $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
             } else {
                 # State file doesn't exist yet — create minimal state so SafeMode-DriverClean
                 # can read gpuInput after reboot. Without this, the GPU choice is lost.
@@ -312,10 +312,21 @@ if ($doDriver) {
 
     # Reset all progress unconditionally — Phase 2+3 will re-run from scratch
     Clear-Progress $null
-    Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1"
+    Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1" -SafeMode
     $SCRIPT:CurrentStepTitle = "Driver Refresh — Safe Mode boot"
-    Set-BootConfig "safeboot" "minimal" "Driver Refresh — Safe Mode for GPU driver clean"
+    $null = Set-BootConfig "safeboot" "minimal" "Driver Refresh — Safe Mode for GPU driver clean"
     try { Flush-BackupBuffer } catch { Write-Debug "Flush after boot config backup failed: $_" }
+
+    # Verify safeboot flag — retry with explicit {current} if first attempt failed
+    if (-not (Test-BootConfigSet "safeboot")) {
+        Write-Warn "Safeboot flag not detected — retrying with explicit identifier..."
+        $null = bcdedit /set "{current}" safeboot minimal 2>&1
+    }
+    if (-not (Test-BootConfigSet "safeboot")) {
+        Write-Err "Could not set Safe Mode boot flag. Run manually: bcdedit /set {current} safeboot minimal"
+        Write-Host "  Then restart to enter Safe Mode for Phase 2." -ForegroundColor Cyan
+        return
+    }
 
     Write-Host "  Restarting in 10 seconds..." -ForegroundColor Yellow
     Start-Sleep 10; Restart-Computer -Force; exit 0

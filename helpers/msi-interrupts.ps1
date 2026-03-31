@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  helpers/msi-interrupts.ps1  —  MSI Interrupts + NIC Interrupt Affinity
 # ==============================================================================
 
@@ -93,28 +93,40 @@ function Set-NicRssConfig {
     try {
         $subkeys = Get-ChildItem $classPath -ErrorAction Stop |
             Where-Object { $_.PSChildName -match "^\d{4}$" }
-
-        # Prefer exact match, fallback to substring only if no exact match found
-        $substringMatch = $null
-        foreach ($key in $subkeys) {
-            $desc = (Get-ItemProperty $key.PSPath -Name "DriverDesc" -ErrorAction SilentlyContinue).DriverDesc
-            if ($desc -and $desc -eq $nic.InterfaceDescription) {
-                $driverKey = $key.PSPath
-                break
-            }
-            if (-not $substringMatch -and $desc -and (
-                $nic.InterfaceDescription -like "*$desc*" -or
-                $desc -like "*$($nic.InterfaceDescription)*")) {
-                $substringMatch = $key.PSPath
-            }
-        }
-        if (-not $driverKey -and $substringMatch) {
-            $driverKey = $substringMatch
-            Write-Debug "RSS: using substring match for NIC driver key (no exact match found)"
-        }
     } catch {
-        Write-Warn "RSS: could not enumerate network class keys: $_"
-        return
+        # Fallback: parent-level ACL may block Get-ChildItem but individual subkeys
+        # are often accessible. Try numbered subkeys 0000–0030 directly.
+        Write-Debug "RSS: Get-ChildItem failed ($_), trying direct subkey access..."
+        $subkeys = @()
+        for ($i = 0; $i -le 30; $i++) {
+            $subPath = "$classPath\$($i.ToString('D4'))"
+            try { $subkeys += Get-Item $subPath -ErrorAction Stop } catch { }
+        }
+        if (-not $subkeys) {
+            Write-Warn "RSS: could not access network class registry keys — skipping RSS configuration."
+            Write-Sub "This does not affect other NIC optimizations (adapter properties, URO, QoS)."
+            return
+        }
+        Write-Debug "RSS: fallback found $($subkeys.Count) subkey(s)"
+    }
+
+    # Prefer exact match, fallback to substring only if no exact match found
+    $substringMatch = $null
+    foreach ($key in $subkeys) {
+        $desc = (Get-ItemProperty $key.PSPath -Name "DriverDesc" -ErrorAction SilentlyContinue).DriverDesc
+        if ($desc -and $desc -eq $nic.InterfaceDescription) {
+            $driverKey = $key.PSPath
+            break
+        }
+        if (-not $substringMatch -and $desc -and (
+            $nic.InterfaceDescription -like "*$desc*" -or
+            $desc -like "*$($nic.InterfaceDescription)*")) {
+            $substringMatch = $key.PSPath
+        }
+    }
+    if (-not $driverKey -and $substringMatch) {
+        $driverKey = $substringMatch
+        Write-Debug "RSS: using substring match for NIC driver key (no exact match found)"
     }
 
     if (-not $driverKey) {
@@ -128,10 +140,11 @@ function Set-NicRssConfig {
     # which silently ignores all RSS sub-parameters (queues, base proc, etc.).
     # Also enable if *RSS doesn't exist at all (missing = disabled on many drivers).
     $rssKeyword = Get-ItemProperty $driverKey -Name "*RSS" -ErrorAction SilentlyContinue
-    if ($null -eq $rssKeyword."*RSS") {
+    $rssValue = if ($null -ne $rssKeyword) { $rssKeyword."*RSS" } else { $null }
+    if ($null -eq $rssValue) {
         Set-RegistryValue $driverKey "*RSS" 1 "DWord" "Enable RSS master switch (was absent)"
         Write-Info "RSS master switch (*RSS) was absent — created and enabled. Sub-parameters below require this."
-    } elseif ([int]$rssKeyword."*RSS" -eq 0) {
+    } elseif ([int]$rssValue -eq 0) {
         Set-RegistryValue $driverKey "*RSS" 1 "DWord" "Enable RSS master switch (was disabled)"
         Write-Info "RSS master switch (*RSS) was 0 — enabled. Sub-parameters below require this."
     }
@@ -148,7 +161,11 @@ function Set-NicRssConfig {
     # queues to non-existent cores (causes driver errors or silent fallback).
     $processorCount = [Environment]::ProcessorCount
     $rssBaseProcNumber = 2
-    if ($processorCount - $rssBaseProcNumber -lt $rssQueueCount) {
+    if ($processorCount -le 2) {
+        $rssBaseProcNumber = 0
+        $rssQueueCount = [math]::Max(1, $processorCount)
+        Write-Info "RSS: Only $processorCount logical processors — base proc 0, $rssQueueCount queue(s)"
+    } elseif ($processorCount - $rssBaseProcNumber -lt $rssQueueCount) {
         $rssBaseProcNumber = 1
         Write-Info "RSS: Only $processorCount logical processors — reduced base proc to $rssBaseProcNumber"
         if ($processorCount - $rssBaseProcNumber -lt $rssQueueCount) {
@@ -193,8 +210,8 @@ function Set-NicRssConfig {
     $skipped = 0
 
     foreach ($entry in $rssDefaults.GetEnumerator()) {
-        $existing = Get-ItemProperty $driverKey -Name $entry.Key -ErrorAction SilentlyContinue
-        if ($null -ne $existing.($entry.Key)) {
+        $existing = Get-ItemProperty -LiteralPath $driverKey -Name $entry.Key -ErrorAction SilentlyContinue
+        if ($null -ne $existing -and $null -ne $existing.($entry.Key)) {
             Write-Sub "$($entry.Key) = $($existing.($entry.Key)) (already set — preserved)"
             $skipped++
         } else {
@@ -273,11 +290,12 @@ function Set-NicInterruptAffinity {
 
     # Get physical core count (need physical, not logical, for correct core targeting)
     try {
-        $coreCount = (Get-CimInstance Win32_Processor | Select-Object -First 1).NumberOfCores
+        $coreCount = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).NumberOfCores
+        if (-not $coreCount) { throw "NumberOfCores returned null" }
     } catch {
-        # Fallback: use logical count directly (safer than assuming SMT factor)
+        # Fallback: estimate physical cores as half of logical count
         $logicalCount = [Environment]::ProcessorCount
-        $coreCount = [math]::Max(2, $logicalCount)
+        $coreCount = [math]::Max(2, [math]::Floor($logicalCount / 2))
         Write-Debug "CIM failed — using $coreCount logical processors as core count"
     }
 
@@ -302,10 +320,36 @@ function Set-NicInterruptAffinity {
     $smtEnabled   = ($logicalCount -gt $coreCount)
     $targetLP     = [math]::Min($coreCount - 1, 63)
     $mask         = [uint64]1 -shl $targetLP
-    if ($smtEnabled -and ($targetLP + $coreCount) -le 63) {
-        $mask = $mask -bor ([uint64]1 -shl ($targetLP + $coreCount))
+    # SMT sibling calculation depends on CPU topology:
+    # - AMD: sequential — core N threads at LP N and LP N+coreCount
+    # - Intel (non-hybrid): interleaved — core N threads at LP 2N and LP 2N+1
+    # - Hybrid (Intel 12th+): E-cores have no SMT sibling
+    $vendor = Get-ChipsetVendor
+    $siblingLP = -1
+    $physCoreIdx = $targetLP   # preserve before possible mutation
+    if ($smtEnabled -and (-not $hybridCpu)) {
+        if ($vendor -eq "AMD") {
+            $siblingLP = $targetLP + $coreCount
+        } else {
+            # Intel interleaved: core's two threads are adjacent (2N, 2N+1)
+            # targetLP is the physical core index; in interleaved layout, its threads
+            # are at LP targetLP*2 and LP targetLP*2+1. But we need the actual LP index.
+            # Since targetLP = coreCount-1 and logical = coreCount*2, the sibling is targetLP+coreCount
+            # for sequential, or for interleaved: if targetLP is even, sibling = targetLP+1; if odd, targetLP-1.
+            # However, the $targetLP we computed is a physical core index mapped to LP space.
+            # For interleaved Intel: thread 0 of core N = LP 2N, thread 1 = LP 2N+1
+            $primaryLP = $targetLP * 2
+            if ($primaryLP -lt 64) {
+                $mask = [uint64]1 -shl $primaryLP
+                $targetLP = $primaryLP
+                $siblingLP = $primaryLP + 1
+            }
+        }
+        if ($siblingLP -ge 0 -and $siblingLP -lt 64) {
+            $mask = $mask -bor ([uint64]1 -shl $siblingLP)
+        }
     }
-    if ($hybridCpu) { Write-Debug "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity" }
+    if ($hybridCpu) { Write-Debug "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity (no SMT sibling on E-core)" }
 
     # Convert mask to 8-byte array for registry (binary value)
     $maskBytes = [BitConverter]::GetBytes([uint64]$mask)
@@ -319,13 +363,13 @@ function Set-NicInterruptAffinity {
 
     # AssignmentSetOverride is Binary — Set-RegistryValue supports this via -Type passthrough
     $lpIndices = @($targetLP)
-    if ($smtEnabled -and ($targetLP + $coreCount) -le 63) { $lpIndices += ($targetLP + $coreCount) }
+    if ($siblingLP -ge 0 -and $siblingLP -le 63) { $lpIndices += $siblingLP }
     $lpLabel = ($lpIndices | ForEach-Object { "LP $_" }) -join ", "
     Set-RegistryValue $affinityPath "AssignmentSetOverride" ([byte[]]$maskBytes) "Binary" `
         "NIC affinity mask 0x$($mask.ToString('X')) -> ${lpLabel}: $($nic.FriendlyName)"
 
     if (-not $SCRIPT:DryRun) {
-        Write-OK "NIC affinity set: $($nic.FriendlyName) -> $lpLabel (physical core $targetLP)"
+        Write-OK "NIC affinity set: $($nic.FriendlyName) -> $lpLabel (physical core $physCoreIdx)"
         Write-Info "Affinity mask: 0x$($mask.ToString('X')) ($lpLabel of $logicalCount LPs, $coreCount physical cores$(if($smtEnabled){', SMT enabled'}))"
     }
     Write-Info "Restart required for affinity changes to take effect."

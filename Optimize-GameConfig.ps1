@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 #  Optimize-GameConfig.ps1  —  Steps 34-38: Autoexec, Chipset, Visual Effects,
 #                                Services, Safe Mode Preparation
 # ==============================================================================
@@ -35,6 +35,7 @@ if ($startStep -le 34) {
                     Write-Sub "$($kv.Key) $($kv.Value)"
                 }
                 Write-Info "Then add 'exec optimization.cfg' as the last line of autoexec.cfg."
+                Complete-Step $PHASE 34 "Autoexec"
             } else {
                 $cfgDir       = "$cs2Path\game\csgo\cfg"
                 $autoexecPath = "$cfgDir\autoexec.cfg"
@@ -108,7 +109,7 @@ if ($startStep -le 34) {
 
                 # ── Optionally show full optimization.cfg contents ─────────────────────────
                 Write-Blank
-                $showAll = Read-Host "  Show full optimization.cfg ($($effectiveAutoexec.Count) CVars)? [y/N]"
+                $showAll = if ($SCRIPT:DryRun -or (Test-YoloProfile)) { "n" } else { Read-Host "  Show full optimization.cfg ($($effectiveAutoexec.Count) CVars)? [y/N]" }
                 if ($showAll -match "^[yY]$") {
                     Write-Blank
                     foreach ($kv in $effectiveAutoexec.GetEnumerator()) {
@@ -126,7 +127,7 @@ if ($startStep -le 34) {
                 }
 
                 # ── Write files ────────────────────────────────────────────────────────────
-                $proceed = Read-Host "  Write optimization.cfg + add 'exec optimization.cfg' to autoexec? [Y/n]"
+                $proceed = if ($SCRIPT:DryRun -or (Test-YoloProfile)) { "Y" } else { Read-Host "  Write optimization.cfg + add 'exec optimization.cfg' to autoexec? [Y/n]" }
                 if ($proceed -notmatch "^[nN]$") {
 
                     # Write optimization.cfg — full clean write each run
@@ -148,8 +149,8 @@ if ($startStep -le 34) {
                         $optLines += "$($kv.Key) $($kv.Value)"
                     }
                     if (-not $SCRIPT:DryRun) {
-                        # Back up existing optimization.cfg before overwriting
-                        if (Test-Path $optPath) { Copy-Item $optPath "$optPath.bak" -Force }
+                        # Back up existing optimization.cfg before overwriting (only if no backup exists yet)
+                        if ((Test-Path $optPath) -and -not (Test-Path "$optPath.bak")) { Copy-Item $optPath "$optPath.bak" -Force }
                         # Use BOM-less UTF-8 — PS 5.1's -Encoding UTF8 adds a BOM (EF BB BF)
                         # which can corrupt the first line if Source 2 doesn't skip it.
                         [System.IO.File]::WriteAllLines($optPath, $optLines, [System.Text.UTF8Encoding]::new($false))
@@ -160,7 +161,7 @@ if ($startStep -le 34) {
 
                     # Append 'exec optimization.cfg' to autoexec.cfg — the only touch to the user's file
                     $execLine   = "exec optimization.cfg"
-                    $alreadyHas = $existingLines | Where-Object { $_ -match '^\s*exec\s+optimization\.cfg\s*($|//)' }
+                    $alreadyHas = $existingLines | Where-Object { $_ -imatch '^\s*exec\s+optimization\.cfg\s*($|//)' }
                     if (-not $alreadyHas) {
                         if ($existingLines.Count -gt 0) {
                             if ($existingLines[-1].Trim() -ne "") { $existingLines += "" }
@@ -219,7 +220,7 @@ if ($startStep -le 34) {
                     }
 
                     # ── Network CFG usage guide ──────────────────────────────────────────────
-                    if ($netCfgsDeployed -gt 0 -or $SCRIPT:DryRun) {
+                    if ($netCfgsDeployed -gt 0 -or ($SCRIPT:DryRun -and (Test-Path $cfgSourceDir))) {
                         Write-Blank
                         Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
                         Write-Host "  │  NETWORK CONDITION CFGs (console commands, use as needed)   │" -ForegroundColor Cyan
@@ -255,10 +256,30 @@ if ($startStep -le 34) {
                         -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
                     if ($lcPath -and (Test-Path $lcPath)) {
                         $lc = Get-Content $lcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+                        if ([string]::IsNullOrWhiteSpace($lc)) { $lc = $null }
+                    }
+                    if ($lc) {
                         # VDF is nested text with recursive braces. A flat regex like
                         # [^}]* fails on nested sub-objects. Instead, find the "730" key
                         # and then manually walk braces to extract its block.
-                        $idx730 = $lc.IndexOf('"730"')
+                        # Find "730" as a VDF key (preceded by whitespace), not as a value
+                        $idx730 = -1
+                        $searchFrom = 0
+                        while ($searchFrom -lt $lc.Length) {
+                            $candidate = $lc.IndexOf('"730"', $searchFrom)
+                            if ($candidate -lt 0) { break }
+                            # VDF keys are preceded by whitespace/newline and followed by whitespace then '{';
+                            # values are also preceded by whitespace, so also check what follows
+                            $before = if ($candidate -gt 0) { $lc[$candidate - 1] } else { "`n" }
+                            if ($before -match '[\s\n\r{]') {
+                                # Verify next non-whitespace after "730" is '{' (key), not '"' (value)
+                                $afterToken = $lc.Substring($candidate + 5).TrimStart()
+                                if ($afterToken.Length -gt 0 -and $afterToken[0] -eq '{') {
+                                    $idx730 = $candidate; break
+                                }
+                            }
+                            $searchFrom = $candidate + 5
+                        }
                         if ($idx730 -ge 0) {
                             $braceStart = $lc.IndexOf('{', $idx730)
                             if ($braceStart -ge 0) {
@@ -297,7 +318,7 @@ if ($startStep -le 34) {
             Write-Host "  │  -> General -> uncheck 'Keep saves in the Steam Cloud'       │" -ForegroundColor DarkGray
             Write-Host "  │  (Only disables cloud for CS2 — other games stay synced)    │" -ForegroundColor DarkGray
             Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor $cloudColor
-            Read-Host "  [Enter] after disabling Cloud sync for CS2"
+            if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] after disabling Cloud sync for CS2" }
 
             # ── Launch Options Guide ──────────────────────────────────────
             Write-Blank
@@ -335,7 +356,7 @@ if ($startStep -le 34) {
             "-console +exec autoexec" | Set-ClipboardSafe
             Write-OK "Launch options string copied to clipboard: -console +exec autoexec"
             Write-Info "Add -refresh [Hz] with your monitor's refresh rate (e.g. -refresh 144)."
-            Read-Host "  [Enter] when launch options are set in Steam"
+            if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) { Read-Host "  [Enter] when launch options are set in Steam" }
 
             Complete-Step $PHASE 34 "Autoexec"
         } `
@@ -381,9 +402,15 @@ if ($startStep -le 35) {
                 Write-Info "Download: $url"
                 $url | Set-ClipboardSafe
                 Write-OK "URL copied to clipboard."
-                $r = Read-Host "  Open in browser? [y/N]"
-                if ($r -match "^[jJyY]$") {
-                    Start-Process $url
+                if (-not $SCRIPT:DryRun -and -not (Test-YoloProfile)) {
+                    $r = Read-Host "  Open in browser? [y/N]"
+                    if ($r -match "^[jJyY]$") {
+                        if ($url -match '^https://(www\.)?(amd|intel)\.com/') {
+                            Start-Process $url
+                        } else {
+                            Write-Warn "URL validation failed — open manually: $url"
+                        }
+                    }
                 }
             } else {
                 Write-Warn "CPU manufacturer not recognized — check manually."
@@ -426,8 +453,9 @@ if ($startStep -le 36) {
             # Exclude CS2 executable and shader cache directories from real-time scanning.
             # Uses Add-MpPreference (Windows Defender API) — does NOT disable protection.
             # djdallmann: "excludes NVIDIA DXCache, AMD shader cache, update datastore"
-            try {
-                $mpAvailable = Get-Command Add-MpPreference -ErrorAction Stop
+            if (-not (Get-Command Add-MpPreference -ErrorAction SilentlyContinue)) {
+                Write-Warn "Windows Defender API not available — exclusions skipped. (This is normal on some debloated Windows builds.)"
+            } else { try {
                 # Exclusion paths — common Steam install locations + shader caches
                 $excludePaths = @(
                     "${env:ProgramFiles(x86)}\Steam\steamapps\common\Counter-Strike Global Offensive",
@@ -473,8 +501,8 @@ if ($startStep -le 36) {
                 }
                 Write-ActionOK "Defender: excluded cs2.exe + $($addedPaths.Count) game/cache paths from real-time scanning."
             } catch {
-                Write-Warn "Windows Defender API not available — exclusions skipped. (This is normal on some debloated Windows builds.)"
-            }
+                Write-Warn "Defender exclusion error: $($_.Exception.Message)"
+            } }
 
             # ── Win11 Auto HDR disable ─────────────────────────────────────────
             # Auto HDR applies tone-mapping post-processing to SDR games in Win11.
@@ -634,8 +662,47 @@ if ($startStep -le 38) {
             throw "Required directory missing: helpers/"
         }
 
-        Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1"
-        Set-BootConfig "safeboot" "minimal" "Safe Mode for GPU driver clean"
-        Complete-Step $PHASE 38 "SafeMode"
+        Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1" -SafeMode
+
+        # Use explicit {current} identifier — some Windows builds ignore the implicit default.
+        # Capture exit code before piping (| Out-String resets $LASTEXITCODE in PS 5.1).
+        $bcdOut = bcdedit /set "{current}" safeboot minimal 2>&1
+        $bcdExit = $LASTEXITCODE
+        Write-Debug "bcdedit /set {current} safeboot minimal — exit $bcdExit — $($bcdOut | Out-String)"
+
+        # If first attempt failed, retry without {current}
+        if ($bcdExit -ne 0) {
+            Write-Warn "bcdedit /set exited with code $bcdExit — retrying without {current}..."
+            $bcdOut = bcdedit /set safeboot minimal 2>&1
+            $bcdExit = $LASTEXITCODE
+            Write-Debug "bcdedit retry exit $bcdExit — $($bcdOut | Out-String)"
+        }
+
+        # Trust bcdedit exit code 0 as success. Only use Test-BootConfigSet as a
+        # fallback when bcdedit reports failure (exit code might be wrong but BCD
+        # was actually written — e.g. bcdedit returns 0 on "already set").
+        $safebootOk = ($bcdExit -eq 0) -or (Test-BootConfigSet "safeboot")
+
+        if ($safebootOk) {
+            $SCRIPT:SafebootReady = $true
+            Write-Blank
+            Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+            Write-Host "  ║  NOTICE: Safe Mode boot flag has been set.              ║" -ForegroundColor Yellow
+            Write-Host "  ║  The NEXT reboot will boot into Safe Mode.              ║" -ForegroundColor Yellow
+            Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+            Complete-Step $PHASE 38 "SafeMode"
+        } else {
+            $SCRIPT:SafebootReady = $false
+            Write-Blank
+            Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Red
+            Write-Host "  ║  ERROR: Safe Mode boot flag could NOT be set.           ║" -ForegroundColor Red
+            Write-Host "  ║                                                         ║" -ForegroundColor Red
+            Write-Host "  ║  The system will boot into Normal Mode on restart.      ║" -ForegroundColor Red
+            Write-Host "  ║  Try manually from an elevated cmd.exe:                 ║" -ForegroundColor Red
+            Write-Host "  ║    bcdedit /set {current} safeboot minimal              ║" -ForegroundColor Red
+            Write-Host "  ║  Then restart to enter Safe Mode for Phase 2.           ║" -ForegroundColor Red
+            Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Red
+            Write-Err "bcdedit /set safeboot minimal failed — step 38 NOT marked complete (will retry on next run)."
+        }
     }
 }
