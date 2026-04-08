@@ -788,16 +788,20 @@ Describe "Pagefile backup and restore roundtrip" {
             -InitialSize 4096 -MaximumSize 8192 -StepTitle "Pagefile Test Step"
         Flush-BackupBuffer
 
-        Mock wmic {
-            $global:LASTEXITCODE = 0
-            "Property(s) update successful."
+        $computerSystem = [PSCustomObject]@{ Name = "HOST" }
+        $pagefileSetting = [PSCustomObject]@{ Name = "C:\\pagefile.sys" }
+        Mock Get-CimInstance {
+            if ($ClassName -eq "Win32_ComputerSystem") { return $computerSystem }
+            if ($ClassName -eq "Win32_PageFileSetting") { return $pagefileSetting }
         }
-        Mock Set-WmiInstance {}
+        Mock Set-CimInstance {}
 
         $result = Restore-StepChanges -StepTitle "Pagefile Test Step"
 
         $result | Should -Be $true
-        Should -Invoke wmic -Exactly 1
+        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+            $InputObject -eq $pagefileSetting -and $Property.InitialSize -eq 4096 -and $Property.MaximumSize -eq 8192
+        }
         Should -Invoke Write-OK -ParameterFilter { $t -match "automated restore completed" }
         Should -Invoke Write-Info -ParameterFilter { $t -match "reboot is required" }
     }
@@ -807,7 +811,7 @@ Describe "Pagefile backup and restore roundtrip" {
             -InitialSize 0 -MaximumSize 0 -StepTitle "Pagefile Test Step"
         Flush-BackupBuffer
 
-        Mock Set-WmiInstance { throw "WMI unavailable" }
+        Mock Get-CimInstance { throw "CIM unavailable" }
         Mock Write-Info {}
 
         $result = Restore-StepChanges -StepTitle "Pagefile Test Step"

@@ -79,42 +79,67 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
         function global:Start-Service { param($Name) $null }
     }
     if (-not (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) {
-        function global:Get-NetAdapter { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Get-NetAdapter {
+            param($Name, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command Get-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
         function global:Get-NetAdapterAdvancedProperty {
-            param([Parameter(ValueFromRemainingArguments)]$Args)
+            param($Name, $DisplayName, $RegistryKeyword, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
             $null
         }
     }
     if (-not (Get-Command Set-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
         function global:Set-NetAdapterAdvancedProperty {
-            param([Parameter(ValueFromRemainingArguments)]$Args)
+            param($Name, $RegistryKeyword, $RegistryValue, $DisplayName, $DisplayValue, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
         }
     }
     if (-not (Get-Command Get-NetQosPolicy -ErrorAction SilentlyContinue)) {
-        function global:Get-NetQosPolicy { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Get-NetQosPolicy {
+            param($Name, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command Remove-NetQosPolicy -ErrorAction SilentlyContinue)) {
-        function global:Remove-NetQosPolicy { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Remove-NetQosPolicy {
+            [CmdletBinding(SupportsShouldProcess = $true)]
+            param($Name, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            if ($PSCmdlet.ShouldProcess($Name, 'Remove QoS policy')) {
+                $null
+            }
+            $null
+        }
     }
     if (-not (Get-Command Remove-MpPreference -ErrorAction SilentlyContinue)) {
-        function global:Remove-MpPreference { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Remove-MpPreference {
+            param($ExclusionPath, $ExclusionProcess, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command Set-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
-        function global:Set-DnsClientServerAddress { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Set-DnsClientServerAddress {
+            param($InterfaceIndex, $ServerAddresses, [switch]$ResetServerAddresses, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command Get-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
-        function global:Get-DnsClientServerAddress { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Get-DnsClientServerAddress {
+            param($InterfaceIndex, $AddressFamily, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command Stop-ScheduledTask -ErrorAction SilentlyContinue)) {
-        function global:Stop-ScheduledTask { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Stop-ScheduledTask {
+            param($TaskName, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command Set-WmiInstance -ErrorAction SilentlyContinue)) {
-        function global:Set-WmiInstance { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
-    }
-    if (-not (Get-Command Set-CimInstance -ErrorAction SilentlyContinue)) {
-        function global:Set-CimInstance { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
+        function global:Set-WmiInstance {
+            param($Class, $Arguments, $EnableAllPrivileges, $Path, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
     if (-not (Get-Command bcdedit -ErrorAction SilentlyContinue)) {
         function global:bcdedit { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
@@ -127,6 +152,13 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
     }
     if (-not (Get-Command wmic -ErrorAction SilentlyContinue)) {
         function global:wmic { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+
+    if (-not (Get-Command Set-CimInstance -ErrorAction SilentlyContinue)) {
+        function global:Set-CimInstance {
+            param($InputObject, $Property, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
 
     # On macOS/Linux, Set-ItemProperty does not have the -Type parameter
