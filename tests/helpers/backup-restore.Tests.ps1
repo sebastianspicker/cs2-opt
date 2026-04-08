@@ -32,7 +32,7 @@ Describe "Initialize-Backup" {
         $data.created | Should -Not -BeNullOrEmpty
     }
 
-    It "does not overwrite existing backup.json" {
+    It "rotates existing backup.json into a versioned file and starts a fresh active backup" {
         # Create a backup with an entry
         $existing = @{
             entries = @(
@@ -45,7 +45,12 @@ Describe "Initialize-Backup" {
         Initialize-Backup
 
         $data = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
-        $data.created | Should -Be "2026-01-01 00:00:00"
+        @($data.entries).Count | Should -Be 0
+        $data.created | Should -Not -Be "2026-01-01 00:00:00"
+
+        $versionedFiles = @(Get-ChildItem $SCRIPT:TestTempRoot -Filter "backup.*.json" | Where-Object { $_.Name -ne "backup.json" })
+        $versionedFiles.Count | Should -Be 1
+        (Get-Content $versionedFiles[0].FullName -Raw) | Should -Match "Existing Step"
     }
 
     It "warns when backup lock exists" {
@@ -55,6 +60,27 @@ Describe "Initialize-Backup" {
         Initialize-Backup
 
         Should -Invoke Write-Warn -Exactly -Times 1
+    }
+
+    It "acquires the backup lock before rotating or pruning existing backups" {
+        $existing = @{
+            entries = @([ordered]@{ type = "registry"; name = "TestValue"; step = "Existing Step" })
+            created = "2026-01-01 00:00:00"
+        }
+        $existing | ConvertTo-Json -Depth 10 | Set-Content $CFG_BackupFile -Encoding UTF8
+
+        $script:InitOrder = [System.Collections.Generic.List[string]]::new()
+        Mock Test-BackupLock { $false }
+        Mock Set-BackupLock { $script:InitOrder.Add("lock") | Out-Null }
+        Mock Move-Item { $script:InitOrder.Add("move") | Out-Null }
+        Mock Prune-BackupVersions { $script:InitOrder.Add("prune") | Out-Null }
+        Mock New-BackupFile { $script:InitOrder.Add("new") | Out-Null }
+        Mock Set-SecureAcl { $script:InitOrder.Add("acl") | Out-Null }
+
+        Initialize-Backup
+
+        $script:InitOrder[0] | Should -Be "lock"
+        ($script:InitOrder -join ',') | Should -Match 'lock,move,prune'
     }
 }
 
@@ -177,7 +203,7 @@ Describe "Get-BackupData" {
 
         @($data.entries).Count | Should -Be 0
         # Should have created a .corrupt backup
-        $corruptFiles = @(Get-ChildItem "$SCRIPT:TestTempRoot" -Filter "backup.json.corrupt.*")
+        $corruptFiles = @(Get-ChildItem "$SCRIPT:TestTempRoot" -Filter "backup.corrupt.*.json")
         $corruptFiles.Count | Should -BeGreaterOrEqual 1
     }
 
@@ -569,6 +595,55 @@ Describe "Backup lock system" {
 
         Test-BackupLock | Should -Be $false
         Test-Path $CFG_BackupLockFile | Should -Be $false
+    }
+}
+
+Describe "Invoke-PagefileRestoreAutomation" {
+
+    BeforeEach {
+        Reset-TestState
+    }
+
+    It "restores automatic pagefile management with CIM" {
+        $computerSystem = [PSCustomObject]@{ Name = "HOST" }
+        Mock Get-CimInstance { $computerSystem } -ParameterFilter { $ClassName -eq "Win32_ComputerSystem" }
+        Mock Invoke-PagefileCimUpdate {}
+
+        $result = Invoke-PagefileRestoreAutomation -Entry ([PSCustomObject]@{
+            automaticManaged = $true
+        })
+
+        $result.Success | Should -Be $true
+        $result.Detail | Should -Be "automatic management restored"
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
+            $InputObject -eq $computerSystem -and $Property.AutomaticManagedPagefile -eq $true
+        }
+    }
+
+    It "restores custom pagefile size with CIM and disables automatic management" {
+        $computerSystem = [PSCustomObject]@{ Name = "HOST" }
+        $pagefileSetting = [PSCustomObject]@{ Name = "C:\\pagefile.sys" }
+        Mock Get-CimInstance {
+            if ($ClassName -eq "Win32_ComputerSystem") { return $computerSystem }
+            if ($ClassName -eq "Win32_PageFileSetting") { return $pagefileSetting }
+        }
+        Mock Invoke-PagefileCimUpdate {}
+
+        $result = Invoke-PagefileRestoreAutomation -Entry ([PSCustomObject]@{
+            automaticManaged = $false
+            pagefilePath = "C:\pagefile.sys"
+            initialSize = 1024
+            maximumSize = 2048
+        })
+
+        $result.Success | Should -Be $true
+        $result.Detail | Should -Match 'custom size restored on C:\\pagefile\.sys'
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
+            $InputObject -eq $pagefileSetting -and $Property.InitialSize -eq 1024 -and $Property.MaximumSize -eq 2048
+        }
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
+            $InputObject -eq $computerSystem -and $Property.AutomaticManagedPagefile -eq $false
+        }
     }
 }
 

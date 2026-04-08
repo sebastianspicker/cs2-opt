@@ -131,10 +131,14 @@ Describe "Set-RegistryValue DRY-RUN" {
         }
     }
 
-    It "does not call Backup-RegistryValue in DRY-RUN mode" {
+    It "still delegates to Backup-RegistryValue in DRY-RUN mode so the helper can self-guard" {
         Set-RegistryValue "HKLM:\SOFTWARE\Test" "TestValue" 1 "DWord" "Test reason"
 
-        Should -Invoke Backup-RegistryValue -Exactly 0
+        Should -Invoke Backup-RegistryValue -Exactly 1 -ParameterFilter {
+            $Path -eq "HKLM:\SOFTWARE\Test" -and
+            $Name -eq "TestValue" -and
+            $StepTitle -eq "Test Step"
+        }
     }
 }
 
@@ -168,10 +172,13 @@ Describe "Set-BootConfig DRY-RUN" {
         }
     }
 
-    It "does not call Backup-BootConfig in DRY-RUN mode" {
+    It "still delegates to Backup-BootConfig in DRY-RUN mode so the helper can self-guard" {
         Set-BootConfig "disabledynamictick" "yes" "Test"
 
-        Should -Invoke Backup-BootConfig -Exactly 0
+        Should -Invoke Backup-BootConfig -Exactly 1 -ParameterFilter {
+            $Key -eq "disabledynamictick" -and
+            $StepTitle -eq "Test Step"
+        }
     }
 }
 
@@ -301,8 +308,8 @@ Describe "Test-RegistryCheck" {
     }
 }
 
-# ── Load-State / Save-State ──────────────────────────────────────────────────
-Describe "Load-State / Save-State" {
+# ── Load-State ────────────────────────────────────────────────────────────────
+Describe "Load-State" {
 
     BeforeEach { Reset-TestState }
 
@@ -312,7 +319,7 @@ Describe "Load-State / Save-State" {
             logLevel = "VERBOSE"
             profile  = "COMPETITIVE"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         $loaded = Load-State $CFG_StateFile
         $SCRIPT:Mode     | Should -Be "DRY-RUN"
@@ -327,7 +334,7 @@ Describe "Load-State / Save-State" {
 
     It "sets DryRun to false for non-DRY-RUN mode" {
         $state = [PSCustomObject]@{ mode = "CONTROL"; profile = "SAFE" }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Load-State $CFG_StateFile | Out-Null
         $SCRIPT:DryRun | Should -Be $false
@@ -335,7 +342,7 @@ Describe "Load-State / Save-State" {
 
     It "defaults logLevel to NORMAL when absent" {
         $state = [PSCustomObject]@{ mode = "CONTROL"; profile = "SAFE" }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Load-State $CFG_StateFile | Out-Null
         $SCRIPT:LogLevel | Should -Be "NORMAL"
@@ -353,7 +360,7 @@ Describe "Initialize-ScriptDefaults" {
             logLevel = "VERBOSE"
             profile  = "COMPETITIVE"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Initialize-ScriptDefaults
 

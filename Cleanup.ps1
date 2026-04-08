@@ -28,12 +28,13 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Initialize-ScriptDefaults
 Initialize-PhaseCounters
 Ensure-Dir $CFG_LogDir
-Write-LogoBanner "Cleanup / Soft-Reset  ·  CS2 Optimization Suite"
 
 if ($SmokeTest) {
     Write-Host "SMOKE TEST OK: Cleanup" -ForegroundColor Green
     exit 0
 }
+
+Write-LogoBanner "Cleanup / Soft-Reset  ·  CS2 Optimization Suite"
 
 Write-Host @"
   [1]  QUICK REFRESH  (~2 min, no restart)

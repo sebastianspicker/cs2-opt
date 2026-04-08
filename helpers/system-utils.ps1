@@ -108,8 +108,28 @@ function Save-JsonAtomic {
     }
 }
 
-function Save-State($obj, $path) {
-    Save-JsonAtomic -Data $obj -Path $path
+function Set-SecureAcl {
+    <#  Applies an Administrators-only ACL to a sensitive JSON file.
+        NOTE: C:\CS2_OPTIMIZE should also inherit restrictive ACLs so newly created
+        temp files from Save-JsonAtomic stay protected before this file ACL is re-applied.  #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path $Path)) { return }
+    if ($IsWindows -eq $false) { return }
+
+    try {
+        $admins = New-Object System.Security.Principal.NTAccount("BUILTIN", "Administrators")
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($admins, "FullControl", "Allow")
+
+        $acl.SetOwner($admins)
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.SetAccessRule($rule)
+        Set-Acl -Path $Path -AclObject $acl -ErrorAction Stop
+    } catch {
+        Write-Warn "Failed to secure ACL on '$Path': $_"
+    }
 }
 
 function Load-State($path) {
@@ -171,10 +191,10 @@ function Set-RunOnce {
     # SECURITY: Validate script path — must be under C:\CS2_OPTIMIZE\ and end in .ps1.
     # RunOnce executes at boot as the logged-on user with admin elevation (HKLM).
     # If an attacker could set $scriptPath to an arbitrary location, they get code execution.
-    $resolvedPath = try { [System.IO.Path]::GetFullPath($scriptPath) } catch { $null }
-    if (-not $resolvedPath -or
-        $resolvedPath -notmatch '^C:\\CS2_OPTIMIZE\\' -or
-        $resolvedPath -notmatch '\.ps1$') {
+    $normalizedPath = $scriptPath -replace '/', '\'
+    if ($normalizedPath -notmatch '^C:\\CS2_OPTIMIZE\\' -or
+        $normalizedPath -match '\\\.\.(\\|$)' -or
+        $normalizedPath -notmatch '\.ps1$') {
         Write-Warn "Set-RunOnce: script path must be under C:\CS2_OPTIMIZE\ and end in .ps1 — rejected: $scriptPath"
         return
     }
@@ -191,10 +211,21 @@ function Set-RunOnce {
         Write-Host "    After rebooting, launch Phase 3 manually: START.bat -> [P]" -ForegroundColor Cyan
         return
     }
-    $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$scriptPath`""
+    $allowedPolicies = @("Bypass", "RemoteSigned", "Unrestricted", "AllSigned")
+    $executionPolicy = [string]$CFG_RunOnceExecutionPolicy
+    if ($executionPolicy -eq "Undefined") {
+        Write-Warn "Set-RunOnce: CFG_RunOnceExecutionPolicy 'Undefined' is unsupported on client systems due to policy precedence and GPOs; use one of: $($allowedPolicies -join ', ')"
+        return
+    }
+    if ($executionPolicy -notin $allowedPolicies) {
+        Write-Warn "Set-RunOnce: invalid CFG_RunOnceExecutionPolicy '$executionPolicy' — expected one of: $($allowedPolicies -join ', ')"
+        return
+    }
+    # Bypass stays the default because the suite runs locally and is already admin-elevated.
+    $cmd = "powershell.exe -NoProfile -ExecutionPolicy $executionPolicy -WindowStyle Normal -File `"$normalizedPath`""
     try {
         Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -Name $name -Value $cmd -ErrorAction Stop
-        Write-OK "RunOnce: $name -> $scriptPath"
+        Write-OK "RunOnce: $name -> $normalizedPath"
     } catch {
         Write-Err "Failed to set RunOnce '$name': $_"
         Write-Host "  $([char]0x2139) What to do: Phase 3 will NOT auto-start after reboot." -ForegroundColor Cyan
@@ -218,7 +249,7 @@ function Set-BootConfig {
     }
 
     # Auto-backup before modification
-    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
+    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle) {
         Backup-BootConfig -Key $key -StepTitle $SCRIPT:CurrentStepTitle
     }
     if ($SCRIPT:DryRun) {
@@ -293,7 +324,7 @@ function Set-RegistryValue {
     }
 
     # Auto-backup before modification
-    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
+    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle) {
         Backup-RegistryValue -Path $path -Name $name -StepTitle $SCRIPT:CurrentStepTitle
     }
     if ($SCRIPT:DryRun) {

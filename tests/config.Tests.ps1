@@ -162,6 +162,18 @@ Describe "Path format validation" {
         $SCRIPT:_OriginalCfgProgressFile | Should -Not -Match "[^:]/" -Because "Windows paths should use backslashes"
     }
 
+    It "CFG_BackupMaxVersions defaults to 3" {
+        $CFG_BackupMaxVersions | Should -Be 3
+    }
+
+    It "CFG_RunOnceExecutionPolicy defaults to Bypass" {
+        $CFG_RunOnceExecutionPolicy | Should -Be "Bypass"
+    }
+
+    It "CFG_RunOnceExecutionPolicy only uses supported values" {
+        $CFG_RunOnceExecutionPolicy | Should -BeIn @("Bypass", "RemoteSigned", "AllSigned")
+    }
+
     It "Shader cache paths use backslash format" {
         foreach ($path in $CFG_ShaderCache_Paths) {
             $path | Should -Not -Match "[^:]/" -Because "Shader cache path '$path' should use backslashes"

@@ -52,6 +52,7 @@ function Save-AppliedSteps {
         $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
         $st | Add-Member -NotePropertyName "appliedSteps" -NotePropertyValue @($SCRIPT:AppliedSteps) -Force
         Save-JsonAtomic -Data $st -Path $CFG_StateFile
+        Set-SecureAcl -Path $CFG_StateFile
         return $true
     } catch {
         Write-DebugLog "Could not persist AppliedSteps: $_"
@@ -239,8 +240,7 @@ function Invoke-TieredStep {
         Write-DebugLog "DRY-RUN: '$Title' — preview only, no changes applied"
         # Run the action but Set-RegistryValue/Set-BootConfig intercept writes
         try { & $Action } catch { Write-Warn "Step '$Title' preview issue (DRY-RUN): $_" }
-        # Defensive flush — DRY-RUN normally buffers nothing, but if a step action
-        # manually calls Backup-* without a DryRun guard, entries would be orphaned.
+        # Defensive flush — should be a no-op because Backup-* functions self-guard in DRY-RUN.
         try { Flush-BackupBuffer } catch { Write-DebugLog "Flush-BackupBuffer failed after DRY-RUN '$Title': $_" }
         $SCRIPT:CurrentStepTitle = $null
         return $false

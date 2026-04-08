@@ -23,20 +23,67 @@ $SCRIPT:DRS_FOUND_VIA_APP = "(found via cs2.exe)"
 # calls per full Phase 1 run).  Flush is called automatically by
 # Invoke-TieredStep after each step's action completes, and also by any
 # function that reads backup data (Get-BackupData) to ensure consistency.
+#
+# DRY-RUN guard pattern:
+#   Every Backup-* function owns its own `if ($SCRIPT:DryRun) { return }` guard
+#   as the first statement. Callers should invoke backup capture unconditionally
+#   when they have enough context; the backup function itself decides whether the
+#   current mode allows persisting an entry.
 $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
 
-function Initialize-Backup {
-    if (-not (Test-Path $CFG_BackupFile)) {
-        Save-JsonAtomic -Data @{ entries = @(); created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") } -Path $CFG_BackupFile
+function New-BackupDataObject {
+    return [PSCustomObject]@{
+        entries = @()
+        created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    # Acquire lock — warns if another instance is running but does not block
-    # (the lock is advisory; concurrent writes are protected by Save-JsonAtomic)
+}
+
+function Get-BackupVersionFiles {
+    $backupDir = Split-Path $CFG_BackupFile -Parent
+    $backupName = Split-Path $CFG_BackupFile -Leaf
+    $backupStem = if ($backupName -match '^(.*)\.json$') { $Matches[1] } else { $backupName }
+    if (-not $backupDir -or -not (Test-Path $backupDir)) { return @() }
+    return @(
+        Get-ChildItem $backupDir -Filter "$backupStem.*.json" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "^$([regex]::Escape($backupStem))\.\d{8}-\d{6}\d{0,3}\.json$" } |
+            Sort-Object Name
+    )
+}
+
+function Prune-BackupVersions {
+    $maxVersions = [Math]::Max(1, [int]$CFG_BackupMaxVersions)
+    $versionFiles = Get-BackupVersionFiles
+    if ($versionFiles.Count -le $maxVersions) { return }
+
+    $versionFiles |
+        Select-Object -First ($versionFiles.Count - $maxVersions) |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+function New-BackupFile {
+    Save-JsonAtomic -Data (New-BackupDataObject) -Path $CFG_BackupFile
+    Set-SecureAcl -Path $CFG_BackupFile
+}
+
+function Initialize-Backup {
+    # Acquire lock before rotating or pruning so we never steal another live backup file.
     if (Test-BackupLock) {
         Write-Warn "Another CS2 Optimization window appears to be open already."
         Write-Host "  $([char]0x2139) What to do: Close the other window first, then try again." -ForegroundColor Cyan
         Write-Host "    If no other window is open, this will clear itself automatically." -ForegroundColor DarkGray
     }
     Set-BackupLock
+
+    if (Test-Path $CFG_BackupFile) {
+        $backupDir = Split-Path $CFG_BackupFile -Parent
+        $backupName = Split-Path $CFG_BackupFile -Leaf
+        $backupStem = if ($backupName -match '^(.*)\.json$') { $Matches[1] } else { $backupName }
+        $stamp = (Get-Date).ToString("yyyyMMdd-HHmmssfff")
+        $versionPath = Join-Path $backupDir "$backupStem.$stamp.json"
+        Move-Item $CFG_BackupFile $versionPath -Force
+        Prune-BackupVersions
+    }
+    if (-not (Test-Path $CFG_BackupFile)) { New-BackupFile } else { Set-SecureAcl -Path $CFG_BackupFile }
 }
 
 function Test-BackupLock {
@@ -147,12 +194,16 @@ function Get-BackupDataRaw {
     } catch {
         # Preserve corrupted file for recovery before overwriting
         $ts = (Get-Date).ToString("yyyyMMdd-HHmmss")
-        $corruptPath = "$CFG_BackupFile.corrupt.$ts"
+        $backupDir = Split-Path $CFG_BackupFile -Parent
+        $backupName = Split-Path $CFG_BackupFile -Leaf
+        $backupStem = if ($backupName -match '^(.*)\.json$') { $Matches[1] } else { $backupName }
+        $corruptPath = Join-Path $backupDir "$backupStem.corrupt.$ts.json"
         try { Copy-Item $CFG_BackupFile $corruptPath -Force -ErrorAction Stop } catch { Write-DebugLog "Could not preserve corrupted backup file — original may already be gone." }
         Write-Warn "backup.json was corrupted — saved copy to $corruptPath before resetting."
         Write-Warn "Backup history reset — previous entries preserved in $corruptPath"
-        Initialize-Backup
-        return [PSCustomObject]@{ entries = @(); created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+        Remove-Item $CFG_BackupFile -Force -ErrorAction SilentlyContinue
+        New-BackupFile
+        return (New-BackupDataObject)
     }
 }
 
@@ -165,6 +216,7 @@ function Get-BackupData {
 
 function Save-BackupData($data) {
     Save-JsonAtomic -Data $data -Path $CFG_BackupFile -Depth 10
+    Set-SecureAcl -Path $CFG_BackupFile
 }
 
 function Backup-RegistryValue {
@@ -173,6 +225,7 @@ function Backup-RegistryValue {
         (via Flush-BackupBuffer) to avoid O(n^2) I/O.  #>
     [CmdletBinding()]
     param([string]$Path, [string]$Name, [string]$StepTitle)
+    if ($SCRIPT:DryRun) { return }
     $existing = $null
     $regType  = $null
     try {
@@ -206,6 +259,7 @@ function Backup-ServiceState {
     <#  Records current service start type, delayed-start flag, and status before modification.
         Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$ServiceName, [string]$StepTitle)
+    if ($SCRIPT:DryRun) { return }
     try {
         $svc = Get-Service -Name $ServiceName -ErrorAction Stop
         $escapedName = $ServiceName -replace "'", "''"
@@ -235,7 +289,7 @@ function Backup-PowerPlan {
     <#  Records the currently active power plan GUID before switching.
         Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$StepTitle)
-    if ($SCRIPT:DryRun) { Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Would backup current power plan" -ForegroundColor Magenta; return }
+    if ($SCRIPT:DryRun) { return }
     $originalGuid = $null
     $originalName = $null
     try {
@@ -276,6 +330,7 @@ function Backup-BootConfig {
         and the English key name match would fail on non-English Windows.  #>
     [CmdletBinding()]
     param([string]$Key, [string]$StepTitle)
+    if ($SCRIPT:DryRun) { return }
 
     # Map well-known bcdedit key names to their raw BCD element hex IDs.
     # bcdedit /enum /v outputs hex IDs instead of localized names.
@@ -318,6 +373,7 @@ function Backup-ScheduledTask {
     <#  Records whether a scheduled task existed and its enabled state before we modify it.
         Entries are buffered in memory and flushed at step boundaries.  #>
     param([string]$TaskName, [string]$StepTitle, [string]$ScriptPath = "")
+    if ($SCRIPT:DryRun) { return }
     $existed = $false
     $wasEnabled = $false
     try {
@@ -353,6 +409,7 @@ function Backup-NicAdapterProperty {
         [string]$PropertyType,
         [string]$StepTitle
     )
+    if ($SCRIPT:DryRun) { return }
     # Capture InterfaceDescription for cross-adapter detection on restore
     $ifDesc = ""
     try {
@@ -381,6 +438,7 @@ function Backup-QosAndUro {
         [string]$UroState,
         [string]$StepTitle
     )
+    if ($SCRIPT:DryRun) { return }
     $entry = [ordered]@{
         type        = "qos_uro"
         policies    = $PolicyNames
@@ -400,6 +458,7 @@ function Backup-DefenderExclusions {
         [string[]]$ExclusionProcesses,
         [string]$StepTitle
     )
+    if ($SCRIPT:DryRun) { return }
     $entry = [ordered]@{
         type               = "defender"
         exclusionPaths     = $ExclusionPaths
@@ -422,6 +481,7 @@ function Backup-PagefileConfig {
         [int]$MaximumSize,
         [string]$StepTitle
     )
+    if ($SCRIPT:DryRun) { return }
     $entry = [ordered]@{
         type              = "pagefile"
         automaticManaged  = $AutomaticManaged
@@ -444,6 +504,7 @@ function Backup-DnsConfig {
         [string[]]$OriginalDnsServers,
         [string]$StepTitle
     )
+    if ($SCRIPT:DryRun) { return }
     $entry = [ordered]@{
         type               = "dns"
         adapterName        = $AdapterName
@@ -473,6 +534,7 @@ function Backup-DrsSettings {
         [string]$ProfileName,
         [bool]$ProfileCreated
     )
+    if ($SCRIPT:DryRun) { return }
 
     $settings = @()
     foreach ($id in $SettingIds) {
@@ -593,6 +655,62 @@ function Restore-DrsSettings {
     }
 }
 
+function Invoke-PagefileRestoreAutomation {
+    param($Entry)
+
+    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+    if (-not $computerSystem) {
+        throw "Win32_ComputerSystem instance not found"
+    }
+
+    if ($Entry.automaticManaged) {
+        try {
+            Invoke-PagefileCimUpdate -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $true }
+        } catch {
+            throw "failed to restore automatic pagefile management: $($_.Exception.Message)"
+        }
+        return [PSCustomObject]@{
+            Success = $true
+            Detail  = "automatic management restored"
+        }
+    }
+
+    $pagefilePathWmi = $Entry.pagefilePath -replace '\\', '\\'
+    try {
+        $pagefileSetting = Get-CimInstance -ClassName Win32_PageFileSetting -Filter "Name='$pagefilePathWmi'" -ErrorAction Stop
+        if (-not $pagefileSetting) {
+            throw "pagefile setting not found for $($Entry.pagefilePath)"
+        }
+
+        Invoke-PagefileCimUpdate -InputObject $pagefileSetting -Property @{
+            InitialSize = [int]$Entry.initialSize
+            MaximumSize = [int]$Entry.maximumSize
+        }
+    } catch {
+        throw "failed to restore custom pagefile size for $($Entry.pagefilePath): $($_.Exception.Message)"
+    }
+
+    try {
+        Invoke-PagefileCimUpdate -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $false }
+    } catch {
+        throw "failed to disable automatic pagefile management after restoring custom size: $($_.Exception.Message)"
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Detail  = "custom size restored on $($Entry.pagefilePath)"
+    }
+}
+
+function Invoke-PagefileCimUpdate {
+    param(
+        $InputObject,
+        [hashtable]$Property
+    )
+
+    Set-CimInstance -InputObject $InputObject -Property $Property -ErrorAction Stop | Out-Null
+}
+
 function Show-BackupSummary {
     $backup = Get-BackupData
     if (-not $backup.entries -or $backup.entries.Count -eq 0) {
@@ -645,9 +763,12 @@ function Restore-StepChanges {
     Write-Step "Restoring $($entries.Count) setting(s) from: $StepTitle"
     $restoreOk = 0
     $restoreFail = 0
+    $restorePartial = 0
     $failedEntries = [System.Collections.Generic.List[object]]::new()
+    $partialEntries = [System.Collections.Generic.List[object]]::new()
     foreach ($e in $entries) {
         $failBefore = $restoreFail
+        $partialBefore = $restorePartial
         try {
             switch ($e.type) {
                 "registry" {
@@ -939,16 +1060,24 @@ function Restore-StepChanges {
                     }
                 }
                 "pagefile" {
-                    # Pagefile restoration requires WMI and may need a reboot.
-                    # Log manual instructions rather than silently failing.
-                    Write-Info "Pagefile restore: original config was AutoManaged=$($e.automaticManaged), InitialSize=$($e.initialSize)MB, MaxSize=$($e.maximumSize)MB"
-                    Write-Info "Manual restore: System Properties -> Advanced -> Performance -> Virtual Memory"
-                    if ($e.automaticManaged) {
-                        Write-Info "  Set 'Automatically manage paging file size for all drives' = checked"
-                    } else {
-                        Write-Info "  Set custom size: Initial=$($e.initialSize)MB, Maximum=$($e.maximumSize)MB on $($e.pagefilePath)"
+                    try {
+                        $pagefileResult = Invoke-PagefileRestoreAutomation -Entry $e
+                        Write-OK "Pagefile restore: automated restore completed ($($pagefileResult.Detail))"
+                        Write-Info "Pagefile restore note: a reboot is required for the change to take effect."
+                        $restoreOk++
+                    } catch {
+                        Write-Warn "Pagefile restore: automated restore failed — falling back to manual instructions. $_"
+                        Write-Info "Pagefile restore: original config was AutoManaged=$($e.automaticManaged), InitialSize=$($e.initialSize)MB, MaxSize=$($e.maximumSize)MB"
+                        Write-Info "Manual restore: System Properties -> Advanced -> Performance -> Virtual Memory"
+                        if ($e.automaticManaged) {
+                            Write-Info "  Set 'Automatically manage paging file size for all drives' = checked"
+                        } else {
+                            Write-Info "  Set custom size: Initial=$($e.initialSize)MB, Maximum=$($e.maximumSize)MB on $($e.pagefilePath)"
+                        }
+                        Write-Info "Pagefile restore note: a reboot is required for the change to take effect."
+                        Write-Warn "Pagefile restore recorded as partial success — manual completion still required."
+                        $restorePartial++
                     }
-                    $restoreOk++
                 }
                 "dns" {
                     try {
@@ -993,19 +1122,27 @@ function Restore-StepChanges {
             Write-Warn "Restore failed for $($e.type) $(if($e.name){$e.name}elseif($e.profile){$e.profile}elseif($e.originalName){$e.originalName}elseif($e.taskName){$e.taskName}else{$e.type}): $_"
         }
         if ($restoreFail -gt $failBefore) { $failedEntries.Add($e) }
+        if ($restorePartial -gt $partialBefore) { $partialEntries.Add($e) }
     }
 
     if ($restoreFail -gt 0) {
         Write-Warn "Restore '$StepTitle': $restoreOk succeeded, $restoreFail failed — check warnings above."
     }
+    if ($restorePartial -gt 0) {
+        Write-Warn "Restore '$StepTitle': $restorePartial partial/manual step(s) still need completion."
+    }
 
-    # Remove successfully restored entries; keep only failed ones for retry
-    $backup.entries = @($backup.entries | Where-Object { $_.step -ne $StepTitle -or $_ -in $failedEntries })
+    # Remove successfully restored entries; keep failed and partial/manual ones for retry.
+    $retainedEntries = @($failedEntries) + @($partialEntries)
+    $backup.entries = @($backup.entries | Where-Object { $_.step -ne $StepTitle -or $_ -in $retainedEntries })
     Save-BackupData $backup
     if ($restoreFail -gt 0) {
         Write-Warn "$restoreFail failed entry/entries retained for '$StepTitle' — retry restore to complete."
     }
-    return ($restoreFail -eq 0)
+    if ($restorePartial -gt 0) {
+        Write-Warn "$restorePartial partial entry/entries retained for '$StepTitle' — complete the manual pagefile step, then retry if needed."
+    }
+    return ($restoreFail -eq 0 -and $restorePartial -eq 0)
 }
 
 function Restore-AllChanges {
@@ -1076,15 +1213,30 @@ function Restore-Interactive {
         $choice = Read-Host "  Choice"
         if ($choice -eq "0" -or [string]::IsNullOrWhiteSpace($choice)) { return }
         if ($choice -match "^[aA]$") {
-            # Lock is already held by Restore-Interactive — call inner restore logic directly
-            # (Restore-AllChanges would see the lock and abort)
             $stepNames = @(($backup.entries | Group-Object -Property step).Name)
             $failures = 0
+            $skippedSteps = [System.Collections.Generic.List[string]]::new()
             foreach ($stepName in $stepNames) {
+                Write-Host "" 
+                Write-Host "  [$stepName]" -ForegroundColor Cyan
+                Write-Host "  [R]  Restore and continue" -ForegroundColor White
+                Write-Host "  [S]  Skip this step" -ForegroundColor Yellow
+                Write-Host "  [A]  Abort interactive restore" -ForegroundColor DarkGray
+                do { $stepAction = Read-Host "  [R/S/A]" } while ($stepAction -notmatch "^[rRsSaA]$")
+                if ($stepAction -match "^[aA]$") {
+                    Write-Warn "Interactive restore aborted — remaining entries left in backup.json."
+                    return
+                }
+                if ($stepAction -match "^[sS]$") {
+                    Write-Info "Skipped step '$stepName' — entry remains in backup.json."
+                    $skippedSteps.Add($stepName) | Out-Null
+                    continue
+                }
                 $result = Restore-StepChanges -StepTitle $stepName
                 if (-not $result) { $failures++ }
             }
-            if ($failures -eq 0) { Write-OK "All settings restored to pre-optimization state." }
+            if ($failures -eq 0 -and $skippedSteps.Count -eq 0) { Write-OK "All settings restored to pre-optimization state." }
+            elseif ($failures -eq 0) { Write-Warn "Restore completed with $($skippedSteps.Count) skipped step group(s): $(@($skippedSteps) -join ', ')." }
             else { Write-Warn "$failures step group(s) had restore failures — check output above." }
             return
         }
