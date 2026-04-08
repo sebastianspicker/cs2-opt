@@ -47,12 +47,17 @@ if (-not (Get-Variable -Name AppliedSteps -Scope Script -ErrorAction SilentlyCon
 
 function Save-AppliedSteps {
     <#  Persists $SCRIPT:AppliedSteps to state.json so Phase 3 can read Phase 1 estimates.  #>
-    if (-not (Test-Path $CFG_StateFile)) { return }
+    if (-not (Test-Path $CFG_StateFile)) { return $true }
     try {
         $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
         $st | Add-Member -NotePropertyName "appliedSteps" -NotePropertyValue @($SCRIPT:AppliedSteps) -Force
         Save-JsonAtomic -Data $st -Path $CFG_StateFile
-    } catch { Write-DebugLog "Could not persist AppliedSteps: $_" }
+        return $true
+    } catch {
+        Write-DebugLog "Could not persist AppliedSteps: $_"
+        Write-Warn "Could not persist applied steps to state.json. Phase 3 estimates may be incomplete."
+        return $false
+    }
 }
 
 function Load-AppliedSteps {

@@ -494,7 +494,11 @@ Describe "Get-ImprovementEstimate" {
 # ── Save-AppliedSteps / Load-AppliedSteps round-trip ─────────────────────────
 Describe "Save-AppliedSteps / Load-AppliedSteps" {
 
-    BeforeEach { Reset-TestState }
+    BeforeEach {
+        Reset-TestState
+        Mock Write-DebugLog {}
+        Mock Write-Warn {}
+    }
 
     It "round-trips applied steps through state.json" {
         # Create a state file first (Save-AppliedSteps requires it to exist)
@@ -503,7 +507,7 @@ Describe "Save-AppliedSteps / Load-AppliedSteps" {
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
         $SCRIPT:AppliedSteps.Add("Clear Shader Cache")
         $SCRIPT:AppliedSteps.Add("FPS Cap")
-        Save-AppliedSteps
+        Save-AppliedSteps | Should -Be $true
 
         # Reset and reload
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
@@ -519,7 +523,7 @@ Describe "Save-AppliedSteps / Load-AppliedSteps" {
 
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
         $SCRIPT:AppliedSteps.Add("Clear Shader Cache")
-        Save-AppliedSteps
+        Save-AppliedSteps | Should -Be $true
 
         # Load twice
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
@@ -532,8 +536,20 @@ Describe "Save-AppliedSteps / Load-AppliedSteps" {
     It "does nothing when state file does not exist" {
         $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
         # No state file created
-        { Save-AppliedSteps } | Should -Not -Throw
+        Save-AppliedSteps | Should -Be $true
         { Load-AppliedSteps } | Should -Not -Throw
         $SCRIPT:AppliedSteps.Count | Should -Be 0
+    }
+
+    It "returns false and warns when persistence fails" {
+        New-TestStateFile -TestProfile "RECOMMENDED" | Out-Null
+        $SCRIPT:AppliedSteps = [System.Collections.Generic.List[string]]::new()
+        $SCRIPT:AppliedSteps.Add("Clear Shader Cache")
+        Mock Save-JsonAtomic { throw "disk full" }
+
+        $result = Save-AppliedSteps
+
+        $result | Should -Be $false
+        Should -Invoke Write-Warn -Times 1
     }
 }

@@ -3,9 +3,23 @@ name: Lint
 on:
   push:
     branches: [main]
-    paths: ['**.ps1', '**.psd1']
+    paths:
+      - '**.ps1'
+      - '**.psd1'
+      - '*.bat'
+      - 'cfgs/**'
+      - 'README.md'
+      - 'docs/**'
+      - '.github/workflows/**'
   pull_request:
-    paths: ['**.ps1', '**.psd1']
+    paths:
+      - '**.ps1'
+      - '**.psd1'
+      - '*.bat'
+      - 'cfgs/**'
+      - 'README.md'
+      - 'docs/**'
+      - '.github/workflows/**'
 
 # Restrict GITHUB_TOKEN to read-only by default (principle of least privilege).
 # Individual jobs can escalate if needed — none in this workflow do.
@@ -113,6 +127,39 @@ jobs:
           name: pester-test-results
           path: ./test-results.xml
           retention-days: 14
+
+  entrypoint-smoke:
+    name: Entry point smoke tests
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Smoke-test shipped entry scripts
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'Run-Optimize.ps1',
+            'Cleanup.ps1',
+            'SafeMode-DriverClean.ps1',
+            'PostReboot-Setup.ps1',
+            'FpsCap-Calculator.ps1',
+            'CS2-Optimize-GUI.ps1'
+          )
+
+          foreach ($script in $scripts) {
+            Write-Host "=== Smoke test: $script ==="
+            $output = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -SmokeTest 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+              throw "Smoke test failed for $script`n$output"
+            }
+            if ($output -notmatch 'SMOKE TEST OK') {
+              throw "Smoke test marker missing for $script`n$output"
+            }
+            Write-Host $output
+          }
 
   estimate-keys:
     name: EstimateKey cross-reference

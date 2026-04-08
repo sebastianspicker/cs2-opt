@@ -3,6 +3,7 @@
 #  CS2-Optimize-GUI.ps1  —  WPF Dashboard
 #  Launch via START-GUI.bat
 # ==============================================================================
+param([switch]$SmokeTest)
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -16,6 +17,11 @@ $Script:Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path $MyInvocat
 . "$Script:Root\helpers.ps1"
 . "$Script:Root\helpers\step-catalog.ps1"
 . "$Script:Root\helpers\system-analysis.ps1"
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: CS2-Optimize-GUI" -ForegroundColor Green
+    exit 0
+}
 
 # ── Async engine ──────────────────────────────────────────────────────────────
 $Script:Pool   = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 3)

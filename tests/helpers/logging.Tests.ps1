@@ -229,4 +229,22 @@ Describe "Initialize-Log" {
         $rotatedContent = Get-Content $rotatedFiles[0].FullName -Raw
         $rotatedContent | Should -Match "first run content"
     }
+
+    It "writes logs for Windows-style paths on non-Windows hosts" {
+        $originalLogDir = $CFG_LogDir
+        $originalLogFile = $CFG_LogFile
+        try {
+            $CFG_LogDir = "$SCRIPT:TestTempRoot\WinStyle\Logs"
+            $CFG_LogFile = "$CFG_LogDir\test.log"
+
+            Initialize-Log
+            Write-Log "INFO" "windows style log path"
+
+            Test-Path $CFG_LogFile | Should -Be $true
+            (Get-Content $CFG_LogFile -Raw) | Should -Match "windows style log path"
+        } finally {
+            $CFG_LogDir = $originalLogDir
+            $CFG_LogFile = $originalLogFile
+        }
+    }
 }

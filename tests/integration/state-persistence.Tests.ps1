@@ -121,7 +121,7 @@ Describe "state.json persistence roundtrip" {
         $SCRIPT:AppliedSteps.Add("Fullscreen Optimizations")
         $SCRIPT:AppliedSteps.Add("FPS Cap")
 
-        Save-AppliedSteps
+        Save-AppliedSteps | Should -Be $true
 
         $raw = Get-Content $CFG_StateFile -Raw | ConvertFrom-Json
         $raw.appliedSteps | Should -Contain "Clear Shader Cache"

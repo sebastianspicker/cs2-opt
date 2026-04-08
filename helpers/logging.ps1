@@ -2,17 +2,37 @@
 #  helpers/logging.ps1  —  Logging, Console Output, Banners
 # ==============================================================================
 
+function Set-TextFileUtf8 {
+    param([string]$Path, [string]$Value)
+    $nativePath = if ($IsWindows -ne $false) { $Path -replace '/', '\' } else { $Path -replace '\\', '/' }
+    $parentDir = Split-Path -Path $nativePath -Parent
+    if ($parentDir) {
+        [System.IO.Directory]::CreateDirectory($parentDir) | Out-Null
+    }
+    [System.IO.File]::WriteAllText($nativePath, $Value, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Add-TextFileUtf8Line {
+    param([string]$Path, [string]$Value)
+    $nativePath = if ($IsWindows -ne $false) { $Path -replace '/', '\' } else { $Path -replace '\\', '/' }
+    $parentDir = Split-Path -Path $nativePath -Parent
+    if ($parentDir) {
+        [System.IO.Directory]::CreateDirectory($parentDir) | Out-Null
+    }
+    [System.IO.File]::AppendAllText($nativePath, $Value + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+}
+
 function Initialize-Log {
     Ensure-Dir $CFG_LogDir
     if (Test-Path $CFG_LogFile) {
         $stamp   = (Get-Item $CFG_LogFile).LastWriteTime.ToString("yyyyMMdd_HHmmss")
-        Move-Item $CFG_LogFile "$CFG_LogDir\optimize_$stamp.log" -Force
+        Move-Item $CFG_LogFile (Join-Path $CFG_LogDir "optimize_$stamp.log") -Force
         Get-ChildItem $CFG_LogDir -Filter "optimize_*.log" |
             Sort-Object LastWriteTime -Descending |
             Select-Object -Skip $CFG_LogMaxFiles |
             Remove-Item -Force -ErrorAction SilentlyContinue
     }
-    Set-Content $CFG_LogFile @"
+    Set-TextFileUtf8 -Path $CFG_LogFile -Value @"
 ================================================================================
   CS2 Optimization Suite · Log
   Started:    $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
@@ -27,7 +47,7 @@ function Write-Log($Level, $Message) {
     $ts      = Get-Date -Format "HH:mm:ss"
     $logLine = "[$ts][$Level] $Message"
     if ($CFG_LogFile -and (Test-Path $CFG_LogDir -ErrorAction SilentlyContinue)) {
-        Add-Content $CFG_LogFile $logLine -Encoding UTF8 -ErrorAction SilentlyContinue
+        try { Add-TextFileUtf8Line -Path $CFG_LogFile -Value $logLine } catch {}
     }
     $show = switch ($SCRIPT:LogLevel) {
         "MINIMAL" { $Level -in @("ERROR","WARN","OK","INFO","SECTION","STEP","T1","T2","T3") }

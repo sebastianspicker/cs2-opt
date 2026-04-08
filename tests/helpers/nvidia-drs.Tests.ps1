@@ -142,8 +142,13 @@ Describe "Initialize-NvApiDrs" {
 # ── Invoke-DrsSession ─────────────────────────────────────────────────────
 Describe "Invoke-DrsSession" {
 
-    It "requires -Action parameter" {
-        { Invoke-DrsSession } | Should -Throw
+    It "marks -Action as mandatory" {
+        $cmd = Get-Command Invoke-DrsSession
+        $actionMetadata = $cmd.Parameters['Action']
+        $parameterAttribute = $actionMetadata.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } | Select-Object -First 1
+
+        $parameterAttribute | Should -Not -BeNullOrEmpty
+        $parameterAttribute.Mandatory | Should -Be $true
     }
 
     It "has a -NoSave switch parameter" {

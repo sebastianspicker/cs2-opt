@@ -30,12 +30,18 @@
         All steps completed. System reboots normally. RunOnce fires Phase 3.
         - This is equivalent to a normal power cycle — no data loss risk.
 #>
+param([switch]$SmokeTest)
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: SafeMode-DriverClean" -ForegroundColor Green
+    exit 0
+}
 
 try {
     $state = Load-State $CFG_StateFile

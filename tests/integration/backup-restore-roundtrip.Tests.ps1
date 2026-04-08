@@ -272,7 +272,8 @@ Describe "BootConfig backup and restore roundtrip" {
 
         # Mock bcdedit for restore
         Mock bcdedit {
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $args })
+            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
@@ -294,7 +295,8 @@ Describe "BootConfig backup and restore roundtrip" {
         Flush-BackupBuffer
 
         Mock bcdedit {
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $args })
+            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
