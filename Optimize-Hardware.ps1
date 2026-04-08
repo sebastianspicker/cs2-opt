@@ -109,7 +109,7 @@ if ($startStep -le 14) {
                     if (Get-ItemProperty $rp -Name $app -ErrorAction SilentlyContinue) {
                         if (-not $SCRIPT:DryRun) {
                             Backup-RegistryValue -Path $rp -Name $app -StepTitle $SCRIPT:CurrentStepTitle
-                            try { Flush-BackupBuffer } catch { Write-Debug "Flush after autostart backup failed: $_" }
+                            try { Flush-BackupBuffer } catch { Write-DebugLog "Flush after autostart backup failed: $_" }
                             Remove-ItemProperty $rp -Name $app -ErrorAction SilentlyContinue
                         } else {
                             Write-Host "  [DRY-RUN] Would remove autostart: $app from $rp" -ForegroundColor Magenta
@@ -180,7 +180,7 @@ if ($startStep -le 15) {
                         $depNames = ($waaDeps | ForEach-Object { $_.Name }) -join ", "
                         Write-Info "WaaSMedicSvc has $($waaDeps.Count) dependent(s): $depNames — will be stopped together."
                     }
-                } catch { Write-Debug "WaaSMedicSvc dependent enumeration failed: $_" }
+                } catch { Write-DebugLog "WaaSMedicSvc dependent enumeration failed: $_" }
                 Stop-Service WaaSMedicSvc -Force -ErrorAction SilentlyContinue
                 Set-Service WaaSMedicSvc -StartupType Disabled -ErrorAction SilentlyContinue
                 $waasCheck = (Get-Service WaaSMedicSvc -ErrorAction SilentlyContinue).StartType
@@ -318,7 +318,7 @@ if ($startStep -le 16) {
                 } elseif ($wifiAdapter -and $nic) {
                     Write-Sub "Wi-Fi adapter also present — Ethernet ($($nic.Name)) used for NIC tweaks."
                 }
-            } catch { Write-Debug "Wi-Fi detection failed." }
+            } catch { Write-DebugLog "Wi-Fi detection failed." }
 
             # ── RSS driver registry entries (adds missing entries only) ────────────────
             Set-NicRssConfig
@@ -350,10 +350,10 @@ if ($startStep -le 16) {
                             Write-OK "URO: UDP Receive Offload disabled — per-datagram DPC delivery"
                             Write-Sub "Undo: netsh int udp set global uro=enabled"
                         } else {
-                            Write-Debug "URO: netsh returned error (build $osBuild may not support URO) — $uroOut"
+                            Write-DebugLog "URO: netsh returned error (build $osBuild may not support URO) — $uroOut"
                         }
                     } catch {
-                        Write-Debug "URO: command failed (build $osBuild) — $_"
+                        Write-DebugLog "URO: command failed (build $osBuild) — $_"
                     }
                 } else {
                     Write-Host "  [DRY-RUN] Would run: netsh int udp set global uro=disabled" -ForegroundColor Magenta
@@ -534,7 +534,7 @@ if ($startStep -le 19) {
                         $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
                         $st | Add-Member -NotePropertyName "nvidiaGpuName" -NotePropertyValue $gpuForState.Name -Force
                         Save-JsonAtomic -Data $st -Path $CFG_StateFile
-                    } catch { Write-Debug "Could not persist GPU name to state: $_" }
+                    } catch { Write-DebugLog "Could not persist GPU name to state: $_" }
                 }
 
                 $driverInfo = $null

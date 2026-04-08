@@ -39,7 +39,7 @@ Describe "SAFE profile behavior matrix" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}
@@ -159,7 +159,7 @@ Describe "RECOMMENDED profile behavior matrix" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}
@@ -257,7 +257,7 @@ Describe "COMPETITIVE profile behavior matrix" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}
@@ -349,7 +349,7 @@ Describe "CUSTOM profile behavior matrix" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}
@@ -441,7 +441,7 @@ Describe "SkipAction callback fires correctly across profiles" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}
@@ -488,7 +488,7 @@ Describe "YOLO profile behavior matrix" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}

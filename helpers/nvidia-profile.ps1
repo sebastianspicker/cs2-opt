@@ -158,7 +158,7 @@ function Apply-NvidiaCS2Profile {
             $props = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
             if ($props.ProviderName -match "NVIDIA" -or $props.DriverDesc -match "NVIDIA") {
                 $nvKeyPath = $key.PSPath
-                Write-Debug "NVIDIA GPU key: $($key.PSChildName) — $($props.DriverDesc)"
+                Write-DebugLog "NVIDIA GPU key: $($key.PSChildName) — $($props.DriverDesc)"
                 break
             }
         }
@@ -298,7 +298,7 @@ function Apply-NvidiaCS2ProfileDrs {
                 try { $baseProfile = [NvApiDrs]::FindProfileByName($session, "_GLOBAL_DRIVER_PROFILE") } catch { }
                 if ($baseProfile -ne [IntPtr]::Zero -and $drsProfile -eq $baseProfile) {
                     # cs2.exe is in the Base Profile — create a dedicated profile and move it
-                    Write-Debug "DRS: cs2.exe found in Base Profile — creating dedicated CS2 profile"
+                    Write-DebugLog "DRS: cs2.exe found in Base Profile — creating dedicated CS2 profile"
                     $profileName = "Counter-strike 2"
                     $drsProfile = [NvApiDrs]::CreateProfile($session, $profileName)
                     $profileCreated = $true
@@ -314,7 +314,7 @@ function Apply-NvidiaCS2ProfileDrs {
                     # cs2.exe is in a non-Base profile — use that profile directly
                     # (regardless of its name — it's the profile the driver reads for cs2.exe)
                     $profileName = "(cs2.exe profile)"
-                    Write-Debug "DRS: cs2.exe found in dedicated profile (handle $drsProfile)"
+                    Write-DebugLog "DRS: cs2.exe found in dedicated profile (handle $drsProfile)"
                 }
             } else {
                 # cs2.exe not in any profile — search by known names
@@ -331,7 +331,7 @@ function Apply-NvidiaCS2ProfileDrs {
                     $profileName = "Counter-strike 2"
                     $drsProfile = [NvApiDrs]::CreateProfile($session, $profileName)
                     $profileCreated = $true
-                    Write-Debug "DRS: Created profile '$profileName'"
+                    Write-DebugLog "DRS: Created profile '$profileName'"
                 }
 
                 # Bind applications — only needed for newly created profiles.
@@ -345,7 +345,7 @@ function Apply-NvidiaCS2ProfileDrs {
                         Write-Warn "DRS: AddApplication csgos2.exe — $_"
                     }
                 } else {
-                    Write-Debug "DRS: Profile '$profileName' found — cs2.exe pre-bound by NVIDIA, skipping AddApplication"
+                    Write-DebugLog "DRS: Profile '$profileName' found — cs2.exe pre-bound by NVIDIA, skipping AddApplication"
                 }
             }
 
@@ -379,13 +379,13 @@ function Apply-NvidiaCS2ProfileDrs {
                     [NvApiDrs]::SetDwordSetting($session, $drsProfile, [uint32]$s.Id, $writeValue)
                     $applied++
                 } catch {
-                    Write-Debug "DRS: Failed to set $($s.Name) (0x$($s.Id.ToString('X'))): $_"
+                    Write-DebugLog "DRS: Failed to set $($s.Name) (0x$($s.Id.ToString('X'))): $_"
                     $failedIds += "0x$($s.Id.ToString('X'))"
                     $errors++
                 }
             }
 
-            Write-Debug "DRS: Applied $applied settings, $errors errors"
+            Write-DebugLog "DRS: Applied $applied settings, $errors errors"
             if ($failedIds.Count -gt 0) {
                 Write-Warn "DRS: $($failedIds.Count) setting(s) rejected by driver (non-fatal): $($failedIds -join ', ')"
             }

@@ -7,6 +7,8 @@ function Enable-DeviceMSI {
     .SYNOPSIS  Enables Message Signaled Interrupts (MSI) for GPU, NIC, and Audio
                devices via direct registry writes. Replaces MSI Utility v3.
     #>
+    [CmdletBinding()]
+    param()
 
     Write-Step "Enabling MSI interrupts for PCI devices..."
 
@@ -96,7 +98,7 @@ function Set-NicRssConfig {
     } catch {
         # Fallback: parent-level ACL may block Get-ChildItem but individual subkeys
         # are often accessible. Try numbered subkeys 0000–0030 directly.
-        Write-Debug "RSS: Get-ChildItem failed ($_), trying direct subkey access..."
+        Write-DebugLog "RSS: Get-ChildItem failed ($_), trying direct subkey access..."
         $subkeys = @()
         for ($i = 0; $i -le 30; $i++) {
             $subPath = "$classPath\$($i.ToString('D4'))"
@@ -107,7 +109,7 @@ function Set-NicRssConfig {
             Write-Sub "This does not affect other NIC optimizations (adapter properties, URO, QoS)."
             return
         }
-        Write-Debug "RSS: fallback found $($subkeys.Count) subkey(s)"
+        Write-DebugLog "RSS: fallback found $($subkeys.Count) subkey(s)"
     }
 
     # Prefer exact match, fallback to substring only if no exact match found
@@ -126,7 +128,7 @@ function Set-NicRssConfig {
     }
     if (-not $driverKey -and $substringMatch) {
         $driverKey = $substringMatch
-        Write-Debug "RSS: using substring match for NIC driver key (no exact match found)"
+        Write-DebugLog "RSS: using substring match for NIC driver key (no exact match found)"
     }
 
     if (-not $driverKey) {
@@ -277,7 +279,7 @@ function Set-NicInterruptAffinity {
                     Where-Object { $activeHwId -eq $_.InstanceId } |
                     Select-Object -First 1
             }
-        } catch { Write-Debug "PCI path matching failed for NIC affinity: $_" }
+        } catch { Write-DebugLog "PCI path matching failed for NIC affinity: $_" }
     }
 
     if (-not $nic) {
@@ -290,13 +292,13 @@ function Set-NicInterruptAffinity {
 
     # Get physical core count (need physical, not logical, for correct core targeting)
     try {
-        $coreCount = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).NumberOfCores
+        $coreCount = (Get-CachedCpuInfo).NumberOfCores
         if (-not $coreCount) { throw "NumberOfCores returned null" }
     } catch {
         # Fallback: estimate physical cores as half of logical count
         $logicalCount = [Environment]::ProcessorCount
         $coreCount = [math]::Max(2, [math]::Floor($logicalCount / 2))
-        Write-Debug "CIM failed — using $coreCount logical processors as core count"
+        Write-DebugLog "CIM failed — using $coreCount logical processors as core count"
     }
 
     if ($coreCount -lt 2) {
@@ -313,7 +315,7 @@ function Set-NicInterruptAffinity {
     # systems with >64 LPs require GROUP_AFFINITY which needs a different API.
     # Target last physical core to avoid Core 0 (OS-heavy); on hybrid CPUs this lands in the E-core region
     $hybridCpu = Get-IntelHybridCpuName
-    if ($null -eq $hybridCpu) { Write-Debug "CPU hybrid detection returned null — defaulting to non-hybrid" }
+    if ($null -eq $hybridCpu) { Write-DebugLog "CPU hybrid detection returned null — defaulting to non-hybrid" }
     # SMT-aware affinity: on AMD sequential SMT, physical core N maps to LP N (thread 0)
     # and LP N+coreCount (thread 1). We target the last physical core's LP(s).
     $logicalCount = [Environment]::ProcessorCount
@@ -349,7 +351,7 @@ function Set-NicInterruptAffinity {
             $mask = $mask -bor ([uint64]1 -shl $siblingLP)
         }
     }
-    if ($hybridCpu) { Write-Debug "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity (no SMT sibling on E-core)" }
+    if ($hybridCpu) { Write-DebugLog "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity (no SMT sibling on E-core)" }
 
     # Convert mask to 8-byte array for registry (binary value)
     $maskBytes = [BitConverter]::GetBytes([uint64]$mask)

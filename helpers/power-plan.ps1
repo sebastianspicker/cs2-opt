@@ -136,7 +136,7 @@ function Set-PowerPlanValue {
         } else {
             Write-Warn "powercfg failed for '$Label': $ppOut"
         }
-    } else { Write-Debug "Power plan: $Label = $Value" }
+    } else { Write-DebugLog "Power plan: $Label = $Value" }
 }
 
 
@@ -160,7 +160,7 @@ function New-CS2PowerPlan {
     foreach ($line in $existing) {
         if ($line -match "CS2 Optimized" -and $line -match '\b([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\b') {
             $oldGuid = $Matches[1]
-            Write-Debug "Removing existing CS2 Optimized plan: $oldGuid"
+            Write-DebugLog "Removing existing CS2 Optimized plan: $oldGuid"
             powercfg /setactive SCHEME_BALANCED 2>&1 | Out-Null   # switch away first
             powercfg /delete $oldGuid 2>&1 | Out-Null
         }

@@ -320,7 +320,7 @@ function Show-CS2SettingsGuide {
                 }
             }
         }
-    } catch { Write-Debug "video.txt path detection failed: $_" }
+    } catch { Write-DebugLog "video.txt path detection failed: $_" }
 
     # ── Parse existing video.txt ──────────────────────────────────────────────
     $existingVideoKeys  = @{}

@@ -48,15 +48,23 @@ function Invoke-Async {
         if ($capturedHandle.IsCompleted) {
             $timer.Stop()
             $errorOccurred = $false
-            try { $capturedRs.EndInvoke($capturedHandle) } catch { $capturedUISync.AsyncError = $_.Exception.Message; $errorOccurred = $true }
+            try { $capturedRs.EndInvoke($capturedHandle) } catch { $capturedUISync.AsyncError = "$($_.Exception.GetType().Name): $($_.Exception.Message)"; $errorOccurred = $true }
             finally { $capturedRs.Dispose() }
             if ($errorOccurred) {
-                $capturedWindow.Dispatcher.Invoke({
-                    [System.Windows.MessageBox]::Show("Background task error: $($capturedUISync.AsyncError)", "Error", "OK", "Error")
-                })
+                if ($capturedWindow) {
+                    $capturedWindow.Dispatcher.Invoke({
+                        [System.Windows.MessageBox]::Show("Background task error: $($capturedUISync.AsyncError)", "Error", "OK", "Error")
+                    })
+                }
                 $capturedUISync.AsyncError = $null
             } else {
-                & $capturedDone
+                try { & $capturedDone } catch {
+                    if ($capturedWindow) {
+                        $capturedWindow.Dispatcher.Invoke({
+                            [System.Windows.MessageBox]::Show("Callback error: $($_.Exception.Message)", "Error", "OK", "Error")
+                        })
+                    }
+                }
             }
             $capturedTimers.Remove($timer)
         }
@@ -503,7 +511,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
           <Border Width="4" Height="16" Background="#e8520a" CornerRadius="2" Margin="0,0,8,0" VerticalAlignment="Center"/>
           <TextBlock Text="CS2" FontSize="14" FontWeight="Bold" Foreground="#e8520a" VerticalAlignment="Center"/>
           <TextBlock Text=" OPTIMIZE" FontSize="14" FontWeight="Bold" Foreground="#f0f0f0" VerticalAlignment="Center"/>
-          <TextBlock Text="  v2.1" FontSize="10" Foreground="#4b5563" VerticalAlignment="Center" Margin="4,1,0,0"/>
+          <TextBlock x:Name="TitleVersion" Text="" FontSize="10" Foreground="#4b5563" VerticalAlignment="Center" Margin="4,1,0,0"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
           <Button x:Name="BtnMin"   Content="─"  Style="{StaticResource WinBtn}"/>
@@ -1000,7 +1008,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                 <StackPanel Orientation="Horizontal">
                   <Border Width="3" Height="14" Background="#e8520a" CornerRadius="1" Margin="0,0,8,0" VerticalAlignment="Center"/>
                   <TextBlock Text="CS2 Optimization Suite" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                  <TextBlock Text="  v2.1" FontSize="11" Foreground="#6b7280" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="SettingsVersion" Text="" FontSize="11" Foreground="#6b7280" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Text="MIT License" FontSize="11" Foreground="#6b7280" Margin="0,6,0,0"/>
               </StackPanel>
@@ -1020,7 +1028,15 @@ $Window = [Windows.Markup.XamlReader]::Load($reader)
 $reader.Dispose()
 
 # ── Named element shortcuts ───────────────────────────────────────────────────
-function El { $Window.FindName($args[0]) }
+function El {
+    $e = $Window.FindName($args[0])
+    if ($null -eq $e) { Write-Warning "El: XAML element '$($args[0])' not found" }
+    $e
+}
+
+# ── Version labels (from config.env.ps1) ─────────────────────────────────────
+(El "TitleVersion").Text    = "  $CFG_Version"
+(El "SettingsVersion").Text = "  $CFG_Version"
 
 # ── Window chrome ─────────────────────────────────────────────────────────────
 (El "TitleBar").Add_MouseLeftButtonDown({ $Window.DragMove() })
@@ -1098,7 +1114,10 @@ $Window.Add_Loaded({
 
 $Window.Add_Closed({
     $Script:Closing = $true
-    foreach ($t in $Script:AsyncTimers) { try { $t.Stop() } catch {} }
+    # Snapshot the list before iterating — Tick handlers call Remove($timer) on this
+    # same list, which would throw InvalidOperationException during enumeration.
+    $timersSnapshot = @($Script:AsyncTimers)
+    foreach ($t in $timersSnapshot) { try { $t.Stop() } catch {} }
     try { $Script:Pool.Close(); $Script:Pool.Dispose() } catch {}
 })
 

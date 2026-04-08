@@ -147,7 +147,7 @@ Describe "Get-LatestNvidiaDriver" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
 
             $result = Get-LatestNvidiaDriver
             if (-not $result.ManualDownload) {
@@ -205,7 +205,7 @@ Describe "Get-LatestNvidiaDriver" {
             Mock Write-Step {}
             Mock Write-Warn {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
 
             $result = Get-LatestNvidiaDriver
             $result.ManualDownload | Should -Be $true
@@ -268,7 +268,7 @@ Describe "Apply-NvidiaPostInstallTweaks" {
         Mock Write-Step {}
         Mock Write-ActionOK {}
         Mock Write-Info {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Test-Path { $false }
         Mock Backup-ServiceState {}
         Mock Stop-Service {}
@@ -288,7 +288,7 @@ Describe "Apply-NvidiaPostInstallTweaks" {
         Mock Write-Step {}
         Mock Write-ActionOK {}
         Mock Write-Info {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Test-Path { $false }
         Mock Backup-ServiceState {}
         Mock Stop-Service {}
@@ -309,7 +309,7 @@ Describe "Apply-NvidiaPostInstallTweaks" {
         Mock Write-Step {}
         Mock Write-ActionOK {}
         Mock Write-Info {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Test-Path { $false }
         Mock Backup-ServiceState {}
         Mock Stop-Service {}

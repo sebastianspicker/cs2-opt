@@ -19,7 +19,7 @@
 #>
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -154,7 +154,7 @@ if ($startStep -le 1) {
                     Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
                     Write-OK "Removed leftover AppX: $($pkg.Name)"
                 } catch {
-                    Write-Debug "AppX removal: $($pkg.Name) — $_"
+                    Write-DebugLog "AppX removal: $($pkg.Name) — $_"
                 }
             }
             # Also remove provisioned packages to prevent reinstall on feature updates
@@ -165,11 +165,11 @@ if ($startStep -le 1) {
                     $pkg | Remove-AppxProvisionedPackage -Online -ErrorAction Stop | Out-Null
                     Write-OK "Removed provisioned: $($pkg.DisplayName)"
                 } catch {
-                    Write-Debug "Provisioned removal: $($pkg.DisplayName) — $_"
+                    Write-DebugLog "Provisioned removal: $($pkg.DisplayName) — $_"
                 }
             }
         } catch {
-            Write-Debug "AppX cleanup: $_"
+            Write-DebugLog "AppX cleanup: $_"
         }
     }
 
@@ -477,7 +477,7 @@ if ($startStep -le 7) {
                 if ($dg -and $dg.VirtualizationBasedSecurityStatus -ge 2) {
                     $vbsActive = $true
                 }
-            } catch { Write-Debug "VBS detection: $_" }
+            } catch { Write-DebugLog "VBS detection: $_" }
             try {
                 $hvciVal = Get-ItemProperty `
                     "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" `
@@ -572,7 +572,7 @@ if ($startStep -le 8) {
             } `
             -SkipAction { Skip-Step $PHASE 8 "AMDSettings" }
     } else {
-        Write-Debug "Step 8 — AMD GPU Settings skipped (not AMD)."
+        Write-DebugLog "Step 8 — AMD GPU Settings skipped (not AMD)."
         Skip-Step $PHASE 8 "AMDSettings (not AMD)"
     }
 }
@@ -669,7 +669,7 @@ if ($startStep -le 9) {
                                     if ($dnsInfo -and $dnsInfo.ServerAddresses) {
                                         $currentDns = @($dnsInfo.ServerAddresses)
                                     }
-                                } catch { Write-Debug "Could not read current DNS for $($nic.Name)" }
+                                } catch { Write-DebugLog "Could not read current DNS for $($nic.Name)" }
                                 Backup-DnsConfig -AdapterName $nic.Name `
                                     -InterfaceIndex $nic.ifIndex `
                                     -OriginalDnsServers $currentDns `

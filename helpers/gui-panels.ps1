@@ -39,7 +39,7 @@ function Load-Dashboard {
                 (El "ProgressP3Txt").Text = "$p3Done / 13"
             })
         }
-    } catch { Write-Debug "Dashboard progress load failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "Dashboard progress load failed: $($_.Exception.Message)" }
 
     # Benchmark history
     try {
@@ -63,7 +63,7 @@ function Load-Dashboard {
                 (El "DashPerfDelta").Text = ""
             })
         }
-    } catch { Write-Debug "Dashboard benchmark history load failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "Dashboard benchmark history load failed: $($_.Exception.Message)" }
 
     # Hardware (async)
     Invoke-Async -Work {
@@ -71,7 +71,7 @@ function Load-Dashboard {
         . "$ScriptRoot\config.env.ps1"
         . "$ScriptRoot\helpers.ps1"
         try {
-            $cpu  = (Get-CimInstance Win32_Processor -Property Name -ErrorAction SilentlyContinue | Select-Object -First 1).Name
+            $cpu  = (Get-CachedCpuInfo).Name
             $gpu  = Get-NvidiaDriverVersion
             $gpuN = if ($gpu) { $gpu.Name } else {
                 (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1).Caption }
@@ -212,7 +212,7 @@ function Start-Analysis {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Optimize {
     $prog = $null
-    try { $prog = Load-Progress } catch { Write-Debug "Optimize progress load failed: $($_.Exception.Message)" }
+    try { $prog = Load-Progress } catch { Write-DebugLog "Optimize progress load failed: $($_.Exception.Message)" }
     $completed = if ($prog) { $prog.completedSteps } else { @() }
     $skipped   = if ($prog) { $prog.skippedSteps }   else { @() }
 
@@ -397,11 +397,15 @@ function Start-InlineVerify {
             }
         }
         if ($added -gt 0) {
-            $maxPhase = ($verified | ForEach-Object {
-                if ($_ -match "^P(\d+):") { [int]$Matches[1] } else { 0 }
-            } | Measure-Object -Maximum).Maximum
-            if ($maxPhase -gt $prog.phase) { $prog.phase = $maxPhase }
-            Save-Progress $prog
+            if (Test-BackupLock) {
+                Write-DebugLog "Inline verify: skipping progress save — backup lock held by another process"
+            } else {
+                $maxPhase = ($verified | ForEach-Object {
+                    if ($_ -match "^P(\d+):") { [int]$Matches[1] } else { 0 }
+                } | Measure-Object -Maximum).Maximum
+                if ($maxPhase -gt $prog.phase) { $prog.phase = $maxPhase }
+                Save-Progress $prog
+            }
         }
 
         # Reload grid with updated progress
@@ -443,7 +447,13 @@ if ($env:SAFEBOOT_OPTION) {
             "This will remove the Safe Mode boot flag and restart into Normal Mode.`n`nRestart now?",
             "Boot to Normal Mode", "YesNo", "Question")
         if ($confirm -eq "Yes") {
-            Start-Process bcdedit -ArgumentList "/deletevalue safeboot" -Wait -NoNewWindow
+            $bcdOut = bcdedit /deletevalue safeboot 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                [System.Windows.MessageBox]::Show(
+                    "Failed to remove Safe Mode flag (bcdedit exit $LASTEXITCODE).`n`n$($bcdOut | Out-String)`nReboot aborted — you are still in Safe Mode.",
+                    "bcdedit Error", "OK", "Error")
+                return
+            }
             shutdown /r /t 5 /f
         }
     })
@@ -526,6 +536,7 @@ function Load-Backup {
     }
     $r = [System.Windows.MessageBox]::Show("Restore ALL backed-up settings?`nThis will undo every change the suite made.","Restore All","YesNo","Warning")
     if ($r -eq "Yes") {
+        Set-BackupLock
         try {
             # Call step restores directly — Restore-AllChanges uses Read-Host which blocks GUI (no console)
             $bd = Get-BackupData
@@ -539,6 +550,8 @@ function Load-Backup {
             Load-Backup
         } catch {
             [System.Windows.MessageBox]::Show("Restore error: $($_.Exception.Message)","Restore Failed","OK","Error")
+        } finally {
+            Remove-BackupLock
         }
     }
 })
@@ -555,6 +568,7 @@ function Load-Backup {
     $stepTitle = $sel.Step
     $r = [System.Windows.MessageBox]::Show("Restore all changes from:`n`"$stepTitle`"?","Restore Step","YesNo","Question")
     if ($r -eq "Yes") {
+        Set-BackupLock
         try {
             $ok = Restore-StepChanges $stepTitle
             if ($ok) {
@@ -564,6 +578,7 @@ function Load-Backup {
             }
             Load-Backup
         } catch { [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)","Restore Failed") }
+        finally { Remove-BackupLock }
     }
 })
 
@@ -615,7 +630,7 @@ function Load-Benchmark {
         }
         (El "BenchGrid").ItemsSource = $rows
         Draw-BenchChart $hist
-    } catch { Write-Debug "Benchmark history load failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "Benchmark history load failed: $($_.Exception.Message)" }
 }
 
 function Draw-BenchChart {
@@ -722,7 +737,7 @@ function Draw-BenchChart {
     $cap = $Script:UISync.LastCap
     if ($cap) {
         try { [System.Windows.Clipboard]::SetText("$cap") }
-        catch { Write-Debug "Clipboard copy failed: $_" }
+        catch { Write-DebugLog "Clipboard copy failed: $_" }
     }
 })
 
@@ -912,6 +927,16 @@ $writeVideo = {
             $lines += "    `"$($kv.Key)`"`t`"$($kv.Value)`""
         }
         $lines += "}"
+        # Steam Cloud can set video.txt read-only — clear the flag before writing
+        if ((Test-Path $Script:VideoTxtPath) -and (Get-Item $Script:VideoTxtPath).IsReadOnly) {
+            try { (Get-Item $Script:VideoTxtPath).IsReadOnly = $false }
+            catch {
+                [System.Windows.MessageBox]::Show(
+                    "video.txt is read-only (Steam Cloud may be syncing).`n`nTry disabling Steam Cloud sync for CS2:`nSteam → CS2 → Properties → General → Steam Cloud",
+                    "Read-Only File", "OK", "Warning")
+                return
+            }
+        }
         [System.IO.File]::WriteAllLines($Script:VideoTxtPath, [string[]]$lines, [System.Text.UTF8Encoding]::new($false))
 
         $backupMsg = if ($bakMade) { "Original saved as video.txt.bak" } else { "Backup preserved as video.txt.bak (from first run)" }
@@ -927,7 +952,7 @@ $writeVideo = {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Settings {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-DebugLog "Settings state load failed: $($_.Exception.Message)" }
 
     $prof = if ($state) { $state.profile } else { "RECOMMENDED" }
     switch ($prof) {
@@ -962,7 +987,7 @@ function Save-SettingsToState {
         $state | Add-Member -NotePropertyName "mode"    -NotePropertyValue $mode -Force
         Save-JsonAtomic -Data $state -Path $CFG_StateFile
     } catch {
-        Write-Debug "Settings state save failed: $($_.Exception.Message)"
+        Write-DebugLog "Settings state save failed: $($_.Exception.Message)"
         [System.Windows.MessageBox]::Show(
             "Failed to save settings:`n$($_.Exception.Message)`n`nYour profile/mode change was NOT persisted. Terminal operations may use the previous settings.",
             "Settings Save Error", "OK", "Warning")

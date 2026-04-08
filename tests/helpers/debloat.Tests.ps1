@@ -47,7 +47,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-Info {}
             Mock Write-OK {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
             Mock Backup-ServiceState {}
@@ -66,7 +66,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
 
@@ -90,7 +90,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Get-ScheduledTask { $null }
             Mock Write-Step {}
             Mock Write-OK {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Write-Host {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
@@ -117,7 +117,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
 
@@ -141,7 +141,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
 
@@ -158,7 +158,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Stop-Service {}
             Mock Write-Step {}
             Mock Write-OK {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Write-Host {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
@@ -182,7 +182,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Write-Warn {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
@@ -208,7 +208,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
 
@@ -227,7 +227,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Disable-ScheduledTask {}
             Mock Write-Step {}
             Mock Write-OK {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Write-Host {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
@@ -250,7 +250,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Write-ActionOK {}
 
             $script:regCalls = [System.Collections.Generic.List[hashtable]]::new()
@@ -286,7 +286,7 @@ Describe "Invoke-GamingDebloat" {
             Mock Write-Step {}
             Mock Write-OK {}
             Mock Write-Info {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
             Mock Set-RegistryValue {}
             Mock Write-ActionOK {}
 

@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ~/Documents/PowerShell/Modules/PSScriptAnalyzer
-          key: psscriptanalyzer-1-${{ runner.os }}
+          key: psscriptanalyzer-2-${{ runner.os }}-${{ hashFiles('.github/workflows/lint.yml') }}
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -85,7 +85,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ~/Documents/PowerShell/Modules/Pester
-          key: pester5-1-${{ runner.os }}
+          key: pester5-2-${{ runner.os }}-${{ hashFiles('.github/workflows/lint.yml') }}
 
       - name: Install Pester 5.x
         shell: pwsh

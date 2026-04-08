@@ -56,7 +56,7 @@ function Invoke-GamingDebloat {
                     Write-OK "Removed: $pkg"
                     $removedCount++
                 } catch {
-                    Write-Debug "Failed to remove $($pkg): $_"
+                    Write-DebugLog "Failed to remove $($pkg): $_"
                 }
                 # Also remove provisioned package to prevent reinstall on Windows feature updates
                 # Runs independently — provisioned removal should not be blocked by AppxPackage failure

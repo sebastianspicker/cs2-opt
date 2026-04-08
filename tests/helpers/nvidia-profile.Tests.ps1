@@ -124,7 +124,7 @@ Describe "Apply-NvidiaCS2ProfileDrs" {
         It "prints all settings in DRY-RUN mode without DRS write" {
             $SCRIPT:DryRun = $true
             Mock Write-Host {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
 
             # The function tries Invoke-DrsSession which is mocked
             Mock Invoke-DrsSession {}

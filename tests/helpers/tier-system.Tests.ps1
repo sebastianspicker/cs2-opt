@@ -173,7 +173,7 @@ Describe "Invoke-TieredStep" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}

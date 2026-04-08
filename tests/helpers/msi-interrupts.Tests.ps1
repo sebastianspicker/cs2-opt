@@ -35,7 +35,7 @@ Describe "Enable-DeviceMSI" {
             Mock Get-PnpDevice { $null }
             Mock Write-Step {}
             Mock Write-Warn {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
 
             { Enable-DeviceMSI } | Should -Not -Throw
             Should -Invoke Write-Warn -Times 1
@@ -102,7 +102,7 @@ Describe "Enable-DeviceMSI" {
                 } else { $null }
             }
             Mock Write-Step {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
 
             $script:hostOutput = [System.Collections.Generic.List[string]]::new()
             Mock Write-Host {
@@ -153,7 +153,7 @@ Describe "Enable-DeviceMSI" {
             }
             Mock Write-Step {}
             Mock Write-Warn {}
-            Mock Write-Debug {}
+            Mock Write-DebugLog {}
 
             Enable-DeviceMSI
 

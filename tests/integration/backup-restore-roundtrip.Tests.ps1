@@ -29,7 +29,7 @@ Describe "Registry backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -142,7 +142,7 @@ Describe "Service backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -218,7 +218,7 @@ Describe "BootConfig backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -320,7 +320,7 @@ Describe "PowerPlan backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -362,7 +362,7 @@ Describe "ScheduledTask backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -441,7 +441,7 @@ Describe "Flush-BackupBuffer integration" {
 
         New-TestBackupFile -Entries @()
 
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Flush writes pending entries to backup.json and clears buffer" {
@@ -481,7 +481,7 @@ Describe "Corrupted backup.json recovery" {
         Reset-IntegrationState
         $SCRIPT:DryRun = $false
 
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Warn {}
         Mock Write-Host {}
     }
@@ -532,7 +532,7 @@ Describe "Restore security validation" {
         $SCRIPT:DryRun = $false
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
