@@ -29,6 +29,9 @@ if (-not (Get-Command Initialize-NvApiDrs -ErrorAction SilentlyContinue)) {
 if (-not (Get-Variable -Name NV_DRS_SETTINGS -Scope Script -ErrorAction SilentlyContinue)) {
     . "$ScriptRoot\helpers\nvidia-profile.ps1"
 }
+if (-not (Get-Variable -Name PP_SUB_PROCESSOR -ErrorAction SilentlyContinue)) {
+    . "$ScriptRoot\helpers\power-plan.ps1"
+}
 
 function New-VerifyCheckResult {
     param(
@@ -90,7 +93,7 @@ function Test-VerifyNicAdvancedProperties {
             $prop = Get-NetAdapterAdvancedProperty -Name $nic.Name -DisplayName $displayName -ErrorAction SilentlyContinue
         }
         if (-not $prop) {
-            $results.Add((New-VerifyCheckResult -Status "MISSING" -Label "NIC tweak: $displayName" -Detail "property not exposed on $($nic.Name)")) | Out-Null
+            $results.Add((New-VerifyCheckResult -Status "INFO" -Label "NIC tweak: $displayName" -Detail "property not exposed on $($nic.Name)")) | Out-Null
             continue
         }
 
@@ -135,10 +138,38 @@ function Test-VerifyPowerPlan {
             return New-VerifyCheckResult -Status "MISSING" -Label "Active power plan" -Detail "could not read active scheme"
         }
         $activeGuid = $Matches[1].ToLower()
-        if ($activeGuid -eq $targetGuid) {
-            return New-VerifyCheckResult -Status "OK" -Label "Active power plan = CS2 Optimized" -Detail "($activeGuid)"
+        if ($activeGuid -ne $targetGuid) {
+            return New-VerifyCheckResult -Status "CHANGED" -Label "Active power plan = CS2 Optimized" -Detail "(active: $activeGuid, expected: $targetGuid)"
         }
-        return New-VerifyCheckResult -Status "CHANGED" -Label "Active power plan = CS2 Optimized" -Detail "(active: $activeGuid, expected: $targetGuid)"
+
+        $settingsToVerify = @(
+            @{ Label = "CPU max perf state"; Subgroup = $PP_SUB_PROCESSOR; Setting = $PP_PROCTHROTTLEMAX; Expected = 100 },
+            @{ Label = "Core parking max"; Subgroup = $PP_SUB_PROCESSOR; Setting = $PP_CPMAXCORES; Expected = 100 },
+            @{ Label = "USB selective suspend"; Subgroup = $PP_SUB_USB; Setting = $PP_USBSS; Expected = 1 },
+            @{ Label = "Disk idle timeout"; Subgroup = $PP_SUB_DISK; Setting = $PP_DISKIDLE; Expected = 0 },
+            @{ Label = "Standby timeout"; Subgroup = $PP_SUB_SLEEP; Setting = $PP_STANDBYIDLE; Expected = 0 },
+            @{ Label = "Hibernate timeout"; Subgroup = $PP_SUB_SLEEP; Setting = $PP_HIBERNATEIDLE; Expected = 0 },
+            @{ Label = "System cooling"; Subgroup = $PP_SUB_COOLING; Setting = $PP_SYSCOOLPOL; Expected = 1 },
+            @{ Label = "PCIe ASPM"; Subgroup = $PP_SUB_PCIE; Setting = $PP_ASPM; Expected = 0 }
+        )
+
+        $driftDetails = [System.Collections.Generic.List[string]]::new()
+        foreach ($setting in $settingsToVerify) {
+            $queryOutput = powercfg /query $targetGuid $setting.Subgroup $setting.Setting 2>&1 | Out-String
+            if ($queryOutput -notmatch 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
+                return New-VerifyCheckResult -Status "MISSING" -Label "Power plan: CS2 Optimized" -Detail "could not read setting '$($setting.Label)'"
+            }
+            $currentValue = [Convert]::ToInt32($Matches[1], 16)
+            if ($currentValue -ne $setting.Expected) {
+                $driftDetails.Add("$($setting.Label)=$currentValue (expected $($setting.Expected))") | Out-Null
+            }
+        }
+
+        if ($driftDetails.Count -gt 0) {
+            return New-VerifyCheckResult -Status "CHANGED" -Label "Active power plan = CS2 Optimized" -Detail "($(@($driftDetails) -join '; '))"
+        }
+
+        return New-VerifyCheckResult -Status "OK" -Label "Active power plan = CS2 Optimized" -Detail "($activeGuid)"
     } catch {
         return New-VerifyCheckResult -Status "MISSING" -Label "Power plan verification" -Detail "powercfg not readable"
     }
@@ -227,10 +258,21 @@ function Test-VerifyScheduledTasks {
         if (-not $task) {
             return New-VerifyCheckResult -Status "MISSING" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "not found"
         }
-        if ($task.State -eq "Disabled") {
-            return New-VerifyCheckResult -Status "CHANGED" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "(state: Disabled)"
+        $healthyStates = @("Ready", "Running")
+        $taskState = [string]$task.State
+        if ($taskState -notin $healthyStates) {
+            return New-VerifyCheckResult -Status "CHANGED" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "(state: $taskState)"
         }
-        return New-VerifyCheckResult -Status "OK" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "(state: $($task.State))"
+
+        $expectedCommand = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'
+        $expectedArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$CS2_AffinityScriptPath`""
+        $actions = @($task.Actions)
+        $actualCommand = if ($actions.Count -gt 0) { [string]$actions[0].Execute } else { "" }
+        $actualArguments = if ($actions.Count -gt 0) { [string]$actions[0].Arguments } else { "" }
+        if ($actualCommand -ne $expectedCommand -or $actualArguments -ne $expectedArguments) {
+            return New-VerifyCheckResult -Status "CHANGED" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "(action mismatch: exec='$actualCommand' args='$actualArguments')"
+        }
+        return New-VerifyCheckResult -Status "OK" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "(state: $taskState)"
     } catch {
         return New-VerifyCheckResult -Status "MISSING" -Label "Scheduled task: $CS2_AffinityTaskName" -Detail "not readable"
     }

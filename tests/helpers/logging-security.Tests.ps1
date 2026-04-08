@@ -25,7 +25,7 @@ Describe "Redact-Sensitive" {
 
             $redacted = Redact-Sensitive "TESTBOX alice C:\Users\alice\Desktop\config.json"
 
-            $redacted | Should -Be " [COMPUTER] [USER] C:\Users\[USER]\Desktop\config.json".Trim()
+            $redacted | Should -Be "[COMPUTER] [USER] C:\Users\[USER]\Desktop\config.json"
         } finally {
             $env:COMPUTERNAME = $originalComputerName
             $env:USERNAME = $originalUsername

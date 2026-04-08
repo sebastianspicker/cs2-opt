@@ -126,6 +126,15 @@ Describe "Restore-Interactive integration" {
         $remaining[0].step | Should -Be "Step Alpha"
     }
 
+    It "does not claim a full restore when any step group is skipped" {
+        Set-RestorePromptResponses @("A", "S", "R")
+
+        Restore-Interactive
+
+        Should -Invoke Write-OK -Exactly 0 -ParameterFilter { $t -match 'All settings restored to pre-optimization state' }
+        Should -Invoke Write-Warn -Exactly 1 -ParameterFilter { $t -match 'skipped step group' }
+    }
+
     It "leaves unprocessed step groups in backup.json when the operator aborts mid-run" {
         Set-RestorePromptResponses @("A", "R", "A")
 

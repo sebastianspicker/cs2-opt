@@ -34,9 +34,9 @@ function Should-SkipStartupDriftCheck {
         $State,
         [datetime]$Now = (Get-Date)
     )
-    if (-not $State -or -not $State.PSObject.Properties['last_verified']) { return $false }
+    if (-not $State -or -not $State.PSObject.Properties['startup_last_verified']) { return $false }
     try {
-        $lastVerified = [datetime]::Parse([string]$State.last_verified)
+        $lastVerified = [datetime]::Parse([string]$State.startup_last_verified)
         return (($Now - $lastVerified).TotalMinutes -lt 60)
     } catch {
         return $false
@@ -53,7 +53,7 @@ function Test-StartupConfigDrift {
             DriftCount   = 0
             CheckedCount = 0
             DriftLabels  = @()
-            CheckedAt    = [string]$state.last_verified
+            CheckedAt    = [string]$state.startup_last_verified
         }
     }
 
@@ -75,11 +75,11 @@ function Test-StartupConfigDrift {
 
     if (-not $state) {
         $state = [PSCustomObject]@{
-            mode    = "CONTROL"
+            mode    = "AUTO"
             profile = "RECOMMENDED"
         }
     }
-    $state | Add-Member -NotePropertyName "last_verified" -NotePropertyValue ($now.ToString("o")) -Force
+    $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ($now.ToString("o")) -Force
     Save-StateDataSafe -State $state
 
     return [PSCustomObject]@{
@@ -537,9 +537,9 @@ function Start-InlineVerify {
                 Save-Progress $prog
                 $state = Get-StateDataSafe
                 if (-not $state) {
-                    $state = [PSCustomObject]@{ mode = "CONTROL"; profile = "RECOMMENDED" }
+                    $state = [PSCustomObject]@{ mode = "AUTO"; profile = "RECOMMENDED" }
                 }
-                $state | Add-Member -NotePropertyName "last_verified" -NotePropertyValue ((Get-Date).ToString("o")) -Force
+                $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ((Get-Date).ToString("o")) -Force
                 Save-StateDataSafe -State $state
             }
         }

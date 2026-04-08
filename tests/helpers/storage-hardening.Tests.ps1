@@ -137,4 +137,13 @@ Describe "Set-RunOnce configurable ExecutionPolicy" {
             $Value -match "-ExecutionPolicy AllSigned"
         }
     }
+
+    It "rejects invalid CFG_RunOnceExecutionPolicy values" {
+        $CFG_RunOnceExecutionPolicy = "Nope"
+
+        Set-RunOnce -name "CS2_Phase3" -scriptPath "C:\CS2_OPTIMIZE\PostReboot-Setup.ps1"
+
+        Should -Invoke Write-Warn -Exactly 1 -ParameterFilter { $t -match 'invalid CFG_RunOnceExecutionPolicy' }
+        Should -Invoke Set-ItemProperty -Exactly 0
+    }
 }

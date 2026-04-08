@@ -61,6 +61,27 @@ Describe "Initialize-Backup" {
 
         Should -Invoke Write-Warn -Exactly -Times 1
     }
+
+    It "acquires the backup lock before rotating or pruning existing backups" {
+        $existing = @{
+            entries = @([ordered]@{ type = "registry"; name = "TestValue"; step = "Existing Step" })
+            created = "2026-01-01 00:00:00"
+        }
+        $existing | ConvertTo-Json -Depth 10 | Set-Content $CFG_BackupFile -Encoding UTF8
+
+        $script:InitOrder = [System.Collections.Generic.List[string]]::new()
+        Mock Test-BackupLock { $false }
+        Mock Set-BackupLock { $script:InitOrder.Add("lock") | Out-Null }
+        Mock Move-Item { $script:InitOrder.Add("move") | Out-Null }
+        Mock Prune-BackupVersions { $script:InitOrder.Add("prune") | Out-Null }
+        Mock New-BackupFile { $script:InitOrder.Add("new") | Out-Null }
+        Mock Set-SecureAcl { $script:InitOrder.Add("acl") | Out-Null }
+
+        Initialize-Backup
+
+        $script:InitOrder[0] | Should -Be "lock"
+        ($script:InitOrder -join ',') | Should -Match 'lock,move,prune'
+    }
 }
 
 # ── Backup-RegistryValue (in-memory buffering) ──────────────────────────────

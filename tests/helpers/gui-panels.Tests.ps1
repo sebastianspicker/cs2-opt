@@ -139,22 +139,22 @@ Describe "Startup drift helpers" {
         Reset-TestState
     }
 
-    It "skips the startup drift probe when last_verified is recent" {
+    It "skips the startup drift probe when startup_last_verified is recent" {
         $state = [PSCustomObject]@{
-            last_verified = (Get-Date).AddMinutes(-10).ToString("o")
+            startup_last_verified = (Get-Date).AddMinutes(-10).ToString("o")
         }
 
         Should-SkipStartupDriftCheck -State $state | Should -Be $true
     }
 
-    It "records last_verified and reports drift counts from the quick startup check" {
+    It "records startup_last_verified and reports drift counts from the quick startup check" {
         Mock Test-RegistryCheck {
             if ($Name -eq "OverlayTestMode") {
                 return @{ Status = "CHANGED"; Value = 0 }
             }
             return @{ Status = "OK"; Value = $Expected }
         }
-        Mock Save-JsonAtomic {}
+        Mock Save-JsonAtomic { $script:SavedState = $Data }
         Mock Set-SecureAcl {}
 
         $result = Test-StartupConfigDrift
@@ -163,6 +163,19 @@ Describe "Startup drift helpers" {
         $result.HasDrift | Should -Be $true
         $result.DriftCount | Should -Be 1
         Should -Invoke Save-JsonAtomic -Exactly 1
+        $script:SavedState.PSObject.Properties.Name | Should -Contain "startup_last_verified"
+        $script:SavedState.PSObject.Properties.Name | Should -Not -Contain "last_verified"
+    }
+
+    It "uses AUTO as the fallback mode for the recommended profile" {
+        Mock Test-RegistryCheck { @{ Status = "OK"; Value = $Expected } }
+        Mock Save-JsonAtomic { $script:SavedState = $Data }
+        Mock Set-SecureAcl {}
+
+        Test-StartupConfigDrift | Out-Null
+
+        $script:SavedState.profile | Should -Be "RECOMMENDED"
+        $script:SavedState.mode | Should -Be "AUTO"
     }
 
     It "shows the drift banner when startup drift is detected" {

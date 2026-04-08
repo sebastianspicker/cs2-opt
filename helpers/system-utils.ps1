@@ -211,8 +211,14 @@ function Set-RunOnce {
         Write-Host "    After rebooting, launch Phase 3 manually: START.bat -> [P]" -ForegroundColor Cyan
         return
     }
+    $allowedPolicies = @("Bypass", "RemoteSigned", "Unrestricted", "AllSigned", "Undefined")
+    $executionPolicy = [string]$CFG_RunOnceExecutionPolicy
+    if ($executionPolicy -notin $allowedPolicies) {
+        Write-Warn "Set-RunOnce: invalid CFG_RunOnceExecutionPolicy '$executionPolicy' — expected one of: $($allowedPolicies -join ', ')"
+        return
+    }
     # Bypass stays the default because the suite runs locally and is already admin-elevated.
-    $cmd = "powershell.exe -NoProfile -ExecutionPolicy $CFG_RunOnceExecutionPolicy -WindowStyle Normal -File `"$normalizedPath`""
+    $cmd = "powershell.exe -NoProfile -ExecutionPolicy $executionPolicy -WindowStyle Normal -File `"$normalizedPath`""
     try {
         Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -Name $name -Value $cmd -ErrorAction Stop
         Write-OK "RunOnce: $name -> $normalizedPath"

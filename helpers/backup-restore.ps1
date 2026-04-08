@@ -66,6 +66,14 @@ function New-BackupFile {
 }
 
 function Initialize-Backup {
+    # Acquire lock before rotating or pruning so we never steal another live backup file.
+    if (Test-BackupLock) {
+        Write-Warn "Another CS2 Optimization window appears to be open already."
+        Write-Host "  $([char]0x2139) What to do: Close the other window first, then try again." -ForegroundColor Cyan
+        Write-Host "    If no other window is open, this will clear itself automatically." -ForegroundColor DarkGray
+    }
+    Set-BackupLock
+
     if (Test-Path $CFG_BackupFile) {
         $backupDir = Split-Path $CFG_BackupFile -Parent
         $backupName = Split-Path $CFG_BackupFile -Leaf
@@ -76,14 +84,6 @@ function Initialize-Backup {
         Prune-BackupVersions
     }
     if (-not (Test-Path $CFG_BackupFile)) { New-BackupFile } else { Set-SecureAcl -Path $CFG_BackupFile }
-    # Acquire lock — warns if another instance is running but does not block
-    # (the lock is advisory; concurrent writes are protected by Save-JsonAtomic)
-    if (Test-BackupLock) {
-        Write-Warn "Another CS2 Optimization window appears to be open already."
-        Write-Host "  $([char]0x2139) What to do: Close the other window first, then try again." -ForegroundColor Cyan
-        Write-Host "    If no other window is open, this will clear itself automatically." -ForegroundColor DarkGray
-    }
-    Set-BackupLock
 }
 
 function Test-BackupLock {
@@ -1200,6 +1200,7 @@ function Restore-Interactive {
         if ($choice -match "^[aA]$") {
             $stepNames = @(($backup.entries | Group-Object -Property step).Name)
             $failures = 0
+            $skippedSteps = [System.Collections.Generic.List[string]]::new()
             foreach ($stepName in $stepNames) {
                 Write-Host "" 
                 Write-Host "  [$stepName]" -ForegroundColor Cyan
@@ -1213,12 +1214,14 @@ function Restore-Interactive {
                 }
                 if ($stepAction -match "^[sS]$") {
                     Write-Info "Skipped step '$stepName' — entry remains in backup.json."
+                    $skippedSteps.Add($stepName) | Out-Null
                     continue
                 }
                 $result = Restore-StepChanges -StepTitle $stepName
                 if (-not $result) { $failures++ }
             }
-            if ($failures -eq 0) { Write-OK "All settings restored to pre-optimization state." }
+            if ($failures -eq 0 -and $skippedSteps.Count -eq 0) { Write-OK "All settings restored to pre-optimization state." }
+            elseif ($failures -eq 0) { Write-Warn "Restore completed with $($skippedSteps.Count) skipped step group(s): $(@($skippedSteps) -join ', ')." }
             else { Write-Warn "$failures step group(s) had restore failures — check output above." }
             return
         }

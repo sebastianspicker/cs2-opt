@@ -147,13 +147,16 @@ Describe "Invoke-VerifySettings" {
                 }
                 return [PSCustomObject]@{ UserPreferencesMask = $script:UserPreferencesMask }
             }
-            throw "Unexpected Get-ItemProperty access: $Path | $Name"
+            return [PSCustomObject]@{
+                HwSchMode = $null
+                UserPreferencesMask = $null
+            }
         }
         Mock Get-Service {
             if ($script:VerifyWindowsUpdateServices.ContainsKey($Name)) {
                 return $script:VerifyWindowsUpdateServices[$Name]
             }
-            throw "Unexpected Get-Service access: $Name"
+            return $null
         }
     }
 
@@ -288,5 +291,110 @@ Describe "Invoke-VerifySettings" {
         $counts = Get-VerifyCounters
         $counts.changedCount | Should -Be 1
         (@($script:VerifyOutput) -join "`n") | Should -Match "NVIDIA DRS profile"
+    }
+}
+
+Describe "Test-VerifyNicAdvancedProperties" {
+
+    BeforeEach {
+        Reset-TestState
+    }
+
+    It "treats missing NIC properties as informational" {
+        Mock Get-ActiveNicAdapter {
+            [PSCustomObject]@{ Name = "Ethernet" }
+        }
+        Mock Get-NetAdapterAdvancedProperty { $null }
+
+        $results = @(Test-VerifyNicAdvancedProperties)
+
+        ($results | Select-Object -First 1).Status | Should -Be "INFO"
+    }
+}
+
+Describe "Test-VerifyPowerPlan" {
+
+    BeforeEach {
+        Reset-TestState
+    }
+
+    It "returns changed when the active CS2 plan has drifted subsettings" {
+        Mock powercfg {
+            param([Parameter(ValueFromRemainingArguments)]$CmdArgs)
+            $joined = @($CmdArgs) -join ' '
+            if ($joined -eq '/list') {
+                return @"
+Power Scheme GUID: 11111111-1111-1111-1111-111111111111  (Balanced)
+Power Scheme GUID: 22222222-2222-2222-2222-222222222222  (CS2 Optimized)
+"@
+            }
+            if ($joined -eq '/getactivescheme') {
+                return 'Power Scheme GUID: 22222222-2222-2222-2222-222222222222  (CS2 Optimized)'
+            }
+            if ($joined -match '^/query 22222222-2222-2222-2222-222222222222 ') {
+                if ($joined -match [regex]::Escape($PP_USBSS)) {
+                    return 'Current AC Power Setting Index: 0x00000000'
+                }
+                return 'Current AC Power Setting Index: 0x00000001'
+            }
+            throw "Unexpected powercfg call: $joined"
+        }
+
+        $result = Test-VerifyPowerPlan
+
+        $result.Status | Should -Be "CHANGED"
+        $result.Detail | Should -Match 'USB selective suspend=0'
+    }
+}
+
+Describe "Test-VerifyScheduledTasks" {
+
+    BeforeEach {
+        Reset-TestState
+        Mock Get-X3DCcdInfo {
+            @{
+                IsX3D = $true
+                DualCCD = $true
+                CpuName = '7950X3D'
+            }
+        }
+    }
+
+    It "returns changed when the affinity task action payload does not match" {
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{
+                State = 'Ready'
+                Actions = @(
+                    [PSCustomObject]@{
+                        Execute = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'
+                        Arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\CS2_OPTIMIZE\wrong.ps1"'
+                    }
+                )
+            }
+        }
+
+        $result = Test-VerifyScheduledTasks
+
+        $result.Status | Should -Be "CHANGED"
+        $result.Detail | Should -Match 'action mismatch'
+    }
+
+    It "returns changed when the affinity task state is unhealthy" {
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{
+                State = 'Unknown'
+                Actions = @(
+                    [PSCustomObject]@{
+                        Execute = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'
+                        Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$CS2_AffinityScriptPath`""
+                    }
+                )
+            }
+        }
+
+        $result = Test-VerifyScheduledTasks
+
+        $result.Status | Should -Be "CHANGED"
+        $result.Detail | Should -Match 'state: Unknown'
     }
 }
