@@ -54,6 +54,25 @@ Describe "Prune-BackupVersions" {
             "backup.20260101-000003.json"
         )
     }
+
+    It "preserves at least one version when CFG_BackupMaxVersions is zero" {
+        $CFG_BackupMaxVersions = 0
+        @(
+            "backup.20260101-000001.json",
+            "backup.20260101-000002.json"
+        ) | ForEach-Object {
+            Set-Content (Join-Path $SCRIPT:TestTempRoot $_) -Value "{}" -Encoding UTF8
+        }
+
+        Prune-BackupVersions
+
+        $remaining = @(
+            Get-ChildItem $SCRIPT:TestTempRoot -Filter "backup.*.json" |
+                Where-Object { $_.Name -match '^backup\.\d{8}-\d{6}\.json$' } |
+                Sort-Object Name
+        )
+        @($remaining.Name) | Should -Be @("backup.20260101-000002.json")
+    }
 }
 
 Describe "Get-BackupDataRaw corruption handling" {
@@ -144,6 +163,15 @@ Describe "Set-RunOnce configurable ExecutionPolicy" {
         Set-RunOnce -name "CS2_Phase3" -scriptPath "C:\CS2_OPTIMIZE\PostReboot-Setup.ps1"
 
         Should -Invoke Write-Warn -Exactly 1 -ParameterFilter { $t -match 'invalid CFG_RunOnceExecutionPolicy' }
+        Should -Invoke Set-ItemProperty -Exactly 0
+    }
+
+    It "rejects Undefined because client policy precedence can block RunOnce" {
+        $CFG_RunOnceExecutionPolicy = "Undefined"
+
+        Set-RunOnce -name "CS2_Phase3" -scriptPath "C:\CS2_OPTIMIZE\PostReboot-Setup.ps1"
+
+        Should -Invoke Write-Warn -Exactly 1 -ParameterFilter { $t -match 'unsupported on client systems' }
         Should -Invoke Set-ItemProperty -Exactly 0
     }
 }

@@ -51,7 +51,7 @@ function Get-BackupVersionFiles {
 }
 
 function Prune-BackupVersions {
-    $maxVersions = if ($CFG_BackupMaxVersions -ge 0) { [int]$CFG_BackupMaxVersions } else { 0 }
+    $maxVersions = [Math]::Max(1, [int]$CFG_BackupMaxVersions)
     $versionFiles = Get-BackupVersionFiles
     if ($versionFiles.Count -le $maxVersions) { return }
 
@@ -658,10 +658,17 @@ function Restore-DrsSettings {
 function Invoke-PagefileRestoreAutomation {
     param($Entry)
 
+    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+    if (-not $computerSystem) {
+        throw "Win32_ComputerSystem instance not found"
+    }
+
     if ($Entry.automaticManaged) {
-        Set-WmiInstance -Class Win32_ComputerSystem `
-            -Arguments @{ AutomaticManagedPagefile = $true } `
-            -EnableAllPrivileges $true -ErrorAction Stop | Out-Null
+        try {
+            Set-CimInstance -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop | Out-Null
+        } catch {
+            throw "failed to restore automatic pagefile management: $($_.Exception.Message)"
+        }
         return [PSCustomObject]@{
             Success = $true
             Detail  = "automatic management restored"
@@ -669,30 +676,29 @@ function Invoke-PagefileRestoreAutomation {
     }
 
     $pagefilePathWmi = $Entry.pagefilePath -replace '\\', '\\'
-    $customSizeRestored = $false
     try {
-        $wmicOut = wmic pagefileset where "name='$pagefilePathWmi'" set `
-            InitialSize=$($Entry.initialSize),MaximumSize=$($Entry.maximumSize) 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "wmic pagefileset failed: $wmicOut"
+        $pagefileSetting = Get-CimInstance -ClassName Win32_PageFileSetting -Filter "Name='$pagefilePathWmi'" -ErrorAction Stop
+        if (-not $pagefileSetting) {
+            throw "pagefile setting not found for $($Entry.pagefilePath)"
         }
-        $customSizeRestored = $true
+
+        Set-CimInstance -InputObject $pagefileSetting -Property @{
+            InitialSize = [int]$Entry.initialSize
+            MaximumSize = [int]$Entry.maximumSize
+        } -ErrorAction Stop | Out-Null
     } catch {
-        Set-WmiInstance -Path "Win32_PageFileSetting.Name='$pagefilePathWmi'" `
-            -Arguments @{
-                InitialSize = [int]$Entry.initialSize
-                MaximumSize = [int]$Entry.maximumSize
-            } -EnableAllPrivileges $true -ErrorAction Stop | Out-Null
-        $customSizeRestored = $true
+        throw "failed to restore custom pagefile size for $($Entry.pagefilePath): $($_.Exception.Message)"
     }
 
-    Set-WmiInstance -Class Win32_ComputerSystem `
-        -Arguments @{ AutomaticManagedPagefile = $false } `
-        -EnableAllPrivileges $true -ErrorAction Stop | Out-Null
+    try {
+        Set-CimInstance -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop | Out-Null
+    } catch {
+        throw "failed to disable automatic pagefile management after restoring custom size: $($_.Exception.Message)"
+    }
 
     return [PSCustomObject]@{
         Success = $true
-        Detail  = if ($customSizeRestored) { "custom size restored on $($Entry.pagefilePath)" } else { "custom size restore attempted" }
+        Detail  = "custom size restored on $($Entry.pagefilePath)"
     }
 }
 

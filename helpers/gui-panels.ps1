@@ -29,6 +29,13 @@ function Save-StateDataSafe {
     Set-SecureAcl -Path $CFG_StateFile
 }
 
+function New-DefaultState {
+    return [PSCustomObject]@{
+        mode    = "AUTO"
+        profile = "RECOMMENDED"
+    }
+}
+
 function Should-SkipStartupDriftCheck {
     param(
         $State,
@@ -74,10 +81,7 @@ function Test-StartupConfigDrift {
     }
 
     if (-not $state) {
-        $state = [PSCustomObject]@{
-            mode    = "AUTO"
-            profile = "RECOMMENDED"
-        }
+        $state = New-DefaultState
     }
     $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ($now.ToString("o")) -Force
     Save-StateDataSafe -State $state
@@ -537,7 +541,7 @@ function Start-InlineVerify {
                 Save-Progress $prog
                 $state = Get-StateDataSafe
                 if (-not $state) {
-                    $state = [PSCustomObject]@{ mode = "AUTO"; profile = "RECOMMENDED" }
+                    $state = New-DefaultState
                 }
                 $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ((Get-Date).ToString("o")) -Force
                 Save-StateDataSafe -State $state

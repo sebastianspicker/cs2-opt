@@ -139,6 +139,13 @@ Describe "Startup drift helpers" {
         Reset-TestState
     }
 
+    It "returns the canonical default state" {
+        $state = New-DefaultState
+
+        $state.profile | Should -Be "RECOMMENDED"
+        $state.mode | Should -Be "AUTO"
+    }
+
     It "skips the startup drift probe when startup_last_verified is recent" {
         $state = [PSCustomObject]@{
             startup_last_verified = (Get-Date).AddMinutes(-10).ToString("o")

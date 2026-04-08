@@ -598,6 +598,55 @@ Describe "Backup lock system" {
     }
 }
 
+Describe "Invoke-PagefileRestoreAutomation" {
+
+    BeforeEach {
+        Reset-TestState
+    }
+
+    It "restores automatic pagefile management with CIM" {
+        $computerSystem = [PSCustomObject]@{ Name = "HOST" }
+        Mock Get-CimInstance { $computerSystem } -ParameterFilter { $ClassName -eq "Win32_ComputerSystem" }
+        Mock Set-CimInstance {}
+
+        $result = Invoke-PagefileRestoreAutomation -Entry ([PSCustomObject]@{
+            automaticManaged = $true
+        })
+
+        $result.Success | Should -Be $true
+        $result.Detail | Should -Be "automatic management restored"
+        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+            $InputObject -eq $computerSystem -and $Property.AutomaticManagedPagefile -eq $true
+        }
+    }
+
+    It "restores custom pagefile size with CIM and disables automatic management" {
+        $computerSystem = [PSCustomObject]@{ Name = "HOST" }
+        $pagefileSetting = [PSCustomObject]@{ Name = "C:\\pagefile.sys" }
+        Mock Get-CimInstance {
+            if ($ClassName -eq "Win32_ComputerSystem") { return $computerSystem }
+            if ($ClassName -eq "Win32_PageFileSetting") { return $pagefileSetting }
+        }
+        Mock Set-CimInstance {}
+
+        $result = Invoke-PagefileRestoreAutomation -Entry ([PSCustomObject]@{
+            automaticManaged = $false
+            pagefilePath = "C:\pagefile.sys"
+            initialSize = 1024
+            maximumSize = 2048
+        })
+
+        $result.Success | Should -Be $true
+        $result.Detail | Should -Match 'custom size restored on C:\\pagefile\.sys'
+        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+            $InputObject -eq $pagefileSetting -and $Property.InitialSize -eq 1024 -and $Property.MaximumSize -eq 2048
+        }
+        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+            $InputObject -eq $computerSystem -and $Property.AutomaticManagedPagefile -eq $false
+        }
+    }
+}
+
 # ── Scheduled task wasEnabled restore ─────────────────────────────────────
 Describe "Restore-StepChanges scheduled task wasEnabled" {
 

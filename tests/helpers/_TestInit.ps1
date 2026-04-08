@@ -113,6 +113,9 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
     if (-not (Get-Command Set-WmiInstance -ErrorAction SilentlyContinue)) {
         function global:Set-WmiInstance { param($Class, $Arguments, $EnableAllPrivileges, $Path, $ErrorAction) $null }
     }
+    if (-not (Get-Command Set-CimInstance -ErrorAction SilentlyContinue)) {
+        function global:Set-CimInstance { param($InputObject, $Property, $ErrorAction) $null }
+    }
     if (-not (Get-Command bcdedit -ErrorAction SilentlyContinue)) {
         function global:bcdedit { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
     }

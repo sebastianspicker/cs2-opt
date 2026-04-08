@@ -211,8 +211,12 @@ function Set-RunOnce {
         Write-Host "    After rebooting, launch Phase 3 manually: START.bat -> [P]" -ForegroundColor Cyan
         return
     }
-    $allowedPolicies = @("Bypass", "RemoteSigned", "Unrestricted", "AllSigned", "Undefined")
+    $allowedPolicies = @("Bypass", "RemoteSigned", "Unrestricted", "AllSigned")
     $executionPolicy = [string]$CFG_RunOnceExecutionPolicy
+    if ($executionPolicy -eq "Undefined") {
+        Write-Warn "Set-RunOnce: CFG_RunOnceExecutionPolicy 'Undefined' is unsupported on client systems due to policy precedence and GPOs; use one of: $($allowedPolicies -join ', ')"
+        return
+    }
     if ($executionPolicy -notin $allowedPolicies) {
         Write-Warn "Set-RunOnce: invalid CFG_RunOnceExecutionPolicy '$executionPolicy' — expected one of: $($allowedPolicies -join ', ')"
         return
