@@ -24,13 +24,13 @@ Describe "state.json persistence roundtrip" {
         Mock Write-DebugLog {}
     }
 
-    It "Save-State / Load-State roundtrip preserves profile" {
+    It "Save-JsonAtomic / Load-State roundtrip preserves profile" {
         $state = [PSCustomObject]@{
             profile  = "COMPETITIVE"
             mode     = "CONTROL"
             logLevel = "VERBOSE"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         $loaded = Load-State $CFG_StateFile
 
@@ -38,13 +38,13 @@ Describe "state.json persistence roundtrip" {
         $SCRIPT:Profile  | Should -Be "COMPETITIVE"
     }
 
-    It "Save-State / Load-State roundtrip preserves mode" {
+    It "Save-JsonAtomic / Load-State roundtrip preserves mode" {
         $state = [PSCustomObject]@{
             profile  = "RECOMMENDED"
             mode     = "DRY-RUN"
             logLevel = "NORMAL"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         $loaded = Load-State $CFG_StateFile
 
@@ -53,13 +53,13 @@ Describe "state.json persistence roundtrip" {
         $SCRIPT:DryRun  | Should -Be $true
     }
 
-    It "Save-State / Load-State roundtrip preserves logLevel" {
+    It "Save-JsonAtomic / Load-State roundtrip preserves logLevel" {
         $state = [PSCustomObject]@{
             profile  = "SAFE"
             mode     = "CONTROL"
             logLevel = "VERBOSE"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         $loaded = Load-State $CFG_StateFile
 
@@ -73,7 +73,7 @@ Describe "state.json persistence roundtrip" {
             mode     = "CONTROL"
             logLevel = "NORMAL"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Load-State $CFG_StateFile
 
@@ -92,7 +92,7 @@ Describe "state.json persistence roundtrip" {
             mode     = "CONTROL"
             logLevel = "MINIMAL"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         $raw = Get-Content $CFG_StateFile -Raw
         { $raw | ConvertFrom-Json } | Should -Not -Throw
@@ -106,7 +106,7 @@ Describe "state.json persistence roundtrip" {
             driverPath = "C:\NVIDIA\driver.exe"
             nicName    = "Realtek RTL8125"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         $loaded = Load-State $CFG_StateFile
 
@@ -143,7 +143,7 @@ Describe "Initialize-ScriptDefaults soft state loader" {
         $state = [PSCustomObject]@{
             profile = "COMPETITIVE"; mode = "CONTROL"; logLevel = "VERBOSE"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Initialize-ScriptDefaults
 
@@ -178,7 +178,7 @@ Describe "Initialize-ScriptDefaults soft state loader" {
         $state = [PSCustomObject]@{
             profile = "RECOMMENDED"; mode = "DRY-RUN"; logLevel = "NORMAL"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Initialize-ScriptDefaults
 
@@ -190,7 +190,7 @@ Describe "Initialize-ScriptDefaults soft state loader" {
             profile = "SAFE"; mode = "CONTROL"
             # No logLevel property
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Initialize-ScriptDefaults
 
@@ -202,7 +202,7 @@ Describe "Initialize-ScriptDefaults soft state loader" {
             mode = "CONTROL"; logLevel = "NORMAL"
             # No profile property
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         Initialize-ScriptDefaults
 
@@ -434,7 +434,7 @@ Describe "Simulated reboot cycle (Phase 1 save -> Phase 3 load)" {
             driverPath = "C:\NVIDIA\561.00-desktop-win10-win11-64bit.exe"
             nicName    = "Realtek Gaming 2.5GbE"
         }
-        Save-State $state $CFG_StateFile
+        Save-JsonAtomic -Data $state -Path $CFG_StateFile
 
         # Phase 1: Complete some steps
         Complete-Step -phase 1 -stepNum 1 -stepName "Power Plan"

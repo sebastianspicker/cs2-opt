@@ -32,7 +32,7 @@ Describe "Initialize-Backup" {
         $data.created | Should -Not -BeNullOrEmpty
     }
 
-    It "does not overwrite existing backup.json" {
+    It "rotates existing backup.json into a versioned file and starts a fresh active backup" {
         # Create a backup with an entry
         $existing = @{
             entries = @(
@@ -45,7 +45,12 @@ Describe "Initialize-Backup" {
         Initialize-Backup
 
         $data = Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json
-        $data.created | Should -Be "2026-01-01 00:00:00"
+        @($data.entries).Count | Should -Be 0
+        $data.created | Should -Not -Be "2026-01-01 00:00:00"
+
+        $versionedFiles = @(Get-ChildItem $SCRIPT:TestTempRoot -Filter "backup.*.json" | Where-Object { $_.Name -ne "backup.json" })
+        $versionedFiles.Count | Should -Be 1
+        (Get-Content $versionedFiles[0].FullName -Raw) | Should -Match "Existing Step"
     }
 
     It "warns when backup lock exists" {
@@ -177,7 +182,7 @@ Describe "Get-BackupData" {
 
         @($data.entries).Count | Should -Be 0
         # Should have created a .corrupt backup
-        $corruptFiles = @(Get-ChildItem "$SCRIPT:TestTempRoot" -Filter "backup.json.corrupt.*")
+        $corruptFiles = @(Get-ChildItem "$SCRIPT:TestTempRoot" -Filter "backup.corrupt.*.json")
         $corruptFiles.Count | Should -BeGreaterOrEqual 1
     }
 

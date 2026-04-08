@@ -15,6 +15,7 @@ function Load-Progress {
 
 function Save-Progress($prog) {
     Save-JsonAtomic -Data $prog -Path $CFG_ProgressFile
+    Set-SecureAcl -Path $CFG_ProgressFile
     Write-DebugLog "Progress saved: Phase $($prog.phase) Step $($prog.lastCompletedStep)"
 }
 

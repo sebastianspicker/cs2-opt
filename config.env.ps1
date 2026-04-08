@@ -22,6 +22,10 @@ $CFG_LogFile        = "$CFG_LogDir\optimize_current.log"
 $CFG_StateFile      = "$CFG_WorkDir\state.json"
 $CFG_ProgressFile   = "$CFG_WorkDir\progress.json"
 $CFG_LogMaxFiles    = 5
+$CFG_BackupMaxVersions = 3
+# Bypass is the default because the suite runs locally and is already admin-elevated.
+# Harden further with RemoteSigned or AllSigned if you manage signed local scripts.
+$CFG_RunOnceExecutionPolicy = "Bypass"
 
 # ── Device Class GUIDs ───────────────────────────────────────────────────────
 $CFG_GUID_Display   = "{4d36e968-e325-11ce-bfc1-08002be10318}"   # Display adapters (GPU)

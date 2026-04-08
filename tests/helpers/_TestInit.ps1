@@ -78,6 +78,53 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
     if (-not (Get-Command Start-Service -ErrorAction SilentlyContinue)) {
         function global:Start-Service { param($Name) $null }
     }
+    if (-not (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) {
+        function global:Get-NetAdapter { param($Name, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Get-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
+        function global:Get-NetAdapterAdvancedProperty {
+            param($Name, $DisplayName, $RegistryKeyword, $ErrorAction)
+            $null
+        }
+    }
+    if (-not (Get-Command Set-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
+        function global:Set-NetAdapterAdvancedProperty {
+            param($Name, $RegistryKeyword, $RegistryValue, $DisplayName, $DisplayValue, $ErrorAction)
+        }
+    }
+    if (-not (Get-Command Get-NetQosPolicy -ErrorAction SilentlyContinue)) {
+        function global:Get-NetQosPolicy { param($Name, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Remove-NetQosPolicy -ErrorAction SilentlyContinue)) {
+        function global:Remove-NetQosPolicy { param($Name, [switch]$Confirm, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Remove-MpPreference -ErrorAction SilentlyContinue)) {
+        function global:Remove-MpPreference { param($ExclusionPath, $ExclusionProcess, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Set-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
+        function global:Set-DnsClientServerAddress { param($InterfaceIndex, $ServerAddresses, [switch]$ResetServerAddresses, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Get-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
+        function global:Get-DnsClientServerAddress { param($InterfaceIndex, $AddressFamily, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Stop-ScheduledTask -ErrorAction SilentlyContinue)) {
+        function global:Stop-ScheduledTask { param($TaskName, $ErrorAction) $null }
+    }
+    if (-not (Get-Command Set-WmiInstance -ErrorAction SilentlyContinue)) {
+        function global:Set-WmiInstance { param($Class, $Arguments, $EnableAllPrivileges, $Path, $ErrorAction) $null }
+    }
+    if (-not (Get-Command bcdedit -ErrorAction SilentlyContinue)) {
+        function global:bcdedit { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command powercfg -ErrorAction SilentlyContinue)) {
+        function global:powercfg { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command netsh -ErrorAction SilentlyContinue)) {
+        function global:netsh { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command wmic -ErrorAction SilentlyContinue)) {
+        function global:wmic { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
 
     # On macOS/Linux, Set-ItemProperty does not have the -Type parameter
     # (it's a Windows registry provider feature). Wrap it so Pester can mock calls
@@ -190,6 +237,10 @@ function Reset-TestState {
     Remove-Item $CFG_ProgressFile -Force -ErrorAction SilentlyContinue
     Remove-Item $CFG_BackupFile   -Force -ErrorAction SilentlyContinue
     Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.*.json") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.corrupt.*.json") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "state.json.corrupt*") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "progress.json.corrupt*") -Force -ErrorAction SilentlyContinue
 }
 
 # ── Cleanup hook ──────────────────────────────────────────────────────────────

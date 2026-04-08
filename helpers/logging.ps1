@@ -22,6 +22,21 @@ function Add-TextFileUtf8Line {
     [System.IO.File]::AppendAllText($nativePath, $Value + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Redact-Sensitive {
+    param([AllowNull()][string]$Text)
+    if ($null -eq $Text) { return $Text }
+
+    $redacted = $Text
+    if ($env:COMPUTERNAME) {
+        $redacted = [regex]::Replace($redacted, [regex]::Escape($env:COMPUTERNAME), "[COMPUTER]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    if ($env:USERNAME) {
+        $redacted = [regex]::Replace($redacted, [regex]::Escape($env:USERNAME), "[USER]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    $redacted = [regex]::Replace($redacted, '(?i)C:\\Users\\[^\\]+\\', { 'C:\Users\[USER]\' })
+    return $redacted
+}
+
 function Initialize-Log {
     Ensure-Dir $CFG_LogDir
     if (Test-Path $CFG_LogFile) {
@@ -32,7 +47,7 @@ function Initialize-Log {
             Select-Object -Skip $CFG_LogMaxFiles |
             Remove-Item -Force -ErrorAction SilentlyContinue
     }
-    Set-TextFileUtf8 -Path $CFG_LogFile -Value @"
+    $header = @"
 ================================================================================
   CS2 Optimization Suite · Log
   Started:    $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
@@ -40,10 +55,12 @@ function Initialize-Log {
   Host:       $env:COMPUTERNAME     User:  $env:USERNAME
   Windows:    $([System.Environment]::OSVersion.VersionString)
 ================================================================================
-"@ -Encoding UTF8
+"@
+    Set-TextFileUtf8 -Path $CFG_LogFile -Value (Redact-Sensitive $header)
 }
 
 function Write-Log($Level, $Message) {
+    $Message = Redact-Sensitive $Message
     $ts      = Get-Date -Format "HH:mm:ss"
     $logLine = "[$ts][$Level] $Message"
     if ($CFG_LogFile -and (Test-Path $CFG_LogDir -ErrorAction SilentlyContinue)) {

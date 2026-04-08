@@ -567,6 +567,17 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
           <StackPanel Margin="28,20,28,28">
             <TextBlock Text="Dashboard" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,20"/>
 
+            <Border x:Name="DashDriftBanner" Visibility="Collapsed"
+                    Background="#1f1408" BorderBrush="#fbbf24" BorderThickness="1"
+                    CornerRadius="6" Padding="14" Margin="0,0,0,18">
+              <StackPanel>
+                <TextBlock x:Name="DashDriftBannerTitle" Text="Configuration Drift Detected"
+                           FontSize="12" FontWeight="Bold" Foreground="#fbbf24"/>
+                <TextBlock x:Name="DashDriftBannerText" Text=""
+                           TextWrapping="Wrap" FontSize="11" Foreground="#d1d5db" Margin="0,4,0,0"/>
+              </StackPanel>
+            </Border>
+
             <TextBlock Text="SYSTEM" Style="{StaticResource SectionHeader}"/>
             <UniformGrid Columns="4" Margin="0,0,0,12">
               <Border Style="{StaticResource CardBorder}" Margin="0,0,8,0">
@@ -1066,18 +1077,6 @@ $Script:ActivePanel = "PanelDashboard"
 $ActiveStyle   = $Window.Resources["NavBtnActive"]
 $InactiveStyle = $Window.Resources["NavBtn"]
 
-function Switch-Panel {
-    param([string]$PanelName, [scriptblock]$OnSwitch = $null)
-    foreach ($p in $Script:AllPanels) {
-        (El $p).Visibility = if ($p -eq $PanelName) { "Visible" } else { "Collapsed" }
-    }
-    foreach ($kv in $Script:NavMap.GetEnumerator()) {
-        (El $kv.Value).Style = if ($kv.Key -eq $PanelName) { $ActiveStyle } else { $InactiveStyle }
-    }
-    $Script:ActivePanel = $PanelName
-    if ($OnSwitch) { & $OnSwitch }
-}
-
 (El "NavDashboard").Add_Click({ Switch-Panel "PanelDashboard"; Load-Dashboard })
 (El "NavAnalyze"  ).Add_Click({ Switch-Panel "PanelAnalyze" ; Start-Analysis })
 (El "NavOptimize" ).Add_Click({ Switch-Panel "PanelOptimize" ; Load-Optimize  })
@@ -1115,6 +1114,7 @@ function Update-SidebarStatus {
 # ══════════════════════════════════════════════════════════════════════════════
 $Window.Add_Loaded({
     Update-SidebarStatus
+    Update-StartupDriftBanner
     Load-Dashboard
 })
 
