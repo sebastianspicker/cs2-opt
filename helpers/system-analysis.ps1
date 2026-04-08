@@ -67,7 +67,7 @@ function Invoke-CheckHardware {
             $wheaSt = if ($whea.HasErrors) { "ERR" } elseif ($whea.Count -gt 0) { "WARN" } else { "OK" }
             $results.Add((New-CheckItem "Hardware" "CPU" "WHEA Errors" $wheaStr "0" $wheaSt "BIOS" "WHEA errors indicate PBO/CO instability — reduce Curve Optimizer by 5"))
         }
-    } catch { Write-Debug "WHEA check failed: $_" }
+    } catch { Write-DebugLog "WHEA check failed: $_" }
 
     # AMD X3D CPU base clock (informational — MaxClockSpeed is base, not boost)
     $amdCpu = $null
@@ -77,7 +77,7 @@ function Invoke-CheckHardware {
             $baseStr = "$($amdCpu.MaxClockSpeed) MHz (base clock)"
             $results.Add((New-CheckItem "Hardware" "CPU" "X3D Base Clock" $baseStr "N/A (boost requires HWiNFO)" "INFO" "BIOS" "Win32_Processor.MaxClockSpeed reports base clock, not boost — use HWiNFO to verify boost"))
         }
-    } catch { Write-Debug "X3D base clock check failed: $_" }
+    } catch { Write-DebugLog "X3D base clock check failed: $_" }
 
     # DDR5 FCLK/MCLK 1:1
     try {
@@ -88,7 +88,7 @@ function Invoke-CheckHardware {
             $ddr5Rec = if ($amdCpu -and $amdCpu.IsX3D) { "DDR5-6000 (1:1)" } else { "XMP rated speed" }
             $results.Add((New-CheckItem "Hardware" "Memory" "DDR5 Speed" $mtsStr $ddr5Rec $ddr5St "P1-2" "AM5 optimal: DDR5-6000 (FCLK 2000, MCLK 3000, 1:1 ratio)"))
         }
-    } catch { Write-Debug "DDR5 timing check failed: $_" }
+    } catch { Write-DebugLog "DDR5 timing check failed: $_" }
 
     # Dual-channel RAM
     try {
@@ -97,7 +97,7 @@ function Invoke-CheckHardware {
             $st = if ($dc.DualChannel -eq $true) { "OK" } elseif ($dc.DualChannel -eq $false) { "ERR" } else { "INFO" }
             $results.Add((New-CheckItem "Hardware" "Memory" "Dual-Channel RAM" $dc.Reason "Dual-channel" $st "P1-24" "Single-channel halves memory bandwidth — 20-40% FPS loss in CS2"))
         }
-    } catch { Write-Debug "Dual-channel RAM check failed: $_" }
+    } catch { Write-DebugLog "Dual-channel RAM check failed: $_" }
 
     # XMP / EXPO
     try {
@@ -107,7 +107,7 @@ function Invoke-CheckHardware {
             $st = if ($ram.AtRatedSpeed) { "OK" } else { "WARN" }
             $results.Add((New-CheckItem "Hardware" "Memory" "XMP / EXPO" $xmpStr "At rated speed" $st "P1-2" "RAM running below rated speed — enable XMP/EXPO in BIOS"))
         }
-    } catch { Write-Debug "XMP/EXPO check failed: $_" }
+    } catch { Write-DebugLog "XMP/EXPO check failed: $_" }
 
     return $results
 }
@@ -121,7 +121,7 @@ function Invoke-CheckWindowsGaming {
         $hags = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode"
         $hagsStr = switch ($hags) { 2 { "Enabled" } 1 { "Disabled" } $null { "Not set" } default { "$hags" } }
         $r.Add((New-CheckItem "Windows" "Display" "HAGS" $hagsStr "Enabled (2)" "INFO" "P1-7" "Setup-dependent — benchmark both ON and OFF on your system"))
-    } catch { Write-Debug "HAGS registry check failed: $_" }
+    } catch { Write-DebugLog "HAGS registry check failed: $_" }
 
     # Fast Startup
     $fs = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" "HiberbootEnabled"
@@ -245,7 +245,7 @@ function Invoke-CheckSystemLatency {
     try {
         $bcdOutput = bcdedit /enum "{current}" /v 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0) {
-            Write-Debug "bcdedit exited with code $LASTEXITCODE — skipping boot config checks"
+            Write-DebugLog "bcdedit exited with code $LASTEXITCODE — skipping boot config checks"
         } else {
             $dynTick = if ($bcdOutput -match "0x26000060\s+\S+") { "OK" } else { "WARN" }
             $r.Add((New-CheckItem "Windows" "Boot" "Dynamic Tick" $(if ($dynTick -eq "OK") {"Disabled"} else {"Active"}) "Disabled" $dynTick "P1-10" "Adaptive timer causes irregular CPU wakeups — frametime jitter"))
@@ -253,7 +253,7 @@ function Invoke-CheckSystemLatency {
             $platTick = if ($bcdOutput -match "0x26000092\s+\S+") { "OK" } else { "WARN" }
             $r.Add((New-CheckItem "Windows" "Boot" "Platform Tick" $(if ($platTick -eq "OK") {"Active"} else {"Inactive"}) "Active" $platTick "P1-10" "Hardware timer instead of software timer"))
         }
-    } catch { Write-Debug "bcdedit check failed: $_" }
+    } catch { Write-DebugLog "bcdedit check failed: $_" }
 
     return $r
 }
@@ -297,7 +297,7 @@ function Invoke-CheckNetwork {
             }
         }
         $r.Add((New-CheckItem "Network" "TCP" "Nagle Disable (TcpNoDelay)" $(if ($nagleOk) {"Disabled on active NIC"} else {"Enabled / Not set"}) "1 (disabled)" $(if ($nagleOk) {"OK"} else {"WARN"}) "P1-25" "Nagle bundles small TCP packets → increases latency"))
-    } catch { Write-Debug "Nagle/TcpNoDelay check failed: $_" }
+    } catch { Write-DebugLog "Nagle/TcpNoDelay check failed: $_" }
 
     # IPv6 — intentionally left enabled (2026 reversal: Steam prefers IPv6 when faster)
     $ipv6 = Get-RegVal "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" "DisabledComponents"
@@ -325,7 +325,7 @@ function Invoke-CheckNetwork {
                 $r.Add((New-CheckItem "Network" "Stack" "URO (UDP Receive Offload)" $uroVal "disabled" $st "P1-16" "URO batches UDP datagrams causing receive jitter on Win11"))
             }
         }
-    } catch { Write-Debug "URO check failed: $_" }
+    } catch { Write-DebugLog "URO check failed: $_" }
 
     return $r
 }
@@ -381,7 +381,7 @@ function Invoke-CheckCS2 {
 
     # Find CS2 install
     $cs2Path = $null
-    try { $cs2Path = Get-CS2InstallPath } catch { Write-Debug "CS2 install path detection failed: $_" }
+    try { $cs2Path = Get-CS2InstallPath } catch { Write-DebugLog "CS2 install path detection failed: $_" }
 
     if (-not $cs2Path) {
         $r.Add((New-CheckItem "CS2" "Install" "CS2 Install" "Not found" "Found" "ERR" "—" "CS2 not detected — check Steam library"))
@@ -442,7 +442,7 @@ function Invoke-CheckCS2 {
                 $r.Add((New-CheckItem "CS2" "video.txt" "video.txt" "Not found" "Present" "WARN" "P3-6" "Video settings file missing — launch CS2 once to generate it"))
             }
         }
-    } catch { Write-Debug "video.txt check failed: $_" }
+    } catch { Write-DebugLog "video.txt check failed: $_" }
 
     # Launch options (localconfig.vdf)
     try {
@@ -462,7 +462,7 @@ function Invoke-CheckCS2 {
                 }
             }
         }
-    } catch { Write-Debug "Launch options check failed: $_" }
+    } catch { Write-DebugLog "Launch options check failed: $_" }
 
     return $r
 }
@@ -479,7 +479,7 @@ function Invoke-SystemAnalysis {
         { Invoke-CheckServices       }
         { Invoke-CheckCS2            }
     )) {
-        try { $all.AddRange([object[]]@(& $fn)) } catch { Write-Debug "Analysis check failed: $_" }
+        try { $all.AddRange([object[]]@(& $fn)) } catch { Write-DebugLog "Analysis check failed: $_" }
     }
     return $all
 }

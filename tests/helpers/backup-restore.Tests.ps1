@@ -171,7 +171,7 @@ Describe "Get-BackupData" {
         "this is {{{ not valid json" | Set-Content $CFG_BackupFile -Encoding UTF8
 
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         $data = Get-BackupData
 
@@ -266,7 +266,7 @@ Describe "Restore-StepChanges" {
         Mock Write-Step {}
         Mock Write-OK {}
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
     }
 
@@ -504,7 +504,7 @@ Describe "Backup-ServiceState" {
 
     It "handles service not found gracefully" {
         Mock Get-Service { throw "Service not found" } -ParameterFilter { $Name -eq "FakeSvc" }
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         { Backup-ServiceState -ServiceName "FakeSvc" -StepTitle "Step" } | Should -Not -Throw
         $SCRIPT:_backupPending.Count | Should -Be 0
@@ -581,7 +581,7 @@ Describe "Restore-StepChanges scheduled task wasEnabled" {
         Mock Write-Step {}
         Mock Write-OK {}
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
     }
 

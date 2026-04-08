@@ -21,7 +21,7 @@ Describe "state.json persistence roundtrip" {
 
     BeforeEach {
         Reset-IntegrationState
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Save-State / Load-State roundtrip preserves profile" {
@@ -136,7 +136,7 @@ Describe "Initialize-ScriptDefaults soft state loader" {
 
     BeforeEach {
         Reset-IntegrationState
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "loads profile from existing state.json" {
@@ -216,7 +216,7 @@ Describe "progress.json persistence roundtrip" {
     BeforeEach {
         Reset-IntegrationState
         $SCRIPT:DryRun = $false
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Complete-Step creates and persists progress.json" {
@@ -297,7 +297,7 @@ Describe "Corrupted progress.json recovery" {
     BeforeEach {
         Reset-IntegrationState
         $SCRIPT:DryRun = $false
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Warn {}
     }
 
@@ -333,7 +333,7 @@ Describe "Clear-Progress" {
     BeforeEach {
         Reset-IntegrationState
         $SCRIPT:DryRun = $false
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Warn {}
     }
 
@@ -418,7 +418,7 @@ Describe "Simulated reboot cycle (Phase 1 save -> Phase 3 load)" {
     BeforeEach {
         Reset-IntegrationState
         $SCRIPT:DryRun = $false
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Phase 1 state survives simulated reboot and loads correctly in Phase 3" {

@@ -108,7 +108,7 @@ Describe "Set-RegistryValue DRY-RUN" {
         $SCRIPT:CurrentStepTitle = "Test Step"
         # Mock all functions that Set-RegistryValue might call
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Backup-RegistryValue {}
     }
 
@@ -200,8 +200,8 @@ Describe "Initialize-VerifyCounters / Get-VerifyCounters" {
 
     It "resets counters when called again" {
         Initialize-VerifyCounters
-        $global:_verifyOkCount = 5
-        $global:_verifyChangedCount = 3
+        $Script:_verifyOkCount = 5
+        $Script:_verifyChangedCount = 3
 
         Initialize-VerifyCounters
         $c = Get-VerifyCounters

@@ -58,9 +58,10 @@ function Write-Warn($t)     { Write-Log "WARN"    $t }
 function Write-Err($t)      { Write-Log "ERROR"   $t }
 function Write-Step($t)     { Write-Log "STEP"    $t }
 function Write-Info($t)     { Write-Log "INFO"    $t }
-# Intentionally shadows the built-in Write-Debug cmdlet to route debug output
-# through the suite's unified logging system (file + console with level filtering).
-function Write-Debug($t)    { Write-Log "DEBUG"   $t }
+# Suite-specific debug logging — routes through the unified logging system
+# (file + console with level filtering). Named Write-DebugLog to avoid
+# shadowing the built-in Write-Debug cmdlet.
+function Write-DebugLog($t)    { Write-Log "DEBUG"   $t }
 function Write-Blank()      { Write-Host "" }
 function Write-Sub($t)      { Write-Host "  · $t" -ForegroundColor White }
 # Summary message after an action — suppressed in DRY-RUN because
@@ -124,14 +125,14 @@ function Write-LogoBanner($subtitle) {
 # ── Phase step counters ────────────────────────────────────────────────────
 # Tracks applied / skipped / failed counts per phase for the summary box.
 function Initialize-PhaseCounters {
-    $global:_phaseApplied = 0
-    $global:_phaseSkipped = 0
-    $global:_phaseFailed  = 0
+    $Script:_phaseApplied = 0
+    $Script:_phaseSkipped = 0
+    $Script:_phaseFailed  = 0
 }
 
-function Add-PhaseApplied { if ($null -eq $global:_phaseApplied) { $global:_phaseApplied = 0 }; $global:_phaseApplied++ }
-function Add-PhaseSkipped { if ($null -eq $global:_phaseSkipped) { $global:_phaseSkipped = 0 }; $global:_phaseSkipped++ }
-function Add-PhaseFailed  { if ($null -eq $global:_phaseFailed) { $global:_phaseFailed = 0 }; $global:_phaseFailed++ }
+function Add-PhaseApplied { if ($null -eq $Script:_phaseApplied) { $Script:_phaseApplied = 0 }; $Script:_phaseApplied++ }
+function Add-PhaseSkipped { if ($null -eq $Script:_phaseSkipped) { $Script:_phaseSkipped = 0 }; $Script:_phaseSkipped++ }
+function Add-PhaseFailed  { if ($null -eq $Script:_phaseFailed) { $Script:_phaseFailed = 0 }; $Script:_phaseFailed++ }
 
 function Write-PhaseSummary {
     <#  Displays a summary box after a phase with applied/skipped/failed counts.  #>
@@ -141,12 +142,12 @@ function Write-PhaseSummary {
         [switch]$DryRun
     )
 
-    if ($null -eq $global:_phaseApplied) { $global:_phaseApplied = 0 }
-    if ($null -eq $global:_phaseSkipped) { $global:_phaseSkipped = 0 }
-    if ($null -eq $global:_phaseFailed)  { $global:_phaseFailed  = 0 }
-    $applied = [int]$global:_phaseApplied
-    $skipped = [int]$global:_phaseSkipped
-    $failed  = [int]$global:_phaseFailed
+    if ($null -eq $Script:_phaseApplied) { $Script:_phaseApplied = 0 }
+    if ($null -eq $Script:_phaseSkipped) { $Script:_phaseSkipped = 0 }
+    if ($null -eq $Script:_phaseFailed)  { $Script:_phaseFailed  = 0 }
+    $applied = [int]$Script:_phaseApplied
+    $skipped = [int]$Script:_phaseSkipped
+    $failed  = [int]$Script:_phaseFailed
 
     Write-Blank
     if ($DryRun) {

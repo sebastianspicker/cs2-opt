@@ -240,7 +240,7 @@ if (-not $state -or $startStep -eq 1) {
             if ($gpu.Name -match "AMD|Radeon")                      { $gpuInput = "3" }
             elseif ($gpu.Name -match "Intel.*Arc|Intel.*Graphics")   { $gpuInput = "4" }
             elseif ($gpu.Name -match "RTX\s*5\d{3}")                { $gpuInput = "1" }
-        } catch { Write-Debug "YOLO GPU auto-detect failed, defaulting to NVIDIA: $_" }
+        } catch { Write-DebugLog "YOLO GPU auto-detect failed, defaulting to NVIDIA: $_" }
         $gpuName = switch ($gpuInput) { "1" {"NVIDIA RTX 5000"} "2" {"NVIDIA RTX 4000/older"} "3" {"AMD"} "4" {"Intel Arc"} }
         Write-Info "YOLO: GPU auto-detected as [$gpuInput] $gpuName"
     } else {

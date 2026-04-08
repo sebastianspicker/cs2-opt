@@ -57,14 +57,14 @@ function Test-BackupLock {
             try {
                 $parsedDate = [datetime]::Parse([string]$lockData.started)
             } catch {
-                Write-Debug "Backup lock has unparseable timestamp '$($lockData.started)' — removing stale lock."
+                Write-DebugLog "Backup lock has unparseable timestamp '$($lockData.started)' — removing stale lock."
                 Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
                 return $false
             }
             $lockAge = (Get-Date) - $parsedDate
             if ($lockAge.TotalHours -gt 4) {
                 Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
-                Write-Debug "Removed expired backup lock (age: $([math]::Round($lockAge.TotalHours, 1))h, PID $($lockData.pid))."
+                Write-DebugLog "Removed expired backup lock (age: $([math]::Round($lockAge.TotalHours, 1))h, PID $($lockData.pid))."
                 return $false
             }
         }
@@ -76,12 +76,12 @@ function Test-BackupLock {
             if ($isPowerShell) { return $true }
             # PID was reused by a non-PowerShell process — stale lock
             Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
-            Write-Debug "Removed stale backup lock (PID $($lockData.pid) reused by '$($proc.ProcessName)')."
+            Write-DebugLog "Removed stale backup lock (PID $($lockData.pid) reused by '$($proc.ProcessName)')."
             return $false
         }
         # Process is dead — stale lock; remove it
         Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
-        Write-Debug "Removed stale backup lock (PID $($lockData.pid) no longer running)."
+        Write-DebugLog "Removed stale backup lock (PID $($lockData.pid) no longer running)."
     } catch {
         # Corrupted lock file — remove it
         Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
@@ -148,7 +148,7 @@ function Get-BackupDataRaw {
         # Preserve corrupted file for recovery before overwriting
         $ts = (Get-Date).ToString("yyyyMMdd-HHmmss")
         $corruptPath = "$CFG_BackupFile.corrupt.$ts"
-        try { Copy-Item $CFG_BackupFile $corruptPath -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted backup file — original may already be gone." }
+        try { Copy-Item $CFG_BackupFile $corruptPath -Force -ErrorAction Stop } catch { Write-DebugLog "Could not preserve corrupted backup file — original may already be gone." }
         Write-Warn "backup.json was corrupted — saved copy to $corruptPath before resetting."
         Write-Warn "Backup history reset — previous entries preserved in $corruptPath"
         Initialize-Backup
@@ -171,6 +171,7 @@ function Backup-RegistryValue {
     <#  Records the current value of a registry key before modification.
         Entries are buffered in memory and flushed to disk at step boundaries
         (via Flush-BackupBuffer) to avoid O(n^2) I/O.  #>
+    [CmdletBinding()]
     param([string]$Path, [string]$Name, [string]$StepTitle)
     $existing = $null
     $regType  = $null
@@ -186,7 +187,7 @@ function Backup-RegistryValue {
                 $regType = if ($Path -match '\\Run$' -or $Path -match '\\Run\\') { "String" } else { "DWord" }
             }
         }
-    } catch { Write-Debug "Backup-RegistryValue: could not read '$Name' from '$Path' — treating as non-existent." }
+    } catch { Write-DebugLog "Backup-RegistryValue: could not read '$Name' from '$Path' — treating as non-existent." }
 
     $entry = [ordered]@{
         type          = "registry"
@@ -216,7 +217,7 @@ function Backup-ServiceState {
             $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
             $delayReg = Get-ItemProperty -Path $regPath -Name "DelayedAutostart" -ErrorAction SilentlyContinue
             $delayedStart = ($delayReg.DelayedAutostart -eq 1)
-        } catch { Write-Debug "Backup-ServiceState: could not read DelayedAutostart for '$ServiceName' — defaulting to false." }
+        } catch { Write-DebugLog "Backup-ServiceState: could not read DelayedAutostart for '$ServiceName' — defaulting to false." }
         $entry = [ordered]@{
             type              = "service"
             name              = $ServiceName
@@ -227,7 +228,7 @@ function Backup-ServiceState {
             timestamp         = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
         $SCRIPT:_backupPending.Add($entry)
-    } catch { Write-Debug "Backup-ServiceState: $ServiceName not found" }
+    } catch { Write-DebugLog "Backup-ServiceState: $ServiceName not found" }
 }
 
 function Backup-PowerPlan {
@@ -245,14 +246,14 @@ function Backup-PowerPlan {
                 $originalName = $Matches[1]
             }
         }
-    } catch { Write-Debug "Backup-PowerPlan: powercfg query failed — active plan GUID not captured." }
+    } catch { Write-DebugLog "Backup-PowerPlan: powercfg query failed — active plan GUID not captured." }
 
     if ($originalGuid) {
         # If the active plan is already "CS2 Optimized", skip backup — we don't want
         # to record the CS2 plan as the rollback target on re-runs. The original
         # user plan is already captured from the first run.
         if ($originalName -and $originalName -match "CS2 Optimized") {
-            Write-Debug "Backup-PowerPlan: active plan is '$originalName' — skipping backup (re-run detected)"
+            Write-DebugLog "Backup-PowerPlan: active plan is '$originalName' — skipping backup (re-run detected)"
             return
         }
         $entry = [ordered]@{
@@ -263,7 +264,7 @@ function Backup-PowerPlan {
             timestamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
         $SCRIPT:_backupPending.Add($entry)
-        Write-Debug "Backup-PowerPlan: saved $originalGuid ($originalName)"
+        Write-DebugLog "Backup-PowerPlan: saved $originalGuid ($originalName)"
     }
 }
 
@@ -273,6 +274,7 @@ function Backup-BootConfig {
         Uses bcdedit /v to get raw BCD element names (hex IDs), which are locale-independent.
         Without /v, key names like "safeboot" are localized (e.g., German: "Abgesicherter Start")
         and the English key name match would fail on non-English Windows.  #>
+    [CmdletBinding()]
     param([string]$Key, [string]$StepTitle)
 
     # Map well-known bcdedit key names to their raw BCD element hex IDs.
@@ -299,7 +301,7 @@ function Backup-BootConfig {
                 break
             }
         }
-    } catch { Write-Debug "Backup-BootConfig: bcdedit enum failed for key '$Key' — treating as non-existent." }
+    } catch { Write-DebugLog "Backup-BootConfig: bcdedit enum failed for key '$Key' — treating as non-existent." }
 
     $entry = [ordered]@{
         type          = "bootconfig"
@@ -324,7 +326,7 @@ function Backup-ScheduledTask {
         if ($existed) {
             $wasEnabled = ($task.State -ne "Disabled")
         }
-    } catch { Write-Debug "Backup-ScheduledTask: could not query task '$TaskName' — assuming it does not exist." }
+    } catch { Write-DebugLog "Backup-ScheduledTask: could not query task '$TaskName' — assuming it does not exist." }
 
     $entry = [ordered]@{
         type       = "scheduledtask"
@@ -336,7 +338,7 @@ function Backup-ScheduledTask {
         timestamp  = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-ScheduledTask: '$TaskName' existed=$existed wasEnabled=$wasEnabled"
+    Write-DebugLog "Backup-ScheduledTask: '$TaskName' existed=$existed wasEnabled=$wasEnabled"
 }
 
 function Backup-NicAdapterProperty {
@@ -356,7 +358,7 @@ function Backup-NicAdapterProperty {
     try {
         $adapter = Get-NetAdapter -Name $AdapterName -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($adapter) { $ifDesc = $adapter.InterfaceDescription }
-    } catch { Write-Debug "Backup-NicAdapterProperty: could not resolve InterfaceDescription for '$AdapterName'" }
+    } catch { Write-DebugLog "Backup-NicAdapterProperty: could not resolve InterfaceDescription for '$AdapterName'" }
     $entry = [ordered]@{
         type                 = "nic_adapter"
         adapterName          = $AdapterName
@@ -368,7 +370,7 @@ function Backup-NicAdapterProperty {
         timestamp            = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-NicAdapterProperty: '$PropertyName' = '$OriginalValue' on '$AdapterName' ($ifDesc)"
+    Write-DebugLog "Backup-NicAdapterProperty: '$PropertyName' = '$OriginalValue' on '$AdapterName' ($ifDesc)"
 }
 
 function Backup-QosAndUro {
@@ -387,7 +389,7 @@ function Backup-QosAndUro {
         timestamp   = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-QosAndUro: policies=[$($PolicyNames -join ', ')] uro=$UroState"
+    Write-DebugLog "Backup-QosAndUro: policies=[$($PolicyNames -join ', ')] uro=$UroState"
 }
 
 function Backup-DefenderExclusions {
@@ -406,7 +408,7 @@ function Backup-DefenderExclusions {
         timestamp          = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-DefenderExclusions: $($ExclusionPaths.Count) paths, $($ExclusionProcesses.Count) processes"
+    Write-DebugLog "Backup-DefenderExclusions: $($ExclusionPaths.Count) paths, $($ExclusionProcesses.Count) processes"
 }
 
 function Backup-PagefileConfig {
@@ -430,7 +432,7 @@ function Backup-PagefileConfig {
         timestamp         = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-PagefileConfig: auto=$AutomaticManaged path=$PagefilePath init=$InitialSize max=$MaximumSize"
+    Write-DebugLog "Backup-PagefileConfig: auto=$AutomaticManaged path=$PagefilePath init=$InitialSize max=$MaximumSize"
 }
 
 function Backup-DnsConfig {
@@ -451,7 +453,7 @@ function Backup-DnsConfig {
         timestamp          = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-DnsConfig: adapter=$AdapterName dns=[$($OriginalDnsServers -join ', ')]"
+    Write-DebugLog "Backup-DnsConfig: adapter=$AdapterName dns=[$($OriginalDnsServers -join ', ')]"
 }
 
 function Backup-DrsSettings {
@@ -496,7 +498,7 @@ function Backup-DrsSettings {
         timestamp      = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $SCRIPT:_backupPending.Add($entry)
-    Write-Debug "Backup-DrsSettings: saved $($SettingIds.Count) DRS settings for '$StepTitle'"
+    Write-DebugLog "Backup-DrsSettings: saved $($SettingIds.Count) DRS settings for '$StepTitle'"
 }
 
 function Restore-DrsSettings {
@@ -570,7 +572,7 @@ function Restore-DrsSettings {
                         $errors++
                         # Cast $s.id to [uint32] before .ToString('X') — JSON round-trip
                         # may produce [double], which does not support hex format specifier.
-                        Write-Debug "DRS restore: failed for 0x$([uint32]([double]$s.id).ToString('X')): $_"
+                        Write-DebugLog "DRS restore: failed for 0x$([uint32]([double]$s.id).ToString('X')): $_"
                     }
                 }
                 if ($errors -eq 0) {
@@ -631,6 +633,7 @@ function Show-BackupSummary {
 }
 
 function Restore-StepChanges {
+    [CmdletBinding()]
     param([string]$StepTitle)
     $backup = Get-BackupData
     $entries = @($backup.entries | Where-Object { $_.step -eq $StepTitle })
@@ -705,10 +708,10 @@ function Restore-StepChanges {
                                 Remove-ItemProperty -Path $e.path -Name $e.name -ErrorAction Stop
                                 Write-OK "Removed: $($e.name) (was not set before)"
                             } else {
-                                Write-Debug "Restore: value '$($e.name)' already absent from '$($e.path)' — skip"
+                                Write-DebugLog "Restore: value '$($e.name)' already absent from '$($e.path)' — skip"
                             }
                         } else {
-                            Write-Debug "Restore: path '$($e.path)' no longer exists — skip remove for '$($e.name)'"
+                            Write-DebugLog "Restore: path '$($e.path)' no longer exists — skip remove for '$($e.name)'"
                         }
                     }
                     $restoreOk++
@@ -898,7 +901,7 @@ function Restore-StepChanges {
                                 Remove-NetQosPolicy -Name $policyName -Confirm:$false -ErrorAction Stop
                                 Write-OK "Removed QoS policy: $policyName"
                             } else {
-                                Write-Debug "QoS policy '$policyName' does not exist — nothing to remove"
+                                Write-DebugLog "QoS policy '$policyName' does not exist — nothing to remove"
                             }
                         } catch {
                             Write-Warn "Could not remove QoS policy '$policyName': $_"
@@ -912,10 +915,10 @@ function Restore-StepChanges {
                             if ($LASTEXITCODE -eq 0) {
                                 Write-OK "Restored URO state: $($e.uroState)"
                             } else {
-                                Write-Debug "URO restore: netsh returned error — $uroOut"
+                                Write-DebugLog "URO restore: netsh returned error — $uroOut"
                                 $qosFailed = $true
                             }
-                        } catch { Write-Debug "URO restore failed: $_"; $qosFailed = $true }
+                        } catch { Write-DebugLog "URO restore failed: $_"; $qosFailed = $true }
                     }
                     if ($qosFailed) { $restoreFail++ } else { $restoreOk++ }
                 }
@@ -957,13 +960,13 @@ function Restore-StepChanges {
                             $currentAdapter = Get-NetAdapter -Name $e.adapterName -ErrorAction SilentlyContinue |
                                 Select-Object -First 1
                             if ($currentAdapter -and $currentAdapter.InterfaceIndex -ne $ifIndex) {
-                                Write-Debug "DNS restore: InterfaceIndex changed from $ifIndex to $($currentAdapter.InterfaceIndex)"
+                                Write-DebugLog "DNS restore: InterfaceIndex changed from $ifIndex to $($currentAdapter.InterfaceIndex)"
                                 $ifIndex = $currentAdapter.InterfaceIndex
                             } elseif (-not $currentAdapter) {
-                                Write-Debug "DNS restore: adapter '$($e.adapterName)' not found, using stored InterfaceIndex $ifIndex"
+                                Write-DebugLog "DNS restore: adapter '$($e.adapterName)' not found, using stored InterfaceIndex $ifIndex"
                             }
                         } catch {
-                            Write-Debug "DNS restore: adapter lookup failed, using stored InterfaceIndex $ifIndex"
+                            Write-DebugLog "DNS restore: adapter lookup failed, using stored InterfaceIndex $ifIndex"
                         }
                         if ($e.originalDnsServers -and $e.originalDnsServers.Count -gt 0) {
                             Set-DnsClientServerAddress -InterfaceIndex $ifIndex `

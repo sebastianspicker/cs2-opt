@@ -11,7 +11,7 @@
 param([int]$ManualAvg = 0)
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -135,7 +135,7 @@ if ($p1 -gt 0) {
 
 "$cap" | Set-ClipboardSafe
 Write-OK "FPS cap $cap copied to clipboard."
-Write-Debug "FPS cap calculated: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
+Write-DebugLog "FPS cap calculated: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
 
 # Update state and record benchmark (skip in DRY-RUN)
 if (-not $SCRIPT:DryRun) {
@@ -147,7 +147,7 @@ if (-not $SCRIPT:DryRun) {
             if ($p1 -gt 0) { $st | Add-Member -NotePropertyName "p1Fps" -NotePropertyValue $p1 -Force }
             $st | Add-Member -NotePropertyName "capDate" -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm") -Force
             Save-JsonAtomic -Data $st -Path $CFG_StateFile
-        } catch { Write-Debug "Could not persist FPS cap data: $_" }
+        } catch { Write-DebugLog "Could not persist FPS cap data: $_" }
     }
     if ($p1 -gt 0) {
         Add-BenchmarkResult -AvgFps $avg -P1Fps $p1 -Label "FpsCap-Calculator" -Runs $result.Runs | Out-Null

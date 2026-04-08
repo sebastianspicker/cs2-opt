@@ -27,7 +27,7 @@ AfterAll {
 # ── Get-X3DCcdInfo ──────────────────────────────────────────────────────────
 Describe "Get-X3DCcdInfo" {
 
-    BeforeEach { Reset-TestState }
+    BeforeEach { Reset-TestState; Reset-CachedCpuInfo }
 
     Context "Non-X3D CPUs" {
 

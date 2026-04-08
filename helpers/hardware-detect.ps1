@@ -2,6 +2,19 @@
 #  helpers/hardware-detect.ps1  —  RAM, GPU, NIC, Chipset Detection
 # ==============================================================================
 
+# ── CPU cache (lazy-initialized) ─────────────────────────────────────────────
+# Win32_Processor queries take ~50-200ms each. Cache the result for all callers.
+# Call Reset-CachedCpuInfo in tests to clear the cache between mocked scenarios.
+$Script:_cachedCpuInfo = $null
+function Get-CachedCpuInfo {
+    if ($null -eq $Script:_cachedCpuInfo) {
+        $Script:_cachedCpuInfo = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+    }
+    return $Script:_cachedCpuInfo
+}
+function Reset-CachedCpuInfo { $Script:_cachedCpuInfo = $null }
+
 # ── XMP / RAM ────────────────────────────────────────────────────────────────
 
 function Get-RamInfo {
@@ -48,7 +61,7 @@ function Get-RamInfo {
             AtRatedSpeed = $atRatedSpeed
         }
     } catch {
-        Write-Debug "RAM info error: $_"
+        Write-DebugLog "RAM info error: $_"
         return $null
     }
 }
@@ -69,12 +82,12 @@ function Get-NvidiaDriverVersion {
         # Decode: concatenate last two segments, drop leading char, split major/minor
         $parts = $gpu.DriverVersion.Split('.')
         if ($parts.Count -lt 4) {
-            Write-Debug "NVIDIA DriverVersion has unexpected format (expected >= 4 dot-separated parts): $($gpu.DriverVersion)"
+            Write-DebugLog "NVIDIA DriverVersion has unexpected format (expected >= 4 dot-separated parts): $($gpu.DriverVersion)"
             return $null
         }
         $combined = "$($parts[-2])$($parts[-1])"
         if ($combined.Length -lt 5) {
-            Write-Debug "NVIDIA version combined segment too short for reliable decode: $combined"
+            Write-DebugLog "NVIDIA version combined segment too short for reliable decode: $combined"
             return $null
         }
         $nvStr = $combined.Substring(1)  # Remove Windows prefix digit
@@ -87,7 +100,7 @@ function Get-NvidiaDriverVersion {
             $ver = "$major"
         }
         return @{ Version = $ver; Major = $major; Name = $gpu.Name }
-    } catch { Write-Debug "NVIDIA driver detection error: $_"; return $null }
+    } catch { Write-DebugLog "NVIDIA driver detection error: $_"; return $null }
 }
 
 # Known problematic driver ranges (as of 2025/2026)
@@ -150,7 +163,7 @@ function Get-CS2InstallPath {
             # this — a junction to C:\Windows would fail the cs2.exe check. Accepted residual risk:
             # if an attacker creates a junction containing a fake cs2.exe, we'd write autoexec there.
             if ($lp -match '\.\.') {
-                Write-Debug "VDF path rejected (path traversal): $lp"
+                Write-DebugLog "VDF path rejected (path traversal): $lp"
                 continue
             }
             $cs2Path = "$lp\steamapps\common\Counter-Strike Global Offensive"
@@ -184,7 +197,7 @@ function Get-ActiveNicAdapter {
                 $null = [regex]$testPattern
                 $filterPattern = $testPattern
             } catch {
-                Write-Debug "CFG_VirtualAdapterFilter contains invalid regex — ignored: $_"
+                Write-DebugLog "CFG_VirtualAdapterFilter contains invalid regex — ignored: $_"
             }
         }
         return Get-NetAdapter -ErrorAction Stop | Where-Object {
@@ -192,7 +205,7 @@ function Get-ActiveNicAdapter {
             $_.InterfaceDescription -notmatch $filterPattern
         } | Sort-Object { $_.Speed } -Descending | Select-Object -First 1
     } catch {
-        Write-Debug "Get-ActiveNicAdapter error: $_"
+        Write-DebugLog "Get-ActiveNicAdapter error: $_"
         return $null
     }
 }
@@ -232,8 +245,7 @@ function Get-IntelHybridCpuName {
           $null                   -> detection failed (CIM error)
     #>
     try {
-        $cpuObj = Get-CimInstance Win32_Processor -Property Name -ErrorAction Stop |
-            Select-Object -First 1
+        $cpuObj = Get-CachedCpuInfo
         $cpuName = if ($cpuObj) { $cpuObj.Name } else { $null }
         if (-not $cpuName) { return $null }
         if ($cpuName -match "Intel" -and (
@@ -246,7 +258,7 @@ function Get-IntelHybridCpuName {
         # (falsy but distinguishable from $null which means detection failed)
         return ""
     } catch {
-        Write-Debug "Intel 12th-gen+ CPU detection failed: $_"
+        Write-DebugLog "Intel 12th-gen+ CPU detection failed: $_"
         return $null
     }
 }
@@ -256,10 +268,10 @@ function Get-IntelHybridCpuName {
 function Get-ChipsetVendor {
     <#  Returns "AMD" or "Intel" based on CPU manufacturer  #>
     try {
-        $cpu = (Get-CimInstance Win32_Processor | Select-Object -First 1).Manufacturer
+        $cpu = (Get-CachedCpuInfo).Manufacturer
         if ($cpu -match "AMD")   { return "AMD" }
         if ($cpu -match "Intel") { return "Intel" }
-    } catch { Write-Debug "CPU vendor detection failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "CPU vendor detection failed: $($_.Exception.Message)" }
     return "Unknown"
 }
 
@@ -314,7 +326,7 @@ function Get-AmdCpuInfo {
           $null                                -> Detection failed
     #>
     try {
-        $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        $cpu = Get-CachedCpuInfo
         if (-not $cpu -or -not $cpu.Name) { return $null }
         $name = $cpu.Name.Trim()
 
@@ -364,7 +376,7 @@ function Get-AmdCpuInfo {
             MaxClockSpeed            = $cpu.MaxClockSpeed
         }
     } catch {
-        Write-Debug "AMD CPU detection error: $_"
+        Write-DebugLog "AMD CPU detection error: $_"
         return $null
     }
 }
@@ -441,7 +453,7 @@ function Test-WheaErrors {
             LastError = if ($events.Count -gt 0) { $events[0].TimeCreated } else { $null }
         }
     } catch {
-        Write-Debug "WHEA event query failed: $_"
+        Write-DebugLog "WHEA event query failed: $_"
         return $null
     }
 }
@@ -461,7 +473,7 @@ function Get-MotherboardInfo {
             IsASUS       = ($board.Manufacturer -match "ASUSTeK|ASUS")
         }
     } catch {
-        Write-Debug "Motherboard detection error: $_"
+        Write-DebugLog "Motherboard detection error: $_"
         return $null
     }
 }

@@ -2,9 +2,11 @@
 #  helpers/system-utils.ps1  —  Download, Registry, Boot Config, Filesystem
 # ==============================================================================
 
-function Invoke-Download($url, $dest, $name) {
+function Invoke-Download {
+    [CmdletBinding()]
+    param([string]$url, [string]$dest, [string]$name)
     Write-Step "Download: $name"
-    Write-Debug "URL: $url -> $dest"
+    Write-DebugLog "URL: $url -> $dest"
 
     # SECURITY: Defense-in-depth URL allowlist. Currently only NVIDIA drivers are
     # downloaded; the caller (nvidia-driver.ps1) already validates the domain, but
@@ -74,7 +76,11 @@ function Invoke-Download($url, $dest, $name) {
 
 function Save-JsonAtomic {
     <#  Writes JSON to a file atomically (write-to-temp-then-rename).
-        Prevents corruption if interrupted by crash or power loss.  #>
+        Prevents corruption if interrupted by crash or power loss.
+        NOTE: This does NOT prevent lost updates from concurrent read-modify-write
+        cycles. Callers modifying shared files (backup.json, progress.json) should
+        acquire the advisory backup lock (Set-BackupLock) before the read step.  #>
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)][object]$Data,
         [Parameter(Mandatory)][string]$Path,
@@ -114,7 +120,7 @@ function Load-State($path) {
         $s = $raw | ConvertFrom-Json
     } catch {
         $corruptPath = "$path.corrupt.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-        try { Copy-Item $path $corruptPath -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted state file." }
+        try { Copy-Item $path $corruptPath -Force -ErrorAction Stop } catch { Write-DebugLog "Could not preserve corrupted state file." }
         Write-Warn "State file corrupt — preserved as $corruptPath"
         throw "State file corrupt — preserved as $corruptPath"
     }
@@ -122,7 +128,7 @@ function Load-State($path) {
     $SCRIPT:LogLevel = if ($s.logLevel) { $s.logLevel } else { "NORMAL" }
     $SCRIPT:Profile  = if ($s.profile) { $s.profile } else { "RECOMMENDED" }
     if (-not $SCRIPT:Mode) {
-        Write-Debug "Load-State: mode was null/empty — defaulting to CONTROL"
+        Write-DebugLog "Load-State: mode was null/empty — defaulting to CONTROL"
         $SCRIPT:Mode = "CONTROL"
     }
     $SCRIPT:DryRun   = ($SCRIPT:Mode -eq "DRY-RUN")
@@ -148,7 +154,9 @@ function Initialize-ScriptDefaults {
     }
 }
 
-function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
+function Set-RunOnce {
+    [CmdletBinding()]
+    param([string]$name, [string]$scriptPath, [switch]$SafeMode)
     # SECURITY: Validate RunOnce name — alphanumeric + underscore only.
     # Prevents injection into the HKLM RunOnce key namespace.
     if ($name -notmatch '^[a-zA-Z0-9_]+$') {
@@ -192,7 +200,9 @@ function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
     }
 }
 
-function Set-BootConfig($key, $val, $why) {
+function Set-BootConfig {
+    [CmdletBinding()]
+    param([string]$key, [string]$val, [string]$why)
     # SECURITY: Validate bcdedit key/value — these are passed as command-line arguments.
     # An attacker who controls state.json or backup.json could inject arbitrary bcdedit args.
     # bcdedit keys are alphanumeric identifiers; values are alphanumeric, hex, or simple tokens.
@@ -220,7 +230,7 @@ function Set-BootConfig($key, $val, $why) {
     if ($bcdeditExit -ne 0) {
         Write-Warn "Boot config change failed: bcdedit /set $key $val"
         Write-Host "  $([char]0x2139) This is usually fine — Windows may not support this setting on your PC." -ForegroundColor Cyan
-        Write-Debug "bcdedit exit $bcdeditExit — $outputStr"
+        Write-DebugLog "bcdedit exit $bcdeditExit — $outputStr"
         return $false
     }
     Write-OK "Set: $key = $val"
@@ -260,11 +270,13 @@ function Test-BootConfigSet($key) {
             if ($hexId -and $s -match "^\s*$hexId\s+") { return $true }
             elseif (-not $hexId -and $s -match "^\s*$([regex]::Escape($key))\s+") { return $true }
         }
-    } catch { Write-Debug "Test-BootConfigSet: bcdedit enum failed for '$key': $_" }
+    } catch { Write-DebugLog "Test-BootConfigSet: bcdedit enum failed for '$key': $_" }
     return $false
 }
 
-function Set-RegistryValue($path, $name, $value, $type, $why) {
+function Set-RegistryValue {
+    [CmdletBinding()]
+    param([string]$path, [string]$name, $value, [string]$type, [string]$why)
     # SECURITY: Validate registry path — must start with a known hive prefix.
     # An attacker who controls backup.json or state.json could inject arbitrary paths
     # to write to sensitive registry locations outside the expected scope.
@@ -287,7 +299,7 @@ function Set-RegistryValue($path, $name, $value, $type, $why) {
         Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)    Path: $path" -ForegroundColor DarkMagenta
         return
     }
-    Write-Debug "Registry: $path | $name = $value [$type] — $why"
+    Write-DebugLog "Registry: $path | $name = $value [$type] — $why"
     try {
         if (-not (Test-Path $path)) { New-Item -Path $path -Force -ErrorAction Stop | Out-Null }
         Set-ItemProperty -Path $path -Name $name -Value $value -Type $type -ErrorAction Stop
@@ -309,13 +321,13 @@ function Set-ClipboardSafe {
     param([Parameter(ValueFromPipeline)][string]$Text)
     process {
         try { $Text | Set-Clipboard -ErrorAction Stop }
-        catch { Write-Debug "Set-Clipboard failed (headless/remote session?): $_" }
+        catch { Write-DebugLog "Set-Clipboard failed (headless/remote session?): $_" }
     }
 }
 
 function Clear-Dir($path, $label) {
-    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Clear-Dir skipped for $path"; return 0 }
-    if (-not (Test-Path $path)) { Write-Debug "${label}: not found ($path)"; return 0 }
+    if ($SCRIPT:DryRun) { Write-DebugLog "DRY-RUN: Clear-Dir skipped for $path"; return 0 }
+    if (-not (Test-Path $path)) { Write-DebugLog "${label}: not found ($path)"; return 0 }
     $items = Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue
     $files = @($items | Where-Object { -not $_.PSIsContainer })
     $n = $files.Count
@@ -325,7 +337,7 @@ function Clear-Dir($path, $label) {
     $remaining = @(Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
     $del = [math]::Max(0, $n - $remaining)
     Write-OK "${label}: $del deleted$(if($remaining){" ($remaining locked — normal)"})"
-    Write-Debug "${label}: del=$del locked=$remaining path=$path"
+    Write-DebugLog "${label}: del=$del locked=$remaining path=$path"
     return $del
 }
 
@@ -374,7 +386,7 @@ function Test-SystemCompatibility {
 
     # Missing AppX cmdlets (Server Core, minimal installs)
     if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
-        Write-Debug "AppX cmdlets not available — debloat package removal will be skipped."
+        Write-DebugLog "AppX cmdlets not available — debloat package removal will be skipped."
         $warnings++
     }
 
@@ -384,23 +396,22 @@ function Test-SystemCompatibility {
 }
 
 # ── Verification counter infrastructure ─────────────────────────────────────
-# Uses $global: scope so counters work regardless of how this file is loaded
-# (dot-source, Import-Module, or ScriptsToProcess). Callers initialize via
-# Initialize-VerifyCounters and read via Get-VerifyCounters.
+# Uses $Script: scope (caller's scope via dot-sourcing). Entry-point scripts
+# must call Initialize-VerifyCounters before use to reset stale values.
 
 function Initialize-VerifyCounters {
-    $global:_verifyOkCount      = 0
-    $global:_verifyChangedCount = 0
-    $global:_verifyMissingCount = 0
-    $global:_verifyInfoCount    = 0
+    $Script:_verifyOkCount      = 0
+    $Script:_verifyChangedCount = 0
+    $Script:_verifyMissingCount = 0
+    $Script:_verifyInfoCount    = 0
 }
 
 function Get-VerifyCounters {
     return @{
-        okCount      = [int]$global:_verifyOkCount
-        changedCount = [int]$global:_verifyChangedCount
-        missingCount = [int]$global:_verifyMissingCount
-        infoCount    = [int]$global:_verifyInfoCount
+        okCount      = [int]$Script:_verifyOkCount
+        changedCount = [int]$Script:_verifyChangedCount
+        missingCount = [int]$Script:_verifyMissingCount
+        infoCount    = [int]$Script:_verifyInfoCount
     }
 }
 
@@ -418,7 +429,7 @@ function Test-RegistryCheck {
             $val = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
             $result = $val.$Name
         }
-    } catch { Write-Debug "Test-RegistryCheck: could not read '$Name' from '$Path'" }
+    } catch { Write-DebugLog "Test-RegistryCheck: could not read '$Name' from '$Path'" }
 
     $status = if ($null -eq $result) { "MISSING" } elseif ($result -eq $Expected) { "OK" } else { "CHANGED" }
 
@@ -430,11 +441,11 @@ function Test-RegistryCheck {
         "MISSING" {
             Write-Host "  ?  MISSING   $Label" -ForegroundColor Red
             Write-Host "               $Path\$Name" -ForegroundColor DarkGray
-            $global:_verifyMissingCount++
+            $Script:_verifyMissingCount++
         }
         "OK" {
             Write-Host "  ✓  OK        $Label  ($result)" -ForegroundColor Green
-            $global:_verifyOkCount++
+            $Script:_verifyOkCount++
         }
         "CHANGED" {
             Write-Host "  ✗  CHANGED   $Label  (is: $result, expected: $Expected)" -ForegroundColor Yellow
@@ -443,7 +454,7 @@ function Test-RegistryCheck {
             if ($Path -match '\\Policies\\') {
                 Write-Host "               NOTE: This key is under a Policies path — may be managed by Group Policy" -ForegroundColor DarkYellow
             }
-            $global:_verifyChangedCount++
+            $Script:_verifyChangedCount++
         }
     }
     # No return value when not -Quiet — prevents stdout clutter in Verify-Settings.ps1
@@ -469,13 +480,13 @@ function Test-ServiceCheck {
         }
         if ($startType -eq $ExpectedStartType) {
             Write-Host "  ✓  OK        $Label  (StartType: $startType, Status: $($svc.Status))" -ForegroundColor Green
-            $global:_verifyOkCount++
+            $Script:_verifyOkCount++
         } else {
             Write-Host "  ✗  CHANGED   $Label  (StartType: $startType, expected: $ExpectedStartType)" -ForegroundColor Yellow
-            $global:_verifyChangedCount++
+            $Script:_verifyChangedCount++
         }
     } catch {
         Write-Host "  ?  MISSING   $Label  (Service not found)" -ForegroundColor Red
-        $global:_verifyMissingCount++
+        $Script:_verifyMissingCount++
     }
 }

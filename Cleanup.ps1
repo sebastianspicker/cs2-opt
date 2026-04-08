@@ -19,7 +19,7 @@
 #>
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -246,7 +246,7 @@ if ($doDriver) {
         try {
             $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
             if ($st.gpuInput -in @("1","2","3","4")) { $gpuVendorOk = $true }
-        } catch { Write-Debug "State file read failed: $_" }
+        } catch { Write-DebugLog "State file read failed: $_" }
     }
     if (-not $gpuVendorOk) {
         Write-Warn "GPU vendor not found in state — please confirm:"
@@ -266,7 +266,7 @@ if ($doDriver) {
             }
             $st | Add-Member -NotePropertyName "gpuInput" -NotePropertyValue $gpuChoice -Force
             Save-JsonAtomic -Data $st -Path $CFG_StateFile
-        } catch { Write-Debug "Could not persist GPU choice: $_" }
+        } catch { Write-DebugLog "Could not persist GPU choice: $_" }
     }
 
     Write-Warn "Requires restart into Safe Mode."
@@ -299,7 +299,7 @@ if ($doDriver) {
             Ensure-Dir "$CFG_WorkDir\cfgs"
             Copy-Item "$cfgsSrc\*" "$CFG_WorkDir\cfgs\" -Force -Recurse -ErrorAction Stop
         } else {
-            Write-Debug "cfgs/ directory not found at $cfgsSrc — network condition CFGs will not be available after reboot"
+            Write-DebugLog "cfgs/ directory not found at $cfgsSrc — network condition CFGs will not be available after reboot"
         }
     } catch {
         Write-Err "Driver Refresh: failed to copy scripts — $_"
@@ -315,7 +315,7 @@ if ($doDriver) {
     Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1" -SafeMode
     $SCRIPT:CurrentStepTitle = "Driver Refresh — Safe Mode boot"
     $null = Set-BootConfig "safeboot" "minimal" "Driver Refresh — Safe Mode for GPU driver clean"
-    try { Flush-BackupBuffer } catch { Write-Debug "Flush after boot config backup failed: $_" }
+    try { Flush-BackupBuffer } catch { Write-DebugLog "Flush after boot config backup failed: $_" }
 
     # Verify safeboot flag — retry with explicit {current} if first attempt failed
     if (-not (Test-BootConfigSet "safeboot")) {

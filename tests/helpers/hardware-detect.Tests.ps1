@@ -14,6 +14,7 @@ AfterAll {
 
 # ── Get-IntelHybridCpuName ────────────────────────────────────────────────────
 Describe "Get-IntelHybridCpuName" {
+    BeforeEach { Reset-CachedCpuInfo }
 
     Context "Intel 12th gen (Alder Lake)" {
         It "detects i9-12900K as hybrid" {

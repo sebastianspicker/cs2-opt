@@ -52,7 +52,7 @@ function Save-AppliedSteps {
         $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
         $st | Add-Member -NotePropertyName "appliedSteps" -NotePropertyValue @($SCRIPT:AppliedSteps) -Force
         Save-JsonAtomic -Data $st -Path $CFG_StateFile
-    } catch { Write-Debug "Could not persist AppliedSteps: $_" }
+    } catch { Write-DebugLog "Could not persist AppliedSteps: $_" }
 }
 
 function Load-AppliedSteps {
@@ -65,7 +65,7 @@ function Load-AppliedSteps {
                 if ($key -notin $SCRIPT:AppliedSteps) { $SCRIPT:AppliedSteps.Add($key) }
             }
         }
-    } catch { Write-Debug "Could not load AppliedSteps: $_" }
+    } catch { Write-DebugLog "Could not load AppliedSteps: $_" }
 }
 
 function Test-YoloProfile { return $SCRIPT:Profile -eq "YOLO" }
@@ -187,7 +187,7 @@ function Invoke-TieredStep {
         Write-Host "  $([char]0x25CB) [SKIP] Exceeds $($SCRIPT:Profile) profile ($Risk > $max threshold)" -ForegroundColor DarkGray
         if ($Improvement) { Write-Host "         Would have: $Improvement" -ForegroundColor DarkGray }
         if ($Undo)        { Write-Host "         Available in COMPETITIVE or CUSTOM profile" -ForegroundColor DarkGray }
-        Write-Debug "Profile filter: '$Title' skipped ($Risk > $max)"
+        Write-DebugLog "Profile filter: '$Title' skipped ($Risk > $max)"
         Add-PhaseSkipped
         if ($SkipAction) { & $SkipAction }
         $SCRIPT:CurrentStepTitle = $null
@@ -231,12 +231,12 @@ function Invoke-TieredStep {
         Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Would execute: $Title" -ForegroundColor Magenta
         if ($Depth)       { Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Modifies: $Depth" -ForegroundColor Magenta }
         if ($Improvement) { Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)  Expected: $Improvement" -ForegroundColor Magenta }
-        Write-Debug "DRY-RUN: '$Title' — preview only, no changes applied"
+        Write-DebugLog "DRY-RUN: '$Title' — preview only, no changes applied"
         # Run the action but Set-RegistryValue/Set-BootConfig intercept writes
         try { & $Action } catch { Write-Warn "Step '$Title' preview issue (DRY-RUN): $_" }
         # Defensive flush — DRY-RUN normally buffers nothing, but if a step action
         # manually calls Backup-* without a DryRun guard, entries would be orphaned.
-        try { Flush-BackupBuffer } catch { Write-Debug "Flush-BackupBuffer failed after DRY-RUN '$Title': $_" }
+        try { Flush-BackupBuffer } catch { Write-DebugLog "Flush-BackupBuffer failed after DRY-RUN '$Title': $_" }
         $SCRIPT:CurrentStepTitle = $null
         return $false
     }
@@ -249,21 +249,21 @@ function Invoke-TieredStep {
         "SAFE" {
             # T1: auto-run. T2(SAFE): auto-run. T3: already filtered above.
             if ($Tier -eq 1) {
-                Write-Debug "SAFE/T1: Auto-Execute '$Title'"
+                Write-DebugLog "SAFE/T1: Auto-Execute '$Title'"
                 $run = $true
             } elseif ($Tier -eq 2 -and $Risk -eq "SAFE") {
-                Write-Debug "SAFE/T2(SAFE): Auto-Execute '$Title'"
+                Write-DebugLog "SAFE/T2(SAFE): Auto-Execute '$Title'"
                 $run = $true
             } else {
                 # T2 without Risk="SAFE" or unexpected tier — skip with debug message
-                Write-Debug "SAFE profile: Skipping '$Title' (Tier=$Tier, Risk=$Risk)"
+                Write-DebugLog "SAFE profile: Skipping '$Title' (Tier=$Tier, Risk=$Risk)"
                 $run = $false
             }
         }
 
         "RECOMMENDED" {
             if ($Tier -eq 1) {
-                Write-Debug "RECOMMENDED/T1: Auto-Execute '$Title'"
+                Write-DebugLog "RECOMMENDED/T1: Auto-Execute '$Title'"
                 $run = $true
             } elseif ($Tier -eq 2) {
                 # Prompt for T2 steps
@@ -285,7 +285,7 @@ function Invoke-TieredStep {
 
         "COMPETITIVE" {
             if ($Tier -eq 1) {
-                Write-Debug "COMPETITIVE/T1: Auto-Execute '$Title'"
+                Write-DebugLog "COMPETITIVE/T1: Auto-Execute '$Title'"
                 $run = $true
             } elseif ($Tier -eq 2) {
                 Write-Blank
@@ -335,7 +335,7 @@ function Invoke-TieredStep {
 
         "YOLO" {
             # Everything auto-executes. No prompts. Risk ceiling enforced above.
-            Write-Debug "YOLO/T${Tier}: Auto-Execute '$Title'"
+            Write-DebugLog "YOLO/T${Tier}: Auto-Execute '$Title'"
             $run = $true
         }
 
@@ -352,7 +352,7 @@ function Invoke-TieredStep {
     # ── Execute or skip ─────────────────────────────────────────────
     $actionOk = $true
     if ($run) {
-        Write-Debug "Executing: '$Title'"
+        Write-DebugLog "Executing: '$Title'"
         try { & $Action } catch {
             Write-Err "Step '$Title' failed: $_"
             Write-Host "  $([char]0x2139) What to do: This step was skipped safely. Your system is not affected." -ForegroundColor Cyan
@@ -366,7 +366,7 @@ function Invoke-TieredStep {
         # Update phase counters
         if ($actionOk) { Add-PhaseApplied } else { Add-PhaseFailed }
     } else {
-        Write-Debug "Skipped: '$Title'"
+        Write-DebugLog "Skipped: '$Title'"
         Add-PhaseSkipped
         if ($SkipAction) { & $SkipAction }
     }

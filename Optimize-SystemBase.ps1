@@ -280,11 +280,11 @@ if ($startStep -le 4) {
             if ($cs2Exe -and -not (Test-Path $cs2Exe)) { $cs2Exe = $null }
 
             if ($cs2Exe) {
-                Write-Debug "cs2.exe: $cs2Exe"
+                Write-DebugLog "cs2.exe: $cs2Exe"
                 $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
                 Set-RegistryValue $regPath $cs2Exe "~ DISABLEDXMAXIMIZEDWINDOWEDMODE" "String" "Disable fullscreen optimizations for cs2.exe"
                 Write-ActionOK "Fullscreen Optimizations disabled: $cs2Exe"
-                Write-Debug "AppCompatFlags set: $cs2Exe"
+                Write-DebugLog "AppCompatFlags set: $cs2Exe"
             } else {
                 Write-Warn "cs2.exe not found — manual:"
                 Write-Info "cs2.exe -> Right-click -> Properties -> Compatibility"
@@ -504,7 +504,7 @@ if ($startStep -le 7) {
                             Write-OK "VBS/HVCI: not active — no hypervisor overhead."
                         }
                     }
-                } catch { Write-Debug "VBS detection failed: $_" }
+                } catch { Write-DebugLog "VBS detection failed: $_" }
 
                 try {
                     Set-RegistryValue "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode" $hagsVal "DWord" "HAGS toggle"

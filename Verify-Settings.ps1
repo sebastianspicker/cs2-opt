@@ -12,7 +12,7 @@
 #>
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -54,10 +54,10 @@ try {
     $hagsVal = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -ErrorAction Stop).HwSchMode
     $hagsLabel = switch ($hagsVal) { 0 {"OFF"} 1 {"OFF (default)"} 2 {"ON"} default {"Unknown ($hagsVal)"} }
     Write-Host "  ✓  INFO      HAGS = $hagsLabel  (setup-dependent, no target value)" -ForegroundColor Cyan
-    $global:_verifyInfoCount++
+    $Script:_verifyInfoCount++
 } catch {
     Write-Host "  ?  MISSING   HAGS key not found" -ForegroundColor DarkGray
-    $global:_verifyMissingCount++
+    $Script:_verifyMissingCount++
 }
 
 # NVIDIA GPU class registry keys — PerfLevelSrc + DisableDynamicPstate (P-state locks)
@@ -80,7 +80,7 @@ if ($_nvKeyPath) {
     Test-RegistryCheck $_nvKeyPath "DisableDynamicPstate" 1 "NVIDIA DisableDynamicPstate (lock P0)"
 } else {
     Write-Host "  ✓  INFO      NVIDIA GPU class key: N/A (no NVIDIA GPU detected)" -ForegroundColor Cyan
-    $global:_verifyInfoCount++
+    $Script:_verifyInfoCount++
 }
 
 Write-Host "`n  ═══ SYSTEM PROFILE / GAMING ═══" -ForegroundColor Cyan
@@ -104,12 +104,12 @@ Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kerne
 $_intelHybridName = Get-IntelHybridCpuName
 if ($null -eq $_intelHybridName) {
     Write-Host "  ?  WARN      Power Throttling: could not detect CPU (skipping Intel-specific check)" -ForegroundColor Yellow
-    $global:_verifyMissingCount++
+    $Script:_verifyMissingCount++
 } elseif ($_intelHybridName) {
     Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" "PowerThrottlingOff" 1 "Intel Power Throttling disabled (E-core fix)"
 } else {
     Write-Host "  ✓  INFO      Power Throttling: N/A (not Intel 12th gen+)" -ForegroundColor Cyan
-    $global:_verifyInfoCount++
+    $Script:_verifyInfoCount++
 }
 
 Write-Host "`n  ═══ SYSTEM LATENCY TWEAKS ═══" -ForegroundColor Cyan
@@ -144,12 +144,12 @@ if ($nicGuid) {
     Test-RegistryCheck $tcpBase "TcpAckFrequency" 1 "TCP Ack Frequency"
 } else {
     Write-Host "  ?  MISSING   Active NIC not found — Nagle check skipped" -ForegroundColor Red
-    $global:_verifyMissingCount += 2
+    $Script:_verifyMissingCount += 2
 }
 Test-RegistryCheck "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\QoS" "Do not use NLA" "1" "QoS NLA bypass (DSCP prerequisite)"
 # IPv6 intentionally left ENABLED (2026 reversal: Steam prefers IPv6 when faster; disabling forces CGNAT)
 Write-Host "  ✓  INFO      IPv6: enabled (intentional — Steam prefers IPv6 when faster)" -ForegroundColor Cyan
-$global:_verifyInfoCount++
+$Script:_verifyInfoCount++
 
 Write-Host "`n  ═══ FAST STARTUP ═══" -ForegroundColor Cyan
 
@@ -179,20 +179,20 @@ try {
     if ($null -eq $upmVal) {
         Write-Host "  ?  MISSING   UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Red
         Write-Host "               $upmDesktop\UserPreferencesMask" -ForegroundColor DarkGray
-        $global:_verifyMissingCount++
+        $Script:_verifyMissingCount++
     } elseif (@(Compare-Object $upmTrimmed $upmExpected -SyncWindow 0).Count -eq 0) {
         Write-Host "  ✓  OK        UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Green
-        $global:_verifyOkCount++
+        $Script:_verifyOkCount++
     } else {
         $hexVal = ($upmVal | ForEach-Object { '{0:X2}' -f $_ }) -join ' '
         Write-Host "  ✗  CHANGED   UserPreferencesMask (is: $hexVal, expected: 90 12 03 80 10 00 00 00)" -ForegroundColor Yellow
         Write-Host "               $upmDesktop\UserPreferencesMask" -ForegroundColor DarkGray
-        $global:_verifyChangedCount++
+        $Script:_verifyChangedCount++
     }
 } catch {
     Write-Host "  ?  MISSING   UserPreferencesMask (Best Performance + ClearType)" -ForegroundColor Red
     Write-Host "               HKCU:\Control Panel\Desktop\UserPreferencesMask" -ForegroundColor DarkGray
-    $global:_verifyMissingCount++
+    $Script:_verifyMissingCount++
 }
 Test-RegistryCheck "HKCU:\Control Panel\Desktop" "FontSmoothing" "2" "ClearType font smoothing enabled"
 Test-RegistryCheck "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\VideoSettings" "AutoHDREnabled" 0 "Win11 Auto HDR disabled"
@@ -213,21 +213,21 @@ try {
     # 0x26000060 = disabledynamictick, 0x26000092 = useplatformtick
     if ($bcdOutput -match "0x26000060\s+\S+") {
         Write-Host "  ✓  OK        Dynamic Tick disabled" -ForegroundColor Green
-        $global:_verifyOkCount++
+        $Script:_verifyOkCount++
     } else {
         Write-Host "  ✗  CHANGED   Dynamic Tick is ACTIVE (expected: disabled)" -ForegroundColor Yellow
-        $global:_verifyChangedCount++
+        $Script:_verifyChangedCount++
     }
     if ($bcdOutput -match "0x26000092\s+\S+") {
         Write-Host "  ✓  OK        Platform Tick active" -ForegroundColor Green
-        $global:_verifyOkCount++
+        $Script:_verifyOkCount++
     } else {
         Write-Host "  ✗  CHANGED   Platform Tick is INACTIVE (expected: active)" -ForegroundColor Yellow
-        $global:_verifyChangedCount++
+        $Script:_verifyChangedCount++
     }
 } catch {
     Write-Host "  ?  MISSING   bcdedit not readable" -ForegroundColor Red
-    $global:_verifyMissingCount += 2
+    $Script:_verifyMissingCount += 2
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -253,11 +253,11 @@ foreach ($_wuSvc in @("wuauserv", "UsoSvc", "WaaSMedicSvc")) {
     $_wuObj = Get-Service $_wuSvc -ErrorAction SilentlyContinue
     if ($_wuObj -and $_wuObj.StartType -eq 'Disabled') {
         Write-Host "  ✓  OK        $_wuSvc = Disabled (Step 15 — Windows Update Blocker)" -ForegroundColor Green
-        $global:_verifyOkCount++
+        $Script:_verifyOkCount++
     } elseif ($_wuObj) {
         # Not disabled = user likely skipped Step 15 (expected for most users)
         Write-Host "  ✓  INFO      $_wuSvc = $($_wuObj.StartType) (Step 15 skipped — normal)" -ForegroundColor Cyan
-        $global:_verifyInfoCount++
+        $Script:_verifyInfoCount++
     }
 }
 
