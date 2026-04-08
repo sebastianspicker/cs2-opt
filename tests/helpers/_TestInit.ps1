@@ -30,14 +30,14 @@ $SCRIPT:TestTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "cs2opt-tests
 New-Item -ItemType Directory -Path $SCRIPT:TestTempRoot -Force | Out-Null
 
 # Redirect all working paths to temp
-$CFG_WorkDir      = $SCRIPT:TestTempRoot
-$CFG_LogDir       = "$SCRIPT:TestTempRoot\Logs"
-$CFG_LogFile      = "$CFG_LogDir\test.log"
-$CFG_StateFile    = "$SCRIPT:TestTempRoot\state.json"
-$CFG_ProgressFile = "$SCRIPT:TestTempRoot\progress.json"
-$CFG_BackupFile   = "$SCRIPT:TestTempRoot\backup.json"
-$CFG_BackupLockFile = "$SCRIPT:TestTempRoot\backup.lock"
-$CFG_BenchmarkFile = "$SCRIPT:TestTempRoot\benchmark_history.json"
+$CFG_WorkDir        = $SCRIPT:TestTempRoot
+$CFG_LogDir         = Join-Path $SCRIPT:TestTempRoot "Logs"
+$CFG_LogFile        = Join-Path $CFG_LogDir "test.log"
+$CFG_StateFile      = Join-Path $SCRIPT:TestTempRoot "state.json"
+$CFG_ProgressFile   = Join-Path $SCRIPT:TestTempRoot "progress.json"
+$CFG_BackupFile     = Join-Path $SCRIPT:TestTempRoot "backup.json"
+$CFG_BackupLockFile = Join-Path $SCRIPT:TestTempRoot "backup.lock"
+$CFG_BenchmarkFile  = Join-Path $SCRIPT:TestTempRoot "benchmark_history.json"
 
 # Ensure log directory exists (logging.ps1 functions reference it)
 New-Item -ItemType Directory -Path $CFG_LogDir -Force | Out-Null

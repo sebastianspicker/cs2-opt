@@ -8,7 +8,10 @@
   Parameter:
     -ManualAvg  Provide avg FPS directly (skips input dialog)
 #>
-param([int]$ManualAvg = 0)
+param(
+    [int]$ManualAvg = 0,
+    [switch]$SmokeTest
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -20,6 +23,11 @@ Initialize-ScriptDefaults
 Ensure-Dir $CFG_LogDir
 Write-LogoBanner "FPS Cap Calculator  [T1]  ·  CS2 Optimization Suite"
 Write-Host "  $("─" * 58)" -ForegroundColor DarkGray
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: FpsCap-Calculator" -ForegroundColor Green
+    exit 0
+}
 
 Write-Host @"
   BENCHMARK MAPS  (by @fREQUENCYcs / FPSHeaven)
@@ -157,7 +165,11 @@ if (-not $SCRIPT:DryRun) {
             Show-BenchmarkComparison
         }
     }
-    Add-Content $CFG_LogFile "[$(Get-Date -Format HH:mm:ss)][OK] FPS-Cap: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)" -Encoding UTF8 -ErrorAction SilentlyContinue
+    try {
+        Add-TextFileUtf8Line -Path $CFG_LogFile -Value "[$(Get-Date -Format HH:mm:ss)][OK] FPS-Cap: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
+    } catch {
+        Write-DebugLog "Could not append FPS cap log entry: $_"
+    }
 }
 
 # ── Guide to set cap ─────────────────────────────────────────────────────────

@@ -17,6 +17,7 @@
     12  Knowledge Summary + Checklist
     13  Final Benchmark + FPS Cap Calculation  [T1, LAST STEP]
 #>
+param([switch]$SmokeTest)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -24,6 +25,11 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
 . "$ScriptRoot\Guide-VideoSettings.ps1"
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: PostReboot-Setup" -ForegroundColor Green
+    exit 0
+}
 
 try {
     $state = Load-State $CFG_StateFile

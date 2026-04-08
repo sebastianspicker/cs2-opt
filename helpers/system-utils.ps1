@@ -92,7 +92,9 @@ function Save-JsonAtomic {
     if ($parentDir -and -not (Test-Path $parentDir)) {
         New-Item -ItemType Directory -Path $parentDir -Force -ErrorAction Stop | Out-Null
     }
-    $tmp = "$Path.$PID.$([System.IO.Path]::GetRandomFileName()).tmp"
+    $leafName = Split-Path -Path $Path -Leaf
+    $tmpName = "{0}.{1}.{2}.tmp" -f $leafName, $PID, ([System.IO.Path]::GetRandomFileName())
+    $tmp = if ($parentDir) { Join-Path $parentDir $tmpName } else { $tmpName }
     try {
         $json = $Data | ConvertTo-Json -Depth $Depth
         [System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
