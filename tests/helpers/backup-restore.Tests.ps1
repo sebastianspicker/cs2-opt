@@ -607,7 +607,7 @@ Describe "Invoke-PagefileRestoreAutomation" {
     It "restores automatic pagefile management with CIM" {
         $computerSystem = [PSCustomObject]@{ Name = "HOST" }
         Mock Get-CimInstance { $computerSystem } -ParameterFilter { $ClassName -eq "Win32_ComputerSystem" }
-        Mock Set-CimInstance {}
+        Mock Invoke-PagefileCimUpdate {}
 
         $result = Invoke-PagefileRestoreAutomation -Entry ([PSCustomObject]@{
             automaticManaged = $true
@@ -615,7 +615,7 @@ Describe "Invoke-PagefileRestoreAutomation" {
 
         $result.Success | Should -Be $true
         $result.Detail | Should -Be "automatic management restored"
-        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
             $InputObject -eq $computerSystem -and $Property.AutomaticManagedPagefile -eq $true
         }
     }
@@ -627,7 +627,7 @@ Describe "Invoke-PagefileRestoreAutomation" {
             if ($ClassName -eq "Win32_ComputerSystem") { return $computerSystem }
             if ($ClassName -eq "Win32_PageFileSetting") { return $pagefileSetting }
         }
-        Mock Set-CimInstance {}
+        Mock Invoke-PagefileCimUpdate {}
 
         $result = Invoke-PagefileRestoreAutomation -Entry ([PSCustomObject]@{
             automaticManaged = $false
@@ -638,10 +638,10 @@ Describe "Invoke-PagefileRestoreAutomation" {
 
         $result.Success | Should -Be $true
         $result.Detail | Should -Match 'custom size restored on C:\\pagefile\.sys'
-        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
             $InputObject -eq $pagefileSetting -and $Property.InitialSize -eq 1024 -and $Property.MaximumSize -eq 2048
         }
-        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
             $InputObject -eq $computerSystem -and $Property.AutomaticManagedPagefile -eq $false
         }
     }

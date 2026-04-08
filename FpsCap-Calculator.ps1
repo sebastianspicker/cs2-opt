@@ -21,13 +21,14 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Initialize-ScriptDefaults
 Ensure-Dir $CFG_LogDir
-Write-LogoBanner "FPS Cap Calculator  [T1]  ·  CS2 Optimization Suite"
-Write-Host "  $("─" * 58)" -ForegroundColor DarkGray
 
 if ($SmokeTest) {
     Write-Host "SMOKE TEST OK: FpsCap-Calculator" -ForegroundColor Green
     exit 0
 }
+
+Write-LogoBanner "FPS Cap Calculator  [T1]  ·  CS2 Optimization Suite"
+Write-Host "  $("─" * 58)" -ForegroundColor DarkGray
 
 Write-Host @"
   BENCHMARK MAPS  (by @fREQUENCYcs / FPSHeaven)

@@ -665,7 +665,7 @@ function Invoke-PagefileRestoreAutomation {
 
     if ($Entry.automaticManaged) {
         try {
-            Set-CimInstance -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop | Out-Null
+            Invoke-PagefileCimUpdate -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $true }
         } catch {
             throw "failed to restore automatic pagefile management: $($_.Exception.Message)"
         }
@@ -682,16 +682,16 @@ function Invoke-PagefileRestoreAutomation {
             throw "pagefile setting not found for $($Entry.pagefilePath)"
         }
 
-        Set-CimInstance -InputObject $pagefileSetting -Property @{
+        Invoke-PagefileCimUpdate -InputObject $pagefileSetting -Property @{
             InitialSize = [int]$Entry.initialSize
             MaximumSize = [int]$Entry.maximumSize
-        } -ErrorAction Stop | Out-Null
+        }
     } catch {
         throw "failed to restore custom pagefile size for $($Entry.pagefilePath): $($_.Exception.Message)"
     }
 
     try {
-        Set-CimInstance -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $false } -ErrorAction Stop | Out-Null
+        Invoke-PagefileCimUpdate -InputObject $computerSystem -Property @{ AutomaticManagedPagefile = $false }
     } catch {
         throw "failed to disable automatic pagefile management after restoring custom size: $($_.Exception.Message)"
     }
@@ -700,6 +700,15 @@ function Invoke-PagefileRestoreAutomation {
         Success = $true
         Detail  = "custom size restored on $($Entry.pagefilePath)"
     }
+}
+
+function Invoke-PagefileCimUpdate {
+    param(
+        $InputObject,
+        [hashtable]$Property
+    )
+
+    Set-CimInstance -InputObject $InputObject -Property $Property -ErrorAction Stop | Out-Null
 }
 
 function Show-BackupSummary {

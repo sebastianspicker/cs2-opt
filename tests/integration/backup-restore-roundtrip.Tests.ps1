@@ -794,12 +794,12 @@ Describe "Pagefile backup and restore roundtrip" {
             if ($ClassName -eq "Win32_ComputerSystem") { return $computerSystem }
             if ($ClassName -eq "Win32_PageFileSetting") { return $pagefileSetting }
         }
-        Mock Set-CimInstance {}
+        Mock Invoke-PagefileCimUpdate {}
 
         $result = Restore-StepChanges -StepTitle "Pagefile Test Step"
 
         $result | Should -Be $true
-        Should -Invoke Set-CimInstance -Exactly 1 -ParameterFilter {
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
             $InputObject -eq $pagefileSetting -and $Property.InitialSize -eq 4096 -and $Property.MaximumSize -eq 8192
         }
         Should -Invoke Write-OK -ParameterFilter { $t -match "automated restore completed" }
