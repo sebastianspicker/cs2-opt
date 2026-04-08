@@ -185,6 +185,16 @@ Describe "Startup drift helpers" {
         $script:SavedState.mode | Should -Be "AUTO"
     }
 
+    It "returns drift results even when saving startup_last_verified fails" {
+        Mock Test-RegistryCheck { @{ Status = "OK"; Value = $Expected } }
+        Mock Save-StateDataSafe { throw "disk full" }
+
+        { $script:SaveFailureResult = Test-StartupConfigDrift } | Should -Not -Throw
+
+        $script:SaveFailureResult.Skipped | Should -Be $false
+        $script:SaveFailureResult.CheckedCount | Should -Be 5
+    }
+
     It "shows the drift banner when startup drift is detected" {
         Mock Test-StartupConfigDrift {
             [PSCustomObject]@{

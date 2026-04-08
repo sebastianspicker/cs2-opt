@@ -84,7 +84,11 @@ function Test-StartupConfigDrift {
         $state = New-DefaultState
     }
     $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ($now.ToString("o")) -Force
-    Save-StateDataSafe -State $state
+    try {
+        Save-StateDataSafe -State $state
+    } catch {
+        Write-DebugLog "Startup drift state save failed: $($_.Exception.Message)"
+    }
 
     return [PSCustomObject]@{
         Skipped      = $false

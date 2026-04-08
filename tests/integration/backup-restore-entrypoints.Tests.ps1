@@ -5,11 +5,12 @@
 
 BeforeAll {
     $tempBase = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+    $script:FallbackTestTempRoot = Join-Path $tempBase "cs2opt-tests-integration-fallback"
     try {
         . "$PSScriptRoot/_IntegrationInit.ps1"
     } finally {
         if (-not $SCRIPT:TestTempRoot) {
-            $SCRIPT:TestTempRoot = Join-Path $tempBase "cs2opt-tests-integration-fallback"
+            $SCRIPT:TestTempRoot = $script:FallbackTestTempRoot
         }
     }
 
@@ -26,10 +27,11 @@ AfterAll {
     if ($SCRIPT:TestTempRoot -and (Test-Path $SCRIPT:TestTempRoot)) {
         Remove-Item $SCRIPT:TestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
-    $tempBase = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
-    @(Get-ChildItem $tempBase -Directory -Filter "cs2opt-tests-*" -ErrorAction SilentlyContinue) |
-        Where-Object { $_.Name -like "cs2opt-tests-integration-*" } |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    if ($script:FallbackTestTempRoot -and
+        $script:FallbackTestTempRoot -ne $SCRIPT:TestTempRoot -and
+        (Test-Path $script:FallbackTestTempRoot)) {
+        Remove-Item $script:FallbackTestTempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Describe "Restore-AllChanges integration" {

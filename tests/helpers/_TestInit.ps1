@@ -79,42 +79,42 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
         function global:Start-Service { param($Name) $null }
     }
     if (-not (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) {
-        function global:Get-NetAdapter { param($Name, $ErrorAction) $null }
+        function global:Get-NetAdapter { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Get-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
         function global:Get-NetAdapterAdvancedProperty {
-            param($Name, $DisplayName, $RegistryKeyword, $ErrorAction)
+            param([Parameter(ValueFromRemainingArguments)]$Args)
             $null
         }
     }
     if (-not (Get-Command Set-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
         function global:Set-NetAdapterAdvancedProperty {
-            param($Name, $RegistryKeyword, $RegistryValue, $DisplayName, $DisplayValue, $ErrorAction)
+            param([Parameter(ValueFromRemainingArguments)]$Args)
         }
     }
     if (-not (Get-Command Get-NetQosPolicy -ErrorAction SilentlyContinue)) {
-        function global:Get-NetQosPolicy { param($Name, $ErrorAction) $null }
+        function global:Get-NetQosPolicy { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Remove-NetQosPolicy -ErrorAction SilentlyContinue)) {
-        function global:Remove-NetQosPolicy { param($Name, [switch]$Confirm, $ErrorAction) $null }
+        function global:Remove-NetQosPolicy { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Remove-MpPreference -ErrorAction SilentlyContinue)) {
-        function global:Remove-MpPreference { param($ExclusionPath, $ExclusionProcess, $ErrorAction) $null }
+        function global:Remove-MpPreference { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Set-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
-        function global:Set-DnsClientServerAddress { param($InterfaceIndex, $ServerAddresses, [switch]$ResetServerAddresses, $ErrorAction) $null }
+        function global:Set-DnsClientServerAddress { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Get-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
-        function global:Get-DnsClientServerAddress { param($InterfaceIndex, $AddressFamily, $ErrorAction) $null }
+        function global:Get-DnsClientServerAddress { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Stop-ScheduledTask -ErrorAction SilentlyContinue)) {
-        function global:Stop-ScheduledTask { param($TaskName, $ErrorAction) $null }
+        function global:Stop-ScheduledTask { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Set-WmiInstance -ErrorAction SilentlyContinue)) {
-        function global:Set-WmiInstance { param($Class, $Arguments, $EnableAllPrivileges, $Path, $ErrorAction) $null }
+        function global:Set-WmiInstance { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command Set-CimInstance -ErrorAction SilentlyContinue)) {
-        function global:Set-CimInstance { param($InputObject, $Property, $ErrorAction) $null }
+        function global:Set-CimInstance { param([Parameter(ValueFromRemainingArguments)]$Args) $null }
     }
     if (-not (Get-Command bcdedit -ErrorAction SilentlyContinue)) {
         function global:bcdedit { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
