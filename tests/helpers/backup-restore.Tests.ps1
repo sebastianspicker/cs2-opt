@@ -667,4 +667,26 @@ Describe "Restore-StepChanges scheduled task wasEnabled" {
         $result | Should -Be $true
         Should -Invoke Unregister-ScheduledTask -Exactly 1
     }
+
+    It "refuses to delete a tampered scheduled-task scriptPath outside the suite workspace" {
+        $entries = @(
+            [ordered]@{
+                type = "scheduledtask"; taskName = "NewTask"; existed = $false;
+                wasEnabled = $false; scriptPath = "C:\Windows\System32\evil.ps1"; step = "New Task Step"; timestamp = "2026-01-01"
+            }
+        )
+        New-TestBackupFile -Entries $entries
+
+        Mock Get-ScheduledTask {
+            [PSCustomObject]@{ TaskName = "NewTask"; State = "Ready" }
+        }
+        Mock Unregister-ScheduledTask {}
+        Mock Remove-Item {}
+
+        $result = Restore-StepChanges -StepTitle "New Task Step"
+
+        $result | Should -Be $false
+        Should -Invoke Remove-Item -Exactly 0
+        Should -Invoke Write-Warn -ParameterFilter { $t -match 'refusing to delete untrusted scriptPath' }
+    }
 }

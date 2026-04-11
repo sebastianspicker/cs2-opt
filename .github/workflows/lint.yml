@@ -3,9 +3,23 @@ name: Lint
 on:
   push:
     branches: [main]
-    paths: ['**.ps1', '**.psd1']
+    paths:
+      - '**.ps1'
+      - '**.psd1'
+      - '*.bat'
+      - 'cfgs/**'
+      - 'README.md'
+      - 'docs/**'
+      - '.github/workflows/**'
   pull_request:
-    paths: ['**.ps1', '**.psd1']
+    paths:
+      - '**.ps1'
+      - '**.psd1'
+      - '*.bat'
+      - 'cfgs/**'
+      - 'README.md'
+      - 'docs/**'
+      - '.github/workflows/**'
 
 # Restrict GITHUB_TOKEN to read-only by default (principle of least privilege).
 # Individual jobs can escalate if needed — none in this workflow do.
@@ -33,7 +47,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ~/Documents/PowerShell/Modules/PSScriptAnalyzer
-          key: psscriptanalyzer-1-${{ runner.os }}
+          key: psscriptanalyzer-2-${{ runner.os }}-${{ hashFiles('.github/workflows/lint.yml') }}
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -41,7 +55,19 @@ jobs:
           if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
             Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           }
-          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
+          $pssaPaths = Get-ChildItem -Recurse -Filter "*.ps1" |
+            Where-Object { $_.FullName -notlike "*tests/helpers/_TestInit.ps1" }
+          if (-not $pssaPaths) {
+            throw "No PowerShell files found for PSScriptAnalyzer"
+          }
+          $results = @()
+          foreach ($file in $pssaPaths) {
+            try {
+              $results += Invoke-ScriptAnalyzer -Path $file.FullName -Settings .\PSScriptAnalyzerSettings.psd1 -ErrorAction Stop
+            } catch {
+              throw "PSScriptAnalyzer failed on $($file.FullName): $($_.Exception.Message)"
+            }
+          }
           if ($results) {
             $results | Format-Table -AutoSize Severity, ScriptName, Line, RuleName, Message
             throw "$($results.Count) PSScriptAnalyzer issue(s) found"
@@ -72,6 +98,46 @@ jobs:
           if ($errors -gt 0) { throw "$errors parse error(s) found" }
           Write-Host "Syntax check: all files parse cleanly" -ForegroundColor Green
 
+  windows-powershell-compat:
+    name: Windows PowerShell 5.1 compatibility
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Smoke-test shipped entry scripts in Windows PowerShell
+        shell: powershell
+        run: |
+          $scripts = @(
+            'Run-Optimize.ps1',
+            'Cleanup.ps1',
+            'Boot-SafeMode.ps1',
+            'SafeMode-DriverClean.ps1',
+            'PostReboot-Setup.ps1',
+            'FpsCap-Calculator.ps1',
+            'Verify-Settings.ps1',
+            'CS2-Optimize-GUI.ps1'
+          )
+
+          foreach ($script in $scripts) {
+            Write-Host "=== Windows PowerShell smoke test: $script ==="
+            $records = & powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -SmokeTest 2>&1
+            $output = $records | Out-String
+            $errorRecords = @($records | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+            if ($LASTEXITCODE -ne 0) {
+              throw "Smoke test failed for $script`n$output"
+            }
+            if ($errorRecords.Count -gt 0) {
+              throw "Smoke test emitted error records for $script`n$output"
+            }
+            if ($output -notmatch 'SMOKE TEST OK') {
+              throw "Smoke test marker missing for $script`n$output"
+            }
+            Write-Host $output
+          }
+
   pester:
     name: Pester tests
     runs-on: windows-latest
@@ -85,7 +151,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ~/Documents/PowerShell/Modules/Pester
-          key: pester5-1-${{ runner.os }}
+          key: pester5-2-${{ runner.os }}-${{ hashFiles('.github/workflows/lint.yml') }}
 
       - name: Install Pester 5.x
         shell: pwsh
@@ -114,6 +180,68 @@ jobs:
           path: ./test-results.xml
           retention-days: 14
 
+  entrypoint-smoke:
+    name: Entry point smoke tests
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Smoke-test shipped entry scripts
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'Run-Optimize.ps1',
+            'Cleanup.ps1',
+            'Boot-SafeMode.ps1',
+            'SafeMode-DriverClean.ps1',
+            'PostReboot-Setup.ps1',
+            'FpsCap-Calculator.ps1',
+            'Verify-Settings.ps1',
+            'CS2-Optimize-GUI.ps1'
+          )
+
+          foreach ($script in $scripts) {
+            Write-Host "=== Smoke test: $script ==="
+            $records = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -SmokeTest 2>&1
+            $output = $records | Out-String
+            $errorRecords = @($records | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+            if ($LASTEXITCODE -ne 0) {
+              throw "Smoke test failed for $script`n$output"
+            }
+            if ($errorRecords.Count -gt 0) {
+              throw "Smoke test emitted error records for $script`n$output"
+            }
+            if ($output -notmatch 'SMOKE TEST OK') {
+              throw "Smoke test marker missing for $script`n$output"
+            }
+            Write-Host $output
+          }
+
+      - name: Verify launcher contracts
+        shell: pwsh
+        run: |
+          $startBat = Get-Content .\START.bat -Raw
+          foreach ($target in @(
+            'Run-Optimize.ps1',
+            'Cleanup.ps1',
+            'FpsCap-Calculator.ps1',
+            'Verify-Settings.ps1',
+            'Boot-SafeMode.ps1',
+            'PostReboot-Setup.ps1'
+          )) {
+            if ($startBat -notmatch [regex]::Escape($target)) {
+              throw "START.bat is missing launcher target: $target"
+            }
+          }
+
+          $startGuiBat = Get-Content .\START-GUI.bat -Raw
+          if ($startGuiBat -notmatch [regex]::Escape('CS2-Optimize-GUI.ps1')) {
+            throw "START-GUI.bat is missing CS2-Optimize-GUI.ps1"
+          }
+
   estimate-keys:
     name: EstimateKey cross-reference
     runs-on: ubuntu-latest
@@ -128,13 +256,16 @@ jobs:
         run: |
           echo "=== Checking EstimateKey cross-references ==="
 
-          # Extract all -EstimateKey "..." values from phase scripts
+          # Extract all -EstimateKey "..." values from phase scripts and the
+          # GUI step catalog. Some estimate keys are display-only in the catalog
+          # and are intentionally not attached to Invoke-TieredStep calls.
           PHASE_SCRIPTS=(
             Optimize-SystemBase.ps1
             Optimize-RegistryTweaks.ps1
             Optimize-Hardware.ps1
             Optimize-GameConfig.ps1
             PostReboot-Setup.ps1
+            helpers/step-catalog.ps1
           )
 
           USED_KEYS=()

@@ -2,17 +2,57 @@
 #  helpers/logging.ps1  —  Logging, Console Output, Banners
 # ==============================================================================
 
+function Set-TextFileUtf8 {
+    param([string]$Path, [string]$Value)
+    $nativePath = if (Test-HostIsWindows) { $Path -replace '/', '\' } else { $Path -replace '\\', '/' }
+    $parentDir = Split-Path -Path $nativePath -Parent
+    if ($parentDir) {
+        [System.IO.Directory]::CreateDirectory($parentDir) | Out-Null
+    }
+    [System.IO.File]::WriteAllText($nativePath, $Value, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Add-TextFileUtf8Line {
+    param([string]$Path, [string]$Value)
+    $nativePath = if (Test-HostIsWindows) { $Path -replace '/', '\' } else { $Path -replace '\\', '/' }
+    $parentDir = Split-Path -Path $nativePath -Parent
+    if ($parentDir) {
+        [System.IO.Directory]::CreateDirectory($parentDir) | Out-Null
+    }
+    [System.IO.File]::AppendAllText($nativePath, $Value + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Test-HostIsWindows {
+    if ($env:OS -eq 'Windows_NT') { return $true }
+    return ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
+}
+
+function Redact-Sensitive {
+    param([AllowNull()][string]$Text)
+    if ($null -eq $Text) { return $Text }
+
+    $redacted = $Text
+    if ($env:COMPUTERNAME) {
+        $redacted = [regex]::Replace($redacted, [regex]::Escape($env:COMPUTERNAME), "[COMPUTER]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    if ($env:USERNAME) {
+        $redacted = [regex]::Replace($redacted, [regex]::Escape($env:USERNAME), "[USER]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    $redacted = [regex]::Replace($redacted, '(?i)C:\\Users\\[^\\]+\\', { 'C:\Users\[USER]\' })
+    return $redacted
+}
+
 function Initialize-Log {
     Ensure-Dir $CFG_LogDir
     if (Test-Path $CFG_LogFile) {
         $stamp   = (Get-Item $CFG_LogFile).LastWriteTime.ToString("yyyyMMdd_HHmmss")
-        Move-Item $CFG_LogFile "$CFG_LogDir\optimize_$stamp.log" -Force
+        Move-Item $CFG_LogFile (Join-Path $CFG_LogDir "optimize_$stamp.log") -Force
         Get-ChildItem $CFG_LogDir -Filter "optimize_*.log" |
             Sort-Object LastWriteTime -Descending |
             Select-Object -Skip $CFG_LogMaxFiles |
             Remove-Item -Force -ErrorAction SilentlyContinue
     }
-    Set-Content $CFG_LogFile @"
+    $header = @"
 ================================================================================
   CS2 Optimization Suite · Log
   Started:    $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
@@ -20,14 +60,16 @@ function Initialize-Log {
   Host:       $env:COMPUTERNAME     User:  $env:USERNAME
   Windows:    $([System.Environment]::OSVersion.VersionString)
 ================================================================================
-"@ -Encoding UTF8
+"@
+    Set-TextFileUtf8 -Path $CFG_LogFile -Value (Redact-Sensitive $header)
 }
 
 function Write-Log($Level, $Message) {
+    $Message = Redact-Sensitive $Message
     $ts      = Get-Date -Format "HH:mm:ss"
     $logLine = "[$ts][$Level] $Message"
     if ($CFG_LogFile -and (Test-Path $CFG_LogDir -ErrorAction SilentlyContinue)) {
-        Add-Content $CFG_LogFile $logLine -Encoding UTF8 -ErrorAction SilentlyContinue
+        try { Add-TextFileUtf8Line -Path $CFG_LogFile -Value $logLine } catch {}
     }
     $show = switch ($SCRIPT:LogLevel) {
         "MINIMAL" { $Level -in @("ERROR","WARN","OK","INFO","SECTION","STEP","T1","T2","T3") }
@@ -58,9 +100,10 @@ function Write-Warn($t)     { Write-Log "WARN"    $t }
 function Write-Err($t)      { Write-Log "ERROR"   $t }
 function Write-Step($t)     { Write-Log "STEP"    $t }
 function Write-Info($t)     { Write-Log "INFO"    $t }
-# Intentionally shadows the built-in Write-Debug cmdlet to route debug output
-# through the suite's unified logging system (file + console with level filtering).
-function Write-Debug($t)    { Write-Log "DEBUG"   $t }
+# Suite-specific debug logging — routes through the unified logging system
+# (file + console with level filtering). Named Write-DebugLog to avoid
+# shadowing the built-in Write-Debug cmdlet.
+function Write-DebugLog($t)    { Write-Log "DEBUG"   $t }
 function Write-Blank()      { Write-Host "" }
 function Write-Sub($t)      { Write-Host "  · $t" -ForegroundColor White }
 # Summary message after an action — suppressed in DRY-RUN because
@@ -124,14 +167,14 @@ function Write-LogoBanner($subtitle) {
 # ── Phase step counters ────────────────────────────────────────────────────
 # Tracks applied / skipped / failed counts per phase for the summary box.
 function Initialize-PhaseCounters {
-    $global:_phaseApplied = 0
-    $global:_phaseSkipped = 0
-    $global:_phaseFailed  = 0
+    $Script:_phaseApplied = 0
+    $Script:_phaseSkipped = 0
+    $Script:_phaseFailed  = 0
 }
 
-function Add-PhaseApplied { if ($null -eq $global:_phaseApplied) { $global:_phaseApplied = 0 }; $global:_phaseApplied++ }
-function Add-PhaseSkipped { if ($null -eq $global:_phaseSkipped) { $global:_phaseSkipped = 0 }; $global:_phaseSkipped++ }
-function Add-PhaseFailed  { if ($null -eq $global:_phaseFailed) { $global:_phaseFailed = 0 }; $global:_phaseFailed++ }
+function Add-PhaseApplied { if ($null -eq $Script:_phaseApplied) { $Script:_phaseApplied = 0 }; $Script:_phaseApplied++ }
+function Add-PhaseSkipped { if ($null -eq $Script:_phaseSkipped) { $Script:_phaseSkipped = 0 }; $Script:_phaseSkipped++ }
+function Add-PhaseFailed  { if ($null -eq $Script:_phaseFailed) { $Script:_phaseFailed = 0 }; $Script:_phaseFailed++ }
 
 function Write-PhaseSummary {
     <#  Displays a summary box after a phase with applied/skipped/failed counts.  #>
@@ -141,12 +184,12 @@ function Write-PhaseSummary {
         [switch]$DryRun
     )
 
-    if ($null -eq $global:_phaseApplied) { $global:_phaseApplied = 0 }
-    if ($null -eq $global:_phaseSkipped) { $global:_phaseSkipped = 0 }
-    if ($null -eq $global:_phaseFailed)  { $global:_phaseFailed  = 0 }
-    $applied = [int]$global:_phaseApplied
-    $skipped = [int]$global:_phaseSkipped
-    $failed  = [int]$global:_phaseFailed
+    if ($null -eq $Script:_phaseApplied) { $Script:_phaseApplied = 0 }
+    if ($null -eq $Script:_phaseSkipped) { $Script:_phaseSkipped = 0 }
+    if ($null -eq $Script:_phaseFailed)  { $Script:_phaseFailed  = 0 }
+    $applied = [int]$Script:_phaseApplied
+    $skipped = [int]$Script:_phaseSkipped
+    $failed  = [int]$Script:_phaseFailed
 
     Write-Blank
     if ($DryRun) {

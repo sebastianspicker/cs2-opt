@@ -832,9 +832,14 @@ function Restore-StepChanges {
                             Write-Warn "Could not remove scheduled task $($e.taskName): $_"
                             $taskRestoreFailed = $true
                         }
-                        if ($e.scriptPath -and (Test-Path $e.scriptPath)) {
-                            Remove-Item $e.scriptPath -Force -ErrorAction SilentlyContinue
-                            Write-OK "Removed: $($e.scriptPath)"
+                        if ($e.scriptPath) {
+                            if (-not (Test-TrustedSuiteScriptPath -Path $e.scriptPath)) {
+                                Write-Warn "Scheduled task restore: refusing to delete untrusted scriptPath '$($e.scriptPath)'"
+                                $taskRestoreFailed = $true
+                            } elseif (Test-Path $e.scriptPath) {
+                                Remove-Item $e.scriptPath -Force -ErrorAction SilentlyContinue
+                                Write-OK "Removed: $($e.scriptPath)"
+                            }
                         }
                     } else {
                         # Task existed before — restore its enabled/disabled state

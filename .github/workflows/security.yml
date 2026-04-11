@@ -44,14 +44,14 @@ jobs:
           )
 
           for pattern in "${PATTERNS[@]}"; do
-            if grep -rEn "$pattern" --include='*.ps1' --include='*.psd1' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.md' --include='*.txt' --include='*.cfg' --include='*.env' . 2>/dev/null | grep -v '.git/'; then
+            if grep -rEn "$pattern" --include='*.ps1' --include='*.psd1' --include='*.bat' --include='*.cmd' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.md' --include='*.txt' --include='*.cfg' --include='*.env' . 2>/dev/null | grep -v '.git/'; then
               echo "::error::Potential secret found matching pattern: $pattern"
               FOUND=$((FOUND + 1))
             fi
           done
 
           # Check for generic password/secret assignments
-          if grep -rEin '(password|passwd|secret|token|api_key|apikey|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}' --include='*.ps1' --include='*.psd1' --include='*.yml' --include='*.json' . 2>/dev/null | grep -v '.git/' | grep -v 'CONTRIBUTING' | grep -v 'SECURITY' | grep -v '#'; then
+          if grep -rEin '(password|passwd|secret|token|api_key|apikey|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}' --include='*.ps1' --include='*.psd1' --include='*.bat' --include='*.cmd' --include='*.yml' --include='*.json' . 2>/dev/null | grep -v '.git/' | grep -v 'CONTRIBUTING' | grep -v 'SECURITY' | grep -v '#'; then
             echo "::error::Potential hardcoded credential assignment found"
             FOUND=$((FOUND + 1))
           fi
@@ -144,6 +144,40 @@ jobs:
             exit 1
           fi
           echo "Script safety check: clean"
+
+      - name: Check public launcher scripts
+        shell: bash
+        run: |
+          echo "=== Checking public launcher scripts ==="
+          FOUND=0
+
+          for launcher in START.bat START-GUI.bat; do
+            if [ ! -f "$launcher" ]; then
+              echo "::error::Missing launcher: $launcher"
+              FOUND=$((FOUND + 1))
+              continue
+            fi
+
+            if grep -Ein '\-encodedcommand|\-enc ' "$launcher"; then
+              echo "::error::Encoded command execution found in $launcher"
+              FOUND=$((FOUND + 1))
+            fi
+
+            if grep -Ein 'Invoke-WebRequest|curl|bitsadmin|certutil' "$launcher"; then
+              echo "::error::Network download primitive found in $launcher"
+              FOUND=$((FOUND + 1))
+            fi
+          done
+
+          if ! grep -Fq 'CS2-Optimize-GUI.ps1' START-GUI.bat; then
+            echo "::error::START-GUI.bat no longer launches CS2-Optimize-GUI.ps1"
+            FOUND=$((FOUND + 1))
+          fi
+
+          if [ "$FOUND" -gt 0 ]; then
+            exit 1
+          fi
+          echo "Launcher safety check: clean"
 
   workflow-integrity:
     name: Workflow file integrity

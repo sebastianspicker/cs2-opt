@@ -4,6 +4,11 @@
 #  Launch via START-GUI.bat
 # ==============================================================================
 
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: CS2-Optimize-GUI" -ForegroundColor Green
+    exit 0
+}
+
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase

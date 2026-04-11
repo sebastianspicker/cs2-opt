@@ -223,6 +223,22 @@ Describe "Set-RunOnce security validation" {
     }
 }
 
+Describe "Test-TrustedSuiteScriptPath" {
+
+    It "accepts suite-owned PowerShell paths" {
+        Test-TrustedSuiteScriptPath -Path "C:\CS2_OPTIMIZE\PostReboot-Setup.ps1" | Should -Be $true
+    }
+
+    It "rejects paths outside the suite workspace" {
+        Test-TrustedSuiteScriptPath -Path "C:\Windows\System32\evil.ps1" | Should -Be $false
+    }
+
+    It "rejects path traversal and non-PowerShell targets" {
+        Test-TrustedSuiteScriptPath -Path "C:\CS2_OPTIMIZE\..\Windows\evil.ps1" | Should -Be $false
+        Test-TrustedSuiteScriptPath -Path "C:\CS2_OPTIMIZE\tool.cmd" | Should -Be $false
+    }
+}
+
 # ── Get-ActiveNicGuid GUID validation ────────────────────────────────────────
 Describe "Get-ActiveNicGuid GUID validation" {
 

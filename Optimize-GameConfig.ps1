@@ -638,29 +638,7 @@ if ($startStep -le 38) {
         Write-Host "  [DRY-RUN] Would copy scripts to $CFG_WorkDir, set RunOnce, and boot into Safe Mode" -ForegroundColor Magenta
         Complete-Step $PHASE 38 "SafeMode (DRY-RUN preview)"
     } else {
-        # Core scripts (required)
-        foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
-            $src = "$ScriptRoot\$f"
-            if (Test-Path $src) {
-                Copy-Item $src "$CFG_WorkDir\$f" -Force -ErrorAction Stop
-                Write-OK "Copied: $f"
-            } else {
-                Write-Err "Missing: $f — all scripts must be in the same folder."
-                throw "Required file missing: $f"
-            }
-        }
-        # NOTE: FPSHEAVEN2026.pow replaced by native helpers/power-plan.ps1
-        # NOTE: cs2_blur_fix.nip settings applied natively via helpers/nvidia-drs.ps1 (52 DWORD settings)
-        # Copy helpers module directory (required — Phase 2/3 won't load without it)
-        $helpersSrc = "$ScriptRoot\helpers"
-        if (Test-Path $helpersSrc) {
-            Ensure-Dir "$CFG_WorkDir\helpers"
-            Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
-            Write-OK "Copied: helpers/ directory"
-        } else {
-            Write-Err "Missing: helpers/ directory — Phase 2/3 will fail without helper modules."
-            throw "Required directory missing: helpers/"
-        }
+        Copy-PhaseRuntimePayload -SourceRoot $ScriptRoot -DestinationRoot $CFG_WorkDir
 
         Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1" -SafeMode
 
@@ -684,6 +662,7 @@ if ($startStep -le 38) {
         $safebootOk = ($bcdExit -eq 0) -or (Test-BootConfigSet "safeboot")
 
         if ($safebootOk) {
+            Set-Phase1SafeModeReadyFlag -Path $CFG_StateFile | Out-Null
             $SCRIPT:SafebootReady = $true
             Write-Blank
             Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Yellow

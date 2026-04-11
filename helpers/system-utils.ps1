@@ -2,9 +2,11 @@
 #  helpers/system-utils.ps1  —  Download, Registry, Boot Config, Filesystem
 # ==============================================================================
 
-function Invoke-Download($url, $dest, $name) {
+function Invoke-Download {
+    [CmdletBinding()]
+    param([string]$url, [string]$dest, [string]$name)
     Write-Step "Download: $name"
-    Write-Debug "URL: $url -> $dest"
+    Write-DebugLog "URL: $url -> $dest"
 
     # SECURITY: Defense-in-depth URL allowlist. Currently only NVIDIA drivers are
     # downloaded; the caller (nvidia-driver.ps1) already validates the domain, but
@@ -74,7 +76,11 @@ function Invoke-Download($url, $dest, $name) {
 
 function Save-JsonAtomic {
     <#  Writes JSON to a file atomically (write-to-temp-then-rename).
-        Prevents corruption if interrupted by crash or power loss.  #>
+        Prevents corruption if interrupted by crash or power loss.
+        NOTE: This does NOT prevent lost updates from concurrent read-modify-write
+        cycles. Callers modifying shared files (backup.json, progress.json) should
+        acquire the advisory backup lock (Set-BackupLock) before the read step.  #>
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)][object]$Data,
         [Parameter(Mandatory)][string]$Path,
@@ -86,7 +92,9 @@ function Save-JsonAtomic {
     if ($parentDir -and -not (Test-Path $parentDir)) {
         New-Item -ItemType Directory -Path $parentDir -Force -ErrorAction Stop | Out-Null
     }
-    $tmp = "$Path.$PID.$([System.IO.Path]::GetRandomFileName()).tmp"
+    $leafName = Split-Path -Path $Path -Leaf
+    $tmpName = "{0}.{1}.{2}.tmp" -f $leafName, $PID, ([System.IO.Path]::GetRandomFileName())
+    $tmp = if ($parentDir) { Join-Path $parentDir $tmpName } else { $tmpName }
     try {
         $json = $Data | ConvertTo-Json -Depth $Depth
         [System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
@@ -100,8 +108,134 @@ function Save-JsonAtomic {
     }
 }
 
+function Set-SecureAcl {
+    <#  Applies an Administrators-only ACL to a sensitive JSON file.
+        NOTE: C:\CS2_OPTIMIZE should also inherit restrictive ACLs so newly created
+        temp files from Save-JsonAtomic stay protected before this file ACL is re-applied.  #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path $Path)) { return }
+    if (-not (Test-HostIsWindows)) { return }
+
+    try {
+        $admins = New-Object System.Security.Principal.NTAccount("BUILTIN", "Administrators")
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($admins, "FullControl", "Allow")
+
+        $acl.SetOwner($admins)
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.SetAccessRule($rule)
+        Set-Acl -Path $Path -AclObject $acl -ErrorAction Stop
+    } catch {
+        Write-Warn "Failed to secure ACL on '$Path': $_"
+    }
+}
+
 function Save-State($obj, $path) {
     Save-JsonAtomic -Data $obj -Path $path
+}
+
+function Test-TrustedSuiteScriptPath {
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $normalizedPath = $Path -replace '/', '\'
+    return (
+        $normalizedPath -match '^C:\\CS2_OPTIMIZE\\' -and
+        $normalizedPath -notmatch '\\\.\.(\\|$)' -and
+        $normalizedPath -match '\.ps1$'
+    )
+}
+
+function Copy-PhaseRuntimePayload {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SourceRoot,
+        [Parameter(Mandatory)][string]$DestinationRoot
+    )
+
+    $requiredFiles = @(
+        "SafeMode-DriverClean.ps1",
+        "PostReboot-Setup.ps1",
+        "Guide-VideoSettings.ps1",
+        "helpers.ps1",
+        "config.env.ps1"
+    )
+    $requiredDirectories = @(
+        "helpers",
+        "cfgs"
+    )
+    $requiredDocs = @(
+        "docs/video.txt",
+        "docs/nvidia-drs-settings.md"
+    )
+
+    Ensure-Dir $DestinationRoot
+
+    foreach ($file in $requiredFiles) {
+        $src = Join-Path $SourceRoot $file
+        if (-not (Test-Path $src)) {
+            throw "Required file missing: $file"
+        }
+        Copy-Item $src (Join-Path $DestinationRoot $file) -Force -ErrorAction Stop
+        Write-OK "Copied: $file"
+    }
+
+    foreach ($dir in $requiredDirectories) {
+        $src = Join-Path $SourceRoot $dir
+        if (-not (Test-Path $src)) {
+            throw "Required directory missing: $dir"
+        }
+        $dest = Join-Path $DestinationRoot $dir
+        Ensure-Dir $dest
+        Copy-Item (Join-Path $src '*') $dest -Force -Recurse -ErrorAction Stop
+        Write-OK "Copied: $dir/"
+    }
+
+    foreach ($doc in $requiredDocs) {
+        $src = Join-Path $SourceRoot $doc
+        if (-not (Test-Path $src)) {
+            throw "Required file missing: $doc"
+        }
+        $dest = Join-Path $DestinationRoot $doc
+        $destDir = Split-Path -Path $dest -Parent
+        if ($destDir) {
+            Ensure-Dir $destDir
+        }
+        Copy-Item $src $dest -Force -ErrorAction Stop
+        Write-OK "Copied: $doc"
+    }
+}
+
+function Test-Phase1SafeModeReady {
+    [CmdletBinding()]
+    param($State)
+
+    return (
+        $null -ne $State -and
+        $State.PSObject.Properties['phase1SafeModeReady'] -and
+        $State.phase1SafeModeReady -eq $true
+    )
+}
+
+function Set-Phase1SafeModeReadyFlag {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [bool]$Ready = $true
+    )
+
+    if (-not (Test-Path $Path)) {
+        throw "Settings file not found at '$Path' — run Phase 1 first (START.bat -> [1])."
+    }
+
+    $state = Get-Content $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    $state | Add-Member -NotePropertyName "phase1SafeModeReady" -NotePropertyValue $Ready -Force
+    Save-JsonAtomic -Data $state -Path $Path
+    Set-SecureAcl -Path $Path
+    return $state
 }
 
 function Load-State($path) {
@@ -114,7 +248,7 @@ function Load-State($path) {
         $s = $raw | ConvertFrom-Json
     } catch {
         $corruptPath = "$path.corrupt.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-        try { Copy-Item $path $corruptPath -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted state file." }
+        try { Copy-Item $path $corruptPath -Force -ErrorAction Stop } catch { Write-DebugLog "Could not preserve corrupted state file." }
         Write-Warn "State file corrupt — preserved as $corruptPath"
         throw "State file corrupt — preserved as $corruptPath"
     }
@@ -122,7 +256,7 @@ function Load-State($path) {
     $SCRIPT:LogLevel = if ($s.logLevel) { $s.logLevel } else { "NORMAL" }
     $SCRIPT:Profile  = if ($s.profile) { $s.profile } else { "RECOMMENDED" }
     if (-not $SCRIPT:Mode) {
-        Write-Debug "Load-State: mode was null/empty — defaulting to CONTROL"
+        Write-DebugLog "Load-State: mode was null/empty — defaulting to CONTROL"
         $SCRIPT:Mode = "CONTROL"
     }
     $SCRIPT:DryRun   = ($SCRIPT:Mode -eq "DRY-RUN")
@@ -148,7 +282,9 @@ function Initialize-ScriptDefaults {
     }
 }
 
-function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
+function Set-RunOnce {
+    [CmdletBinding()]
+    param([string]$name, [string]$scriptPath, [switch]$SafeMode)
     # SECURITY: Validate RunOnce name — alphanumeric + underscore only.
     # Prevents injection into the HKLM RunOnce key namespace.
     if ($name -notmatch '^[a-zA-Z0-9_]+$') {
@@ -161,10 +297,8 @@ function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
     # SECURITY: Validate script path — must be under C:\CS2_OPTIMIZE\ and end in .ps1.
     # RunOnce executes at boot as the logged-on user with admin elevation (HKLM).
     # If an attacker could set $scriptPath to an arbitrary location, they get code execution.
-    $resolvedPath = try { [System.IO.Path]::GetFullPath($scriptPath) } catch { $null }
-    if (-not $resolvedPath -or
-        $resolvedPath -notmatch '^C:\\CS2_OPTIMIZE\\' -or
-        $resolvedPath -notmatch '\.ps1$') {
+    $normalizedPath = $scriptPath -replace '/', '\'
+    if (-not (Test-TrustedSuiteScriptPath -Path $normalizedPath)) {
         Write-Warn "Set-RunOnce: script path must be under C:\CS2_OPTIMIZE\ and end in .ps1 — rejected: $scriptPath"
         return
     }
@@ -181,10 +315,21 @@ function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
         Write-Host "    After rebooting, launch Phase 3 manually: START.bat -> [P]" -ForegroundColor Cyan
         return
     }
-    $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$scriptPath`""
+    $allowedPolicies = @("Bypass", "RemoteSigned", "Unrestricted", "AllSigned")
+    $executionPolicy = [string]$CFG_RunOnceExecutionPolicy
+    if ($executionPolicy -eq "Undefined") {
+        Write-Warn "Set-RunOnce: CFG_RunOnceExecutionPolicy 'Undefined' is unsupported on client systems due to policy precedence and GPOs; use one of: $($allowedPolicies -join ', ')"
+        return
+    }
+    if ($executionPolicy -notin $allowedPolicies) {
+        Write-Warn "Set-RunOnce: invalid CFG_RunOnceExecutionPolicy '$executionPolicy' — expected one of: $($allowedPolicies -join ', ')"
+        return
+    }
+    # Bypass stays the default because the suite runs locally and is already admin-elevated.
+    $cmd = "powershell.exe -NoProfile -ExecutionPolicy $executionPolicy -WindowStyle Normal -File `"$normalizedPath`""
     try {
         Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -Name $name -Value $cmd -ErrorAction Stop
-        Write-OK "RunOnce: $name -> $scriptPath"
+        Write-OK "RunOnce: $name -> $normalizedPath"
     } catch {
         Write-Err "Failed to set RunOnce '$name': $_"
         Write-Host "  $([char]0x2139) What to do: Phase 3 will NOT auto-start after reboot." -ForegroundColor Cyan
@@ -192,7 +337,9 @@ function Set-RunOnce($name, $scriptPath, [switch]$SafeMode) {
     }
 }
 
-function Set-BootConfig($key, $val, $why) {
+function Set-BootConfig {
+    [CmdletBinding()]
+    param([string]$key, [string]$val, [string]$why)
     # SECURITY: Validate bcdedit key/value — these are passed as command-line arguments.
     # An attacker who controls state.json or backup.json could inject arbitrary bcdedit args.
     # bcdedit keys are alphanumeric identifiers; values are alphanumeric, hex, or simple tokens.
@@ -206,7 +353,7 @@ function Set-BootConfig($key, $val, $why) {
     }
 
     # Auto-backup before modification
-    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
+    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle) {
         Backup-BootConfig -Key $key -StepTitle $SCRIPT:CurrentStepTitle
     }
     if ($SCRIPT:DryRun) {
@@ -220,7 +367,7 @@ function Set-BootConfig($key, $val, $why) {
     if ($bcdeditExit -ne 0) {
         Write-Warn "Boot config change failed: bcdedit /set $key $val"
         Write-Host "  $([char]0x2139) This is usually fine — Windows may not support this setting on your PC." -ForegroundColor Cyan
-        Write-Debug "bcdedit exit $bcdeditExit — $outputStr"
+        Write-DebugLog "bcdedit exit $bcdeditExit — $outputStr"
         return $false
     }
     Write-OK "Set: $key = $val"
@@ -260,11 +407,13 @@ function Test-BootConfigSet($key) {
             if ($hexId -and $s -match "^\s*$hexId\s+") { return $true }
             elseif (-not $hexId -and $s -match "^\s*$([regex]::Escape($key))\s+") { return $true }
         }
-    } catch { Write-Debug "Test-BootConfigSet: bcdedit enum failed for '$key': $_" }
+    } catch { Write-DebugLog "Test-BootConfigSet: bcdedit enum failed for '$key': $_" }
     return $false
 }
 
-function Set-RegistryValue($path, $name, $value, $type, $why) {
+function Set-RegistryValue {
+    [CmdletBinding()]
+    param([string]$path, [string]$name, $value, [string]$type, [string]$why)
     # SECURITY: Validate registry path — must start with a known hive prefix.
     # An attacker who controls backup.json or state.json could inject arbitrary paths
     # to write to sensitive registry locations outside the expected scope.
@@ -279,7 +428,7 @@ function Set-RegistryValue($path, $name, $value, $type, $why) {
     }
 
     # Auto-backup before modification
-    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle -and -not $SCRIPT:DryRun) {
+    if ((Get-Variable -Name CurrentStepTitle -Scope Script -ErrorAction SilentlyContinue) -and $SCRIPT:CurrentStepTitle) {
         Backup-RegistryValue -Path $path -Name $name -StepTitle $SCRIPT:CurrentStepTitle
     }
     if ($SCRIPT:DryRun) {
@@ -287,7 +436,7 @@ function Set-RegistryValue($path, $name, $value, $type, $why) {
         Write-Host "  $([char]0x2588)$([char]0x2588) DRY-RUN $([char]0x2588)$([char]0x2588)    Path: $path" -ForegroundColor DarkMagenta
         return
     }
-    Write-Debug "Registry: $path | $name = $value [$type] — $why"
+    Write-DebugLog "Registry: $path | $name = $value [$type] — $why"
     try {
         if (-not (Test-Path $path)) { New-Item -Path $path -Force -ErrorAction Stop | Out-Null }
         Set-ItemProperty -Path $path -Name $name -Value $value -Type $type -ErrorAction Stop
@@ -309,13 +458,13 @@ function Set-ClipboardSafe {
     param([Parameter(ValueFromPipeline)][string]$Text)
     process {
         try { $Text | Set-Clipboard -ErrorAction Stop }
-        catch { Write-Debug "Set-Clipboard failed (headless/remote session?): $_" }
+        catch { Write-DebugLog "Set-Clipboard failed (headless/remote session?): $_" }
     }
 }
 
 function Clear-Dir($path, $label) {
-    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Clear-Dir skipped for $path"; return 0 }
-    if (-not (Test-Path $path)) { Write-Debug "${label}: not found ($path)"; return 0 }
+    if ($SCRIPT:DryRun) { Write-DebugLog "DRY-RUN: Clear-Dir skipped for $path"; return 0 }
+    if (-not (Test-Path $path)) { Write-DebugLog "${label}: not found ($path)"; return 0 }
     $items = Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue
     $files = @($items | Where-Object { -not $_.PSIsContainer })
     $n = $files.Count
@@ -325,7 +474,7 @@ function Clear-Dir($path, $label) {
     $remaining = @(Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer }).Count
     $del = [math]::Max(0, $n - $remaining)
     Write-OK "${label}: $del deleted$(if($remaining){" ($remaining locked — normal)"})"
-    Write-Debug "${label}: del=$del locked=$remaining path=$path"
+    Write-DebugLog "${label}: del=$del locked=$remaining path=$path"
     return $del
 }
 
@@ -374,7 +523,7 @@ function Test-SystemCompatibility {
 
     # Missing AppX cmdlets (Server Core, minimal installs)
     if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
-        Write-Debug "AppX cmdlets not available — debloat package removal will be skipped."
+        Write-DebugLog "AppX cmdlets not available — debloat package removal will be skipped."
         $warnings++
     }
 
@@ -384,23 +533,22 @@ function Test-SystemCompatibility {
 }
 
 # ── Verification counter infrastructure ─────────────────────────────────────
-# Uses $global: scope so counters work regardless of how this file is loaded
-# (dot-source, Import-Module, or ScriptsToProcess). Callers initialize via
-# Initialize-VerifyCounters and read via Get-VerifyCounters.
+# Uses $Script: scope (caller's scope via dot-sourcing). Entry-point scripts
+# must call Initialize-VerifyCounters before use to reset stale values.
 
 function Initialize-VerifyCounters {
-    $global:_verifyOkCount      = 0
-    $global:_verifyChangedCount = 0
-    $global:_verifyMissingCount = 0
-    $global:_verifyInfoCount    = 0
+    $Script:_verifyOkCount      = 0
+    $Script:_verifyChangedCount = 0
+    $Script:_verifyMissingCount = 0
+    $Script:_verifyInfoCount    = 0
 }
 
 function Get-VerifyCounters {
     return @{
-        okCount      = [int]$global:_verifyOkCount
-        changedCount = [int]$global:_verifyChangedCount
-        missingCount = [int]$global:_verifyMissingCount
-        infoCount    = [int]$global:_verifyInfoCount
+        okCount      = [int]$Script:_verifyOkCount
+        changedCount = [int]$Script:_verifyChangedCount
+        missingCount = [int]$Script:_verifyMissingCount
+        infoCount    = [int]$Script:_verifyInfoCount
     }
 }
 
@@ -418,7 +566,7 @@ function Test-RegistryCheck {
             $val = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
             $result = $val.$Name
         }
-    } catch { Write-Debug "Test-RegistryCheck: could not read '$Name' from '$Path'" }
+    } catch { Write-DebugLog "Test-RegistryCheck: could not read '$Name' from '$Path'" }
 
     $status = if ($null -eq $result) { "MISSING" } elseif ($result -eq $Expected) { "OK" } else { "CHANGED" }
 
@@ -430,11 +578,11 @@ function Test-RegistryCheck {
         "MISSING" {
             Write-Host "  ?  MISSING   $Label" -ForegroundColor Red
             Write-Host "               $Path\$Name" -ForegroundColor DarkGray
-            $global:_verifyMissingCount++
+            $Script:_verifyMissingCount++
         }
         "OK" {
             Write-Host "  ✓  OK        $Label  ($result)" -ForegroundColor Green
-            $global:_verifyOkCount++
+            $Script:_verifyOkCount++
         }
         "CHANGED" {
             Write-Host "  ✗  CHANGED   $Label  (is: $result, expected: $Expected)" -ForegroundColor Yellow
@@ -443,7 +591,7 @@ function Test-RegistryCheck {
             if ($Path -match '\\Policies\\') {
                 Write-Host "               NOTE: This key is under a Policies path — may be managed by Group Policy" -ForegroundColor DarkYellow
             }
-            $global:_verifyChangedCount++
+            $Script:_verifyChangedCount++
         }
     }
     # No return value when not -Quiet — prevents stdout clutter in Verify-Settings.ps1
@@ -469,13 +617,13 @@ function Test-ServiceCheck {
         }
         if ($startType -eq $ExpectedStartType) {
             Write-Host "  ✓  OK        $Label  (StartType: $startType, Status: $($svc.Status))" -ForegroundColor Green
-            $global:_verifyOkCount++
+            $Script:_verifyOkCount++
         } else {
             Write-Host "  ✗  CHANGED   $Label  (StartType: $startType, expected: $ExpectedStartType)" -ForegroundColor Yellow
-            $global:_verifyChangedCount++
+            $Script:_verifyChangedCount++
         }
     } catch {
         Write-Host "  ?  MISSING   $Label  (Service not found)" -ForegroundColor Red
-        $global:_verifyMissingCount++
+        $Script:_verifyMissingCount++
     }
 }

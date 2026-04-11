@@ -379,3 +379,64 @@ Describe "Initialize-ScriptDefaults" {
         $SCRIPT:Profile  | Should -Be "RECOMMENDED"
     }
 }
+
+Describe "Copy-PhaseRuntimePayload" {
+
+    BeforeEach {
+        Reset-TestState
+        $script:PayloadSource = Join-Path $SCRIPT:TestTempRoot "payload-src"
+        $script:PayloadDest = Join-Path $SCRIPT:TestTempRoot "payload-dest"
+        New-Item -ItemType Directory -Path (Join-Path $script:PayloadSource "helpers") -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $script:PayloadSource "cfgs") -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $script:PayloadSource "docs") -Force | Out-Null
+        foreach ($file in @(
+            "SafeMode-DriverClean.ps1",
+            "PostReboot-Setup.ps1",
+            "Guide-VideoSettings.ps1",
+            "helpers.ps1",
+            "config.env.ps1"
+        )) {
+            Set-Content (Join-Path $script:PayloadSource $file) -Value "# $file" -Encoding UTF8
+        }
+        Set-Content (Join-Path $script:PayloadSource "helpers/helper.ps1") -Value "# helper" -Encoding UTF8
+        Set-Content (Join-Path $script:PayloadSource "cfgs/net_highping.cfg") -Value "cfg" -Encoding UTF8
+        Set-Content (Join-Path $script:PayloadSource "docs/video.txt") -Value "video" -Encoding UTF8
+        Set-Content (Join-Path $script:PayloadSource "docs/nvidia-drs-settings.md") -Value "drs" -Encoding UTF8
+        Mock Write-OK {}
+    }
+
+    It "copies the shared runtime payload, cfgs, and repo-local docs in one pass" {
+        Copy-PhaseRuntimePayload -SourceRoot $script:PayloadSource -DestinationRoot $script:PayloadDest
+
+        Test-Path (Join-Path $script:PayloadDest "SafeMode-DriverClean.ps1") | Should -Be $true
+        Test-Path (Join-Path $script:PayloadDest "helpers/helper.ps1") | Should -Be $true
+        Test-Path (Join-Path $script:PayloadDest "cfgs/net_highping.cfg") | Should -Be $true
+        Test-Path (Join-Path $script:PayloadDest "docs/video.txt") | Should -Be $true
+        Test-Path (Join-Path $script:PayloadDest "docs/nvidia-drs-settings.md") | Should -Be $true
+    }
+}
+
+Describe "Phase 1 Safe Mode readiness marker" {
+
+    BeforeEach {
+        Reset-TestState
+        Mock Set-SecureAcl {}
+    }
+
+    It "persists the Safe Mode readiness flag into state.json" {
+        Save-JsonAtomic -Data ([PSCustomObject]@{
+            profile = "RECOMMENDED"
+            mode = "AUTO"
+        }) -Path $CFG_StateFile
+
+        Set-Phase1SafeModeReadyFlag -Path $CFG_StateFile | Out-Null
+
+        $saved = Get-Content $CFG_StateFile -Raw | ConvertFrom-Json
+        $saved.phase1SafeModeReady | Should -Be $true
+    }
+
+    It "detects the readiness marker only when explicitly set" {
+        Test-Phase1SafeModeReady -State ([PSCustomObject]@{ profile = "RECOMMENDED" }) | Should -Be $false
+        Test-Phase1SafeModeReady -State ([PSCustomObject]@{ phase1SafeModeReady = $true }) | Should -Be $true
+    }
+}

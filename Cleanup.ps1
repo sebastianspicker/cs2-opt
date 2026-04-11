@@ -17,9 +17,10 @@
   -> Sudden stutter that wasn't there before             -> Full
   -> Routine before matches / tournaments                -> Quick
 #>
+param([switch]$SmokeTest)
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
@@ -27,6 +28,12 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Initialize-ScriptDefaults
 Initialize-PhaseCounters
 Ensure-Dir $CFG_LogDir
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: Cleanup" -ForegroundColor Green
+    exit 0
+}
+
 Write-LogoBanner "Cleanup / Soft-Reset  ·  CS2 Optimization Suite"
 
 Write-Host @"
@@ -246,7 +253,7 @@ if ($doDriver) {
         try {
             $st = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json
             if ($st.gpuInput -in @("1","2","3","4")) { $gpuVendorOk = $true }
-        } catch { Write-Debug "State file read failed: $_" }
+        } catch { Write-DebugLog "State file read failed: $_" }
     }
     if (-not $gpuVendorOk) {
         Write-Warn "GPU vendor not found in state — please confirm:"
@@ -266,7 +273,7 @@ if ($doDriver) {
             }
             $st | Add-Member -NotePropertyName "gpuInput" -NotePropertyValue $gpuChoice -Force
             Save-JsonAtomic -Data $st -Path $CFG_StateFile
-        } catch { Write-Debug "Could not persist GPU choice: $_" }
+        } catch { Write-DebugLog "Could not persist GPU choice: $_" }
     }
 
     Write-Warn "Requires restart into Safe Mode."
@@ -278,29 +285,7 @@ if ($doDriver) {
     }
 
     try {
-        foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
-            if (Test-Path "$ScriptRoot\$f") {
-                Copy-Item "$ScriptRoot\$f" "$CFG_WorkDir\$f" -Force -ErrorAction Stop
-            } else {
-                throw "Required file missing: $ScriptRoot\$f"
-            }
-        }
-        # Copy helpers module directory
-        $helpersSrc = "$ScriptRoot\helpers"
-        if (Test-Path $helpersSrc) {
-            Ensure-Dir "$CFG_WorkDir\helpers"
-            Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
-        } else {
-            throw "helpers/ directory not found at $helpersSrc"
-        }
-        # Copy cfgs/ directory (network condition CFGs needed by PostReboot-Setup)
-        $cfgsSrc = "$ScriptRoot\cfgs"
-        if (Test-Path $cfgsSrc) {
-            Ensure-Dir "$CFG_WorkDir\cfgs"
-            Copy-Item "$cfgsSrc\*" "$CFG_WorkDir\cfgs\" -Force -Recurse -ErrorAction Stop
-        } else {
-            Write-Debug "cfgs/ directory not found at $cfgsSrc — network condition CFGs will not be available after reboot"
-        }
+        Copy-PhaseRuntimePayload -SourceRoot $ScriptRoot -DestinationRoot $CFG_WorkDir
     } catch {
         Write-Err "Driver Refresh: failed to copy scripts — $_"
         Write-Info "Ensure all suite files are in: $ScriptRoot"
@@ -315,7 +300,7 @@ if ($doDriver) {
     Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1" -SafeMode
     $SCRIPT:CurrentStepTitle = "Driver Refresh — Safe Mode boot"
     $null = Set-BootConfig "safeboot" "minimal" "Driver Refresh — Safe Mode for GPU driver clean"
-    try { Flush-BackupBuffer } catch { Write-Debug "Flush after boot config backup failed: $_" }
+    try { Flush-BackupBuffer } catch { Write-DebugLog "Flush after boot config backup failed: $_" }
 
     # Verify safeboot flag — retry with explicit {current} if first attempt failed
     if (-not (Test-BootConfigSet "safeboot")) {
@@ -328,6 +313,7 @@ if ($doDriver) {
         return
     }
 
+    if ($SCRIPT:DryRun) { Write-Info "[DRY-RUN] Would restart into Safe Mode."; return }
     Write-Host "  Restarting in 10 seconds..." -ForegroundColor Yellow
     Start-Sleep 10; Restart-Computer -Force; exit 0
 }

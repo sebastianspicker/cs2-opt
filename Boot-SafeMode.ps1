@@ -13,11 +13,18 @@
   through all 38 Phase 1 steps again.
 #>
 
+param([switch]$SmokeTest)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: Boot-SafeMode" -ForegroundColor Green
+    exit 0
+}
 
 Ensure-Dir $CFG_WorkDir
 Ensure-Dir $CFG_LogDir
@@ -30,7 +37,7 @@ Write-Host "   BOOT TO SAFE MODE  --  GPU Driver Clean (Phase 2)" -ForegroundCol
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# -- Verify state.json exists (Phase 1 must have been run at least once) ------
+# -- Verify state.json exists and the Phase 1 handoff was actually prepared ----
 $stateExists = Test-Path $CFG_StateFile
 if (-not $stateExists) {
     Write-Warn "state.json not found at $CFG_StateFile"
@@ -48,6 +55,14 @@ try {
     Write-Info "Re-run Phase 1 from START.bat -> [1] to fix."
     Read-Host "  Press Enter to return"
     exit 1
+}
+
+if (-not (Test-Phase1SafeModeReady -State $state)) {
+    Write-Warn "state.json exists, but Phase 1 Safe Mode prep is not marked complete."
+    Write-Info "GUI settings alone do not prepare the reboot payload."
+    Write-Info "Run START.bat -> [1] and complete Step 38 before using this shortcut."
+    Read-Host "  Press Enter to return"
+    exit 0
 }
 
 # Show current GPU config
@@ -83,28 +98,7 @@ if ($confirm -notmatch "^[jJyY]$") {
 Write-Host ""
 Write-Step "Copying scripts to $CFG_WorkDir..."
 Ensure-Dir $CFG_WorkDir
-
-foreach ($f in @("SafeMode-DriverClean.ps1","PostReboot-Setup.ps1","Guide-VideoSettings.ps1","helpers.ps1","config.env.ps1")) {
-    $src = "$ScriptRoot\$f"
-    if (Test-Path $src) {
-        Copy-Item $src "$CFG_WorkDir\$f" -Force -ErrorAction Stop
-        Write-OK "Copied: $f"
-    } else {
-        Write-Err "Missing: $f"
-        throw "Required file missing: $f"
-    }
-}
-
-# Copy helpers module directory
-$helpersSrc = "$ScriptRoot\helpers"
-if (Test-Path $helpersSrc) {
-    Ensure-Dir "$CFG_WorkDir\helpers"
-    Copy-Item "$helpersSrc\*" "$CFG_WorkDir\helpers\" -Force -Recurse -ErrorAction Stop
-    Write-OK "Copied: helpers/ directory"
-} else {
-    Write-Err "Missing: helpers/ directory"
-    throw "Required directory missing: helpers/"
-}
+Copy-PhaseRuntimePayload -SourceRoot $ScriptRoot -DestinationRoot $CFG_WorkDir
 
 # -- 2. Register Phase 2 RunOnce ----------------------------------------------
 Write-Step "Registering Phase 2 for Safe Mode boot..."
