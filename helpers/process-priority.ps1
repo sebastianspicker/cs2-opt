@@ -31,7 +31,7 @@ function Get-X3DCcdInfo {
         CCD0 always contains cores 0..(ccd0Cores-1).
     #>
     try {
-        $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+        $cpu = Get-CachedCpuInfo
     } catch { return $null }
 
     if ($cpu.Name -notmatch "X3D") { return $null }
@@ -102,6 +102,8 @@ function Set-CS2ProcessPriority {
 
         DRY-RUN: IFEO write intercepted by Set-RegistryValue. Task printed only.
     #>
+    [CmdletBinding()]
+    param()
 
     # ── 1. IFEO PerfOptions — persistent High priority ────────────────
     $ifeoPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\cs2.exe\PerfOptions"
@@ -286,12 +288,12 @@ function Remove-CS2ProcessPriority {
         if ($task) {
             if ($task.State -eq "Running") {
                 Stop-ScheduledTask -TaskName $CS2_AffinityTaskName -ErrorAction SilentlyContinue
-                Write-Debug "Stopped running task '$CS2_AffinityTaskName' before unregistering"
+                Write-DebugLog "Stopped running task '$CS2_AffinityTaskName' before unregistering"
             }
             Unregister-ScheduledTask -TaskName $CS2_AffinityTaskName -Confirm:$false
             Write-OK "Removed scheduled task: $CS2_AffinityTaskName"
         }
-    } catch { Write-Debug "Task removal: $_" }
+    } catch { Write-DebugLog "Task removal: $_" }
 
     # Remove affinity script
     if (Test-Path $CS2_AffinityScriptPath) {

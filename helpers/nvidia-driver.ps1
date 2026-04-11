@@ -104,7 +104,7 @@ function Get-LatestNvidiaDriver {
             # Upgrade http:// to https://
             if ($downloadUrl -match "^http://") {
                 $downloadUrl = $downloadUrl -replace "^http://", "https://"
-                Write-Debug "Upgraded driver URL to HTTPS"
+                Write-DebugLog "Upgraded driver URL to HTTPS"
             }
             # Validate the download domain is NVIDIA
             if ($downloadUrl -notmatch '^https://([\w.-]+\.)?nvidia\.com/') {
@@ -123,7 +123,7 @@ function Get-LatestNvidiaDriver {
             }
         }
     } catch {
-        Write-Debug "NVIDIA API lookup failed: $_"
+        Write-DebugLog "NVIDIA API lookup failed: $_"
     } finally {
         $global:ProgressPreference = $oldPP
     }
@@ -194,6 +194,7 @@ function Install-NvidiaDriverClean {
         NVDisplay.ContainerLocalSystem is intentionally kept — it's required for the
         NVIDIA Control Panel to function.
     #>
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [string]$DriverExe
@@ -237,7 +238,7 @@ function Install-NvidiaDriverClean {
             $sigConfirm = Read-Host "  Continue anyway? [y/N]"
             if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
         } else {
-            Write-Debug "Driver Authenticode signature valid: $sigSubject"
+            Write-DebugLog "Driver Authenticode signature valid: $sigSubject"
         }
     } else {
         Write-Warn "Driver .exe has no valid Authenticode signature (status: $(if($sig){$sig.Status}else{'N/A'}))"
@@ -348,7 +349,7 @@ function Install-NvidiaDriverClean {
             foreach ($item in $items) {
                 Remove-Item $item.FullName -Recurse -Force -ErrorAction SilentlyContinue
                 $removedCount++
-                Write-Debug "Removed: $($item.Name)"
+                Write-DebugLog "Removed: $($item.Name)"
             }
         }
         Write-ActionOK "Removed $removedCount bloat components from package."
@@ -391,7 +392,7 @@ function Install-NvidiaDriverClean {
                     Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
                     Write-OK "Removed AppX: $($pkg.Name)"
                 } catch {
-                    Write-Debug "AppX removal: $($pkg.Name) — $_"
+                    Write-DebugLog "AppX removal: $($pkg.Name) — $_"
                 }
             }
         }
@@ -415,7 +416,7 @@ function Install-NvidiaDriverClean {
             if (Test-Path $dir) {
                 Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
                 $removedBloat++
-                Write-Debug "Removed: $dir"
+                Write-DebugLog "Removed: $dir"
             }
         }
         if ($removedBloat -gt 0) { Write-ActionOK "Removed $removedBloat NVIDIA bloat directories." }
@@ -427,8 +428,8 @@ function Install-NvidiaDriverClean {
             foreach ($t in $tasks) {
                 try {
                     Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false -ErrorAction Stop
-                    Write-Debug "Removed task: $($t.TaskName)"
-                } catch { Write-Debug "Task removal: $($t.TaskName) — $_" }
+                    Write-DebugLog "Removed task: $($t.TaskName)"
+                } catch { Write-DebugLog "Task removal: $($t.TaskName) — $_" }
             }
         }
         Write-ActionOK "Full-install bloat cleanup complete."
@@ -452,7 +453,7 @@ function Install-NvidiaDriverClean {
                     Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
                     Write-ActionOK "Disabled: $svc"
                 }
-            } catch { Write-Debug "Bloat service ${svc}: $_" }
+            } catch { Write-DebugLog "Bloat service ${svc}: $_" }
         }
 
         # Remove GFE / NVIDIA App scheduled tasks
@@ -464,7 +465,7 @@ function Install-NvidiaDriverClean {
                     Disable-ScheduledTask -TaskName $t.TaskName -ErrorAction SilentlyContinue | Out-Null
                     Write-ActionOK "Disabled task: $($t.TaskName)"
                 }
-            } catch { Write-Debug "Bloat task ${pattern}: $_" }
+            } catch { Write-DebugLog "Bloat task ${pattern}: $_" }
         }
     }
 
@@ -543,7 +544,7 @@ function Apply-NvidiaPostInstallTweaks {
                 } else {
                     Write-Host "  [DRY-RUN] Would stop + disable: ${svc}" -ForegroundColor Magenta
                 }
-            } catch { Write-Debug "Telemetry service ${svc}: $_" }
+            } catch { Write-DebugLog "Telemetry service ${svc}: $_" }
         }
         Write-ActionOK "NVIDIA telemetry services disabled (if present)."
 

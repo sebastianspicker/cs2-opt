@@ -456,7 +456,7 @@ if ($startStep -le 33) {
                         Write-Blank
                     }
                 }
-            } catch { Write-Debug "Audio device detection failed." }
+            } catch { Write-DebugLog "Audio device detection failed." }
 
             Write-Blank
             Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan

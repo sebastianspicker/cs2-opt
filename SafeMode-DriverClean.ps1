@@ -30,12 +30,18 @@
         All steps completed. System reboots normally. RunOnce fires Phase 3.
         - This is equivalent to a normal power cycle — no data loss risk.
 #>
+param([switch]$SmokeTest)
 
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: SafeMode-DriverClean" -ForegroundColor Green
+    exit 0
+}
 
 try {
     $state = Load-State $CFG_StateFile
@@ -58,7 +64,7 @@ try {
                Where-Object { $_.Status -eq "OK" } | Select-Object -First 1
         if ($gpu.Name -match "AMD|Radeon") { $detectedGpu = "3" }
         elseif ($gpu.Name -match "Intel") { $detectedGpu = "4" }
-    } catch { Write-Debug "GPU auto-detection via WMI failed in Safe Mode: $_" }
+    } catch { Write-DebugLog "GPU auto-detection via WMI failed in Safe Mode: $_" }
     $state = [PSCustomObject]@{ gpuInput=$detectedGpu; mode="CONTROL"; logLevel="NORMAL"; profile="RECOMMENDED"; fpsCap=0; avgFps=0; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
     $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
 }

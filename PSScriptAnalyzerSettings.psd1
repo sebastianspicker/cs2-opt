@@ -19,9 +19,7 @@
         # process-priority.ps1 affinity, CS2-Optimize-GUI.ps1 teardown (4x)
         'PSAvoidUsingEmptyCatchBlock',
 
-        # Verify counters use $global: scope intentionally so they work
-        # regardless of how system-utils.ps1 is loaded (dot-source, module, etc.)
-        # Also: $global:ProgressPreference for PS 5.1 Invoke-WebRequest compat
+        # $global:ProgressPreference needed for PS 5.1 Invoke-WebRequest compat
         'PSAvoidGlobalVars',
 
         # config.env.ps1 exports variables consumed via dot-sourcing;
@@ -40,8 +38,8 @@
         # (Restore-DrsSettings, Backup-DrsSettings, etc.)
         'PSUseSingularNouns',
 
-        # logging.ps1 intentionally overrides Write-Log and Write-Debug
-        # with custom implementations for the suite's logging system
+        # logging.ps1 overrides Write-Log with a custom implementation
+        # for the suite's logging system (Write-Debug renamed to Write-DebugLog)
         'PSAvoidOverwritingBuiltInCmdlets',
 
         # Some params are used inside scriptblocks passed to Invoke-DrsSession

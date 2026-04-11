@@ -3,6 +3,7 @@
 #  CS2-Optimize-GUI.ps1  —  WPF Dashboard
 #  Launch via START-GUI.bat
 # ==============================================================================
+param([switch]$SmokeTest)
 
 if ($SmokeTest) {
     Write-Host "SMOKE TEST OK: CS2-Optimize-GUI" -ForegroundColor Green
@@ -21,6 +22,11 @@ $Script:Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path $MyInvocat
 . "$Script:Root\helpers.ps1"
 . "$Script:Root\helpers\step-catalog.ps1"
 . "$Script:Root\helpers\system-analysis.ps1"
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: CS2-Optimize-GUI" -ForegroundColor Green
+    exit 0
+}
 
 # ── Async engine ──────────────────────────────────────────────────────────────
 $Script:Pool   = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 3)
@@ -53,15 +59,23 @@ function Invoke-Async {
         if ($capturedHandle.IsCompleted) {
             $timer.Stop()
             $errorOccurred = $false
-            try { $capturedRs.EndInvoke($capturedHandle) } catch { $capturedUISync.AsyncError = $_.Exception.Message; $errorOccurred = $true }
+            try { $capturedRs.EndInvoke($capturedHandle) } catch { $capturedUISync.AsyncError = "$($_.Exception.GetType().Name): $($_.Exception.Message)"; $errorOccurred = $true }
             finally { $capturedRs.Dispose() }
             if ($errorOccurred) {
-                $capturedWindow.Dispatcher.Invoke({
-                    [System.Windows.MessageBox]::Show("Background task error: $($capturedUISync.AsyncError)", "Error", "OK", "Error")
-                })
+                if ($capturedWindow) {
+                    $capturedWindow.Dispatcher.Invoke({
+                        [System.Windows.MessageBox]::Show("Background task error: $($capturedUISync.AsyncError)", "Error", "OK", "Error")
+                    })
+                }
                 $capturedUISync.AsyncError = $null
             } else {
-                & $capturedDone
+                try { & $capturedDone } catch {
+                    if ($capturedWindow) {
+                        $capturedWindow.Dispatcher.Invoke({
+                            [System.Windows.MessageBox]::Show("Callback error: $($_.Exception.Message)", "Error", "OK", "Error")
+                        })
+                    }
+                }
             }
             $capturedTimers.Remove($timer)
         }
@@ -508,7 +522,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
           <Border Width="4" Height="16" Background="#e8520a" CornerRadius="2" Margin="0,0,8,0" VerticalAlignment="Center"/>
           <TextBlock Text="CS2" FontSize="14" FontWeight="Bold" Foreground="#e8520a" VerticalAlignment="Center"/>
           <TextBlock Text=" OPTIMIZE" FontSize="14" FontWeight="Bold" Foreground="#f0f0f0" VerticalAlignment="Center"/>
-          <TextBlock Text="  v2.1" FontSize="10" Foreground="#4b5563" VerticalAlignment="Center" Margin="4,1,0,0"/>
+          <TextBlock x:Name="TitleVersion" Text="" FontSize="10" Foreground="#4b5563" VerticalAlignment="Center" Margin="4,1,0,0"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
           <Button x:Name="BtnMin"   Content="─"  Style="{StaticResource WinBtn}"/>
@@ -557,6 +571,17 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
         <ScrollViewer x:Name="PanelDashboard" Visibility="Visible" VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="28,20,28,28">
             <TextBlock Text="Dashboard" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,20"/>
+
+            <Border x:Name="DashDriftBanner" Visibility="Collapsed"
+                    Background="#1f1408" BorderBrush="#fbbf24" BorderThickness="1"
+                    CornerRadius="6" Padding="14" Margin="0,0,0,18">
+              <StackPanel>
+                <TextBlock x:Name="DashDriftBannerTitle" Text="Configuration Drift Detected"
+                           FontSize="12" FontWeight="Bold" Foreground="#fbbf24"/>
+                <TextBlock x:Name="DashDriftBannerText" Text=""
+                           TextWrapping="Wrap" FontSize="11" Foreground="#d1d5db" Margin="0,4,0,0"/>
+              </StackPanel>
+            </Border>
 
             <TextBlock Text="SYSTEM" Style="{StaticResource SectionHeader}"/>
             <UniformGrid Columns="4" Margin="0,0,0,12">
@@ -1005,7 +1030,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
                 <StackPanel Orientation="Horizontal">
                   <Border Width="3" Height="14" Background="#e8520a" CornerRadius="1" Margin="0,0,8,0" VerticalAlignment="Center"/>
                   <TextBlock Text="CS2 Optimization Suite" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                  <TextBlock Text="  v2.1" FontSize="11" Foreground="#6b7280" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="SettingsVersion" Text="" FontSize="11" Foreground="#6b7280" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Text="MIT License" FontSize="11" Foreground="#6b7280" Margin="0,6,0,0"/>
               </StackPanel>
@@ -1025,7 +1050,15 @@ $Window = [Windows.Markup.XamlReader]::Load($reader)
 $reader.Dispose()
 
 # ── Named element shortcuts ───────────────────────────────────────────────────
-function El { $Window.FindName($args[0]) }
+function El {
+    $e = $Window.FindName($args[0])
+    if ($null -eq $e) { Write-Warning "El: XAML element '$($args[0])' not found" }
+    $e
+}
+
+# ── Version labels (from config.env.ps1) ─────────────────────────────────────
+(El "TitleVersion").Text    = "  $CFG_Version"
+(El "SettingsVersion").Text = "  $CFG_Version"
 
 # ── Window chrome ─────────────────────────────────────────────────────────────
 (El "TitleBar").Add_MouseLeftButtonDown({ $Window.DragMove() })
@@ -1048,18 +1081,6 @@ $Script:ActivePanel = "PanelDashboard"
 
 $ActiveStyle   = $Window.Resources["NavBtnActive"]
 $InactiveStyle = $Window.Resources["NavBtn"]
-
-function Switch-Panel {
-    param([string]$PanelName, [scriptblock]$OnSwitch = $null)
-    foreach ($p in $Script:AllPanels) {
-        (El $p).Visibility = if ($p -eq $PanelName) { "Visible" } else { "Collapsed" }
-    }
-    foreach ($kv in $Script:NavMap.GetEnumerator()) {
-        (El $kv.Value).Style = if ($kv.Key -eq $PanelName) { $ActiveStyle } else { $InactiveStyle }
-    }
-    $Script:ActivePanel = $PanelName
-    if ($OnSwitch) { & $OnSwitch }
-}
 
 (El "NavDashboard").Add_Click({ Switch-Panel "PanelDashboard"; Load-Dashboard })
 (El "NavAnalyze"  ).Add_Click({ Switch-Panel "PanelAnalyze" ; Start-Analysis })
@@ -1098,12 +1119,16 @@ function Update-SidebarStatus {
 # ══════════════════════════════════════════════════════════════════════════════
 $Window.Add_Loaded({
     Update-SidebarStatus
+    Update-StartupDriftBanner
     Load-Dashboard
 })
 
 $Window.Add_Closed({
     $Script:Closing = $true
-    foreach ($t in $Script:AsyncTimers) { try { $t.Stop() } catch {} }
+    # Snapshot the list before iterating — Tick handlers call Remove($timer) on this
+    # same list, which would throw InvalidOperationException during enumeration.
+    $timersSnapshot = @($Script:AsyncTimers)
+    foreach ($t in $timersSnapshot) { try { $t.Stop() } catch {} }
     try { $Script:Pool.Close(); $Script:Pool.Dispose() } catch {}
 })
 

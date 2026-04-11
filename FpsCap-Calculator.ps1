@@ -8,16 +8,25 @@
   Parameter:
     -ManualAvg  Provide avg FPS directly (skips input dialog)
 #>
-param([int]$ManualAvg = 0)
+param(
+    [int]$ManualAvg = 0,
+    [switch]$SmokeTest
+)
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$ScriptRoot\config.env.ps1"
 . "$ScriptRoot\helpers.ps1"
 
 Initialize-ScriptDefaults
 Ensure-Dir $CFG_LogDir
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: FpsCap-Calculator" -ForegroundColor Green
+    exit 0
+}
+
 Write-LogoBanner "FPS Cap Calculator  [T1]  ·  CS2 Optimization Suite"
 Write-Host "  $("─" * 58)" -ForegroundColor DarkGray
 
@@ -135,7 +144,7 @@ if ($p1 -gt 0) {
 
 "$cap" | Set-ClipboardSafe
 Write-OK "FPS cap $cap copied to clipboard."
-Write-Debug "FPS cap calculated: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
+Write-DebugLog "FPS cap calculated: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
 
 # Update state and record benchmark (skip in DRY-RUN)
 if (-not $SCRIPT:DryRun) {
@@ -147,7 +156,7 @@ if (-not $SCRIPT:DryRun) {
             if ($p1 -gt 0) { $st | Add-Member -NotePropertyName "p1Fps" -NotePropertyValue $p1 -Force }
             $st | Add-Member -NotePropertyName "capDate" -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm") -Force
             Save-JsonAtomic -Data $st -Path $CFG_StateFile
-        } catch { Write-Debug "Could not persist FPS cap data: $_" }
+        } catch { Write-DebugLog "Could not persist FPS cap data: $_" }
     }
     if ($p1 -gt 0) {
         Add-BenchmarkResult -AvgFps $avg -P1Fps $p1 -Label "FpsCap-Calculator" -Runs $result.Runs | Out-Null
@@ -157,7 +166,11 @@ if (-not $SCRIPT:DryRun) {
             Show-BenchmarkComparison
         }
     }
-    Add-Content $CFG_LogFile "[$(Get-Date -Format HH:mm:ss)][OK] FPS-Cap: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)" -Encoding UTF8 -ErrorAction SilentlyContinue
+    try {
+        Add-TextFileUtf8Line -Path $CFG_LogFile -Value "[$(Get-Date -Format HH:mm:ss)][OK] FPS-Cap: avg=$avg p1=$p1 cap=$cap runs=$($result.Runs)"
+    } catch {
+        Write-DebugLog "Could not append FPS cap log entry: $_"
+    }
 }
 
 # ── Guide to set cap ─────────────────────────────────────────────────────────

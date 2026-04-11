@@ -1,9 +1,10 @@
 ﻿# ==============================================================================
 #  tests/integration/backup-restore-roundtrip.Tests.ps1
-#  End-to-end roundtrip for all 6 backup types.
+#  End-to-end roundtrip for backup/restore entry types.
 # ==============================================================================
 #
-#  Backup types: registry, service, bootconfig, powerplan, drs, scheduledtask
+#  Core backup types: registry, service, bootconfig, powerplan, drs, scheduledtask
+#  Extended backup types: nic_adapter, qos_uro, defender, pagefile, dns
 #  Each test: write -> backup.json captures previous -> restore writes back
 
 BeforeAll {
@@ -29,7 +30,7 @@ Describe "Registry backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -142,7 +143,7 @@ Describe "Service backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -218,7 +219,7 @@ Describe "BootConfig backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -272,7 +273,8 @@ Describe "BootConfig backup and restore roundtrip" {
 
         # Mock bcdedit for restore
         Mock bcdedit {
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $args })
+            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
@@ -294,7 +296,8 @@ Describe "BootConfig backup and restore roundtrip" {
         Flush-BackupBuffer
 
         Mock bcdedit {
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $args })
+            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
@@ -320,7 +323,7 @@ Describe "PowerPlan backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -362,7 +365,7 @@ Describe "ScheduledTask backup and restore roundtrip" {
         New-TestBackupFile -Entries @()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -441,7 +444,7 @@ Describe "Flush-BackupBuffer integration" {
 
         New-TestBackupFile -Entries @()
 
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Flush writes pending entries to backup.json and clears buffer" {
@@ -481,7 +484,7 @@ Describe "Corrupted backup.json recovery" {
         Reset-IntegrationState
         $SCRIPT:DryRun = $false
 
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Warn {}
         Mock Write-Host {}
     }
@@ -502,8 +505,8 @@ Describe "Corrupted backup.json recovery" {
 
         Get-BackupDataRaw
 
-        # A .corrupt.* file should have been created
-        $corruptFiles = Get-ChildItem (Split-Path $CFG_BackupFile -Parent) -Filter "backup.json.corrupt.*"
+        # A .corrupt.*.json file should have been created
+        $corruptFiles = Get-ChildItem (Split-Path $CFG_BackupFile -Parent) -Filter "backup.corrupt.*.json"
         $corruptFiles.Count | Should -BeGreaterOrEqual 1
     }
 
@@ -532,7 +535,7 @@ Describe "Restore security validation" {
         $SCRIPT:DryRun = $false
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Write-Warn {}
         Mock Write-Step {}
@@ -600,5 +603,331 @@ Describe "Restore security validation" {
         Restore-StepChanges -StepTitle "Power Tamper"
 
         Should -Not -Invoke powercfg
+    }
+}
+
+# ── NIC adapter backup/restore roundtrip ─────────────────────────────────────
+Describe "NIC adapter backup and restore roundtrip" {
+
+    BeforeEach {
+        Reset-IntegrationState
+        $SCRIPT:DryRun = $false
+        $SCRIPT:CurrentStepTitle = "NIC Test Step"
+        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+
+        New-TestBackupFile -Entries @()
+
+        Mock Write-Host {}
+        Mock Write-DebugLog {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Step {}
+        Mock Write-Info {}
+    }
+
+    It "restores nic_adapter entries via Set-NetAdapterAdvancedProperty" {
+        Mock Get-NetAdapter {
+            [PSCustomObject]@{ Name = "Ethernet"; InterfaceDescription = "Intel NIC" }
+        }
+
+        Backup-NicAdapterProperty -AdapterName "Ethernet" -PropertyName "EEE" `
+            -OriginalValue "Disabled" -PropertyType "DisplayName" -StepTitle "NIC Test Step"
+        Flush-BackupBuffer
+
+        Mock Set-NetAdapterAdvancedProperty {} -Verifiable
+
+        $result = Restore-StepChanges -StepTitle "NIC Test Step"
+
+        $result | Should -Be $true
+        Should -Invoke Set-NetAdapterAdvancedProperty -Exactly 1 -ParameterFilter {
+            $Name -eq "Ethernet" -and $DisplayName -eq "EEE" -and $DisplayValue -eq "Disabled"
+        }
+    }
+
+    It "retains nic_adapter entries when the adapter identity changed" {
+        Mock Get-NetAdapter {
+            [PSCustomObject]@{ Name = "Ethernet"; InterfaceDescription = "Intel NIC" }
+        }
+
+        Backup-NicAdapterProperty -AdapterName "Ethernet" -PropertyName "EEE" `
+            -OriginalValue "Disabled" -PropertyType "DisplayName" -StepTitle "NIC Test Step"
+        Flush-BackupBuffer
+
+        Mock Get-NetAdapter {
+            [PSCustomObject]@{ Name = "Ethernet"; InterfaceDescription = "Replacement NIC" }
+        }
+        Mock Set-NetAdapterAdvancedProperty {}
+
+        $result = Restore-StepChanges -StepTitle "NIC Test Step"
+
+        $result | Should -Be $false
+        Should -Not -Invoke Set-NetAdapterAdvancedProperty
+        @((Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json).entries).Count | Should -Be 1
+    }
+}
+
+# ── QoS/URO backup/restore roundtrip ────────────────────────────────────────
+Describe "QoS/URO backup and restore roundtrip" {
+
+    BeforeEach {
+        Reset-IntegrationState
+        $SCRIPT:DryRun = $false
+        $SCRIPT:CurrentStepTitle = "QoS Test Step"
+        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+
+        New-TestBackupFile -Entries @()
+
+        Mock Write-Host {}
+        Mock Write-DebugLog {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Step {}
+        Mock Write-Info {}
+    }
+
+    It "removes QoS policies and restores URO state" {
+        Backup-QosAndUro -PolicyNames @("CS2 UDP") -UroState "disabled" -StepTitle "QoS Test Step"
+        Flush-BackupBuffer
+
+        Mock Get-NetQosPolicy { [PSCustomObject]@{ Name = "CS2 UDP" } }
+        Mock Remove-NetQosPolicy {}
+        Mock netsh {
+            $global:LASTEXITCODE = 0
+            "Ok."
+        }
+
+        $result = Restore-StepChanges -StepTitle "QoS Test Step"
+
+        $result | Should -Be $true
+        Should -Invoke Remove-NetQosPolicy -Exactly 1 -ParameterFilter { $Name -eq "CS2 UDP" }
+    }
+
+    It "retains qos_uro entries when policy removal fails" {
+        Backup-QosAndUro -PolicyNames @("CS2 UDP") -UroState "disabled" -StepTitle "QoS Test Step"
+        Flush-BackupBuffer
+
+        Mock Get-NetQosPolicy { [PSCustomObject]@{ Name = "CS2 UDP" } }
+        Mock Remove-NetQosPolicy { throw "Permission denied" }
+        Mock netsh {
+            $global:LASTEXITCODE = 0
+            "Ok."
+        }
+
+        $result = Restore-StepChanges -StepTitle "QoS Test Step"
+
+        $result | Should -Be $false
+        @((Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json).entries).Count | Should -Be 1
+    }
+}
+
+# ── Defender backup/restore roundtrip ───────────────────────────────────────
+Describe "Defender backup and restore roundtrip" {
+
+    BeforeEach {
+        Reset-IntegrationState
+        $SCRIPT:DryRun = $false
+        $SCRIPT:CurrentStepTitle = "Defender Test Step"
+        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+
+        New-TestBackupFile -Entries @()
+
+        Mock Write-Host {}
+        Mock Write-DebugLog {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Step {}
+        Mock Write-Info {}
+    }
+
+    It "removes stored Defender exclusions during restore" {
+        Backup-DefenderExclusions -ExclusionPaths @("C:\Games\CS2") -ExclusionProcesses @("cs2.exe") -StepTitle "Defender Test Step"
+        Flush-BackupBuffer
+
+        Mock Remove-MpPreference {}
+
+        $result = Restore-StepChanges -StepTitle "Defender Test Step"
+
+        $result | Should -Be $true
+        Should -Invoke Remove-MpPreference -Exactly 2
+    }
+
+    It "retains defender entries when exclusion removal fails" {
+        Backup-DefenderExclusions -ExclusionPaths @("C:\Games\CS2") -ExclusionProcesses @("cs2.exe") -StepTitle "Defender Test Step"
+        Flush-BackupBuffer
+
+        Mock Remove-MpPreference { throw "Tamper protection" }
+
+        $result = Restore-StepChanges -StepTitle "Defender Test Step"
+
+        $result | Should -Be $false
+        @((Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json).entries).Count | Should -Be 1
+    }
+}
+
+# ── Pagefile backup/restore roundtrip ───────────────────────────────────────
+Describe "Pagefile backup and restore roundtrip" {
+
+    BeforeEach {
+        Reset-IntegrationState
+        $SCRIPT:DryRun = $false
+        $SCRIPT:CurrentStepTitle = "Pagefile Test Step"
+        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+
+        New-TestBackupFile -Entries @()
+
+        Mock Write-Host {}
+        Mock Write-DebugLog {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Step {}
+        Mock Write-Info {}
+    }
+
+    It "automates pagefile restore and logs that a reboot is required" {
+        Backup-PagefileConfig -AutomaticManaged $false -PagefilePath "C:\pagefile.sys" `
+            -InitialSize 4096 -MaximumSize 8192 -StepTitle "Pagefile Test Step"
+        Flush-BackupBuffer
+
+        $computerSystem = [PSCustomObject]@{ Name = "HOST" }
+        $pagefileSetting = [PSCustomObject]@{ Name = "C:\\pagefile.sys" }
+        Mock Get-CimInstance {
+            if ($ClassName -eq "Win32_ComputerSystem") { return $computerSystem }
+            if ($ClassName -eq "Win32_PageFileSetting") { return $pagefileSetting }
+        }
+        Mock Invoke-PagefileCimUpdate {}
+
+        $result = Restore-StepChanges -StepTitle "Pagefile Test Step"
+
+        $result | Should -Be $true
+        Should -Invoke Invoke-PagefileCimUpdate -Exactly 1 -ParameterFilter {
+            $InputObject -eq $pagefileSetting -and $Property.InitialSize -eq 4096 -and $Property.MaximumSize -eq 8192
+        }
+        Should -Invoke Write-OK -ParameterFilter { $t -match "automated restore completed" }
+        Should -Invoke Write-Info -ParameterFilter { $t -match "reboot is required" }
+    }
+
+    It "falls back to manual instructions and retains the pagefile entry when automation fails" {
+        Backup-PagefileConfig -AutomaticManaged $true -PagefilePath "C:\pagefile.sys" `
+            -InitialSize 0 -MaximumSize 0 -StepTitle "Pagefile Test Step"
+        Flush-BackupBuffer
+
+        Mock Get-CimInstance { throw "CIM unavailable" }
+        Mock Write-Info {}
+
+        $result = Restore-StepChanges -StepTitle "Pagefile Test Step"
+
+        $result | Should -Be $false
+        Should -Invoke Write-Info -ParameterFilter { $t -match "Manual restore: System Properties" }
+        Should -Invoke Write-Warn -ParameterFilter { $t -match "partial success" }
+        Should -Invoke Write-Info -ParameterFilter { $t -match "reboot is required" }
+        @((Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json).entries).Count | Should -Be 1
+    }
+}
+
+# ── DNS backup/restore roundtrip ────────────────────────────────────────────
+Describe "DNS backup and restore roundtrip" {
+
+    BeforeEach {
+        Reset-IntegrationState
+        $SCRIPT:DryRun = $false
+        $SCRIPT:CurrentStepTitle = "DNS Test Step"
+        $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
+
+        New-TestBackupFile -Entries @()
+
+        Mock Write-Host {}
+        Mock Write-DebugLog {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Step {}
+        Mock Write-Info {}
+    }
+
+    It "restores DNS using the current adapter interface index" {
+        Backup-DnsConfig -AdapterName "Ethernet" -InterfaceIndex 12 -OriginalDnsServers @("1.1.1.1", "1.0.0.1") -StepTitle "DNS Test Step"
+        Flush-BackupBuffer
+
+        Mock Get-NetAdapter {
+            [PSCustomObject]@{ Name = "Ethernet"; InterfaceIndex = 99 }
+        }
+        Mock Set-DnsClientServerAddress {}
+
+        $result = Restore-StepChanges -StepTitle "DNS Test Step"
+
+        $result | Should -Be $true
+        Should -Invoke Set-DnsClientServerAddress -Exactly 1 -ParameterFilter {
+            $InterfaceIndex -eq 99 -and @($ServerAddresses).Count -eq 2
+        }
+    }
+
+    It "retains dns entries when restore fails" {
+        Backup-DnsConfig -AdapterName "Ethernet" -InterfaceIndex 12 -OriginalDnsServers @("1.1.1.1") -StepTitle "DNS Test Step"
+        Flush-BackupBuffer
+
+        Mock Get-NetAdapter {
+            [PSCustomObject]@{ Name = "Ethernet"; InterfaceIndex = 12 }
+        }
+        Mock Set-DnsClientServerAddress { throw "Access denied" }
+
+        $result = Restore-StepChanges -StepTitle "DNS Test Step"
+
+        $result | Should -Be $false
+        @((Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json).entries).Count | Should -Be 1
+    }
+}
+
+# ── DRS backup/restore roundtrip ────────────────────────────────────────────
+Describe "DRS backup and restore roundtrip" {
+
+    BeforeEach {
+        Reset-IntegrationState
+        $SCRIPT:DryRun = $false
+
+        Mock Write-Host {}
+        Mock Write-DebugLog {}
+        Mock Write-OK {}
+        Mock Write-Warn {}
+        Mock Write-Step {}
+        Mock Write-Info {}
+    }
+
+    It "delegates drs restore entries to Restore-DrsSettings" {
+        New-TestBackupFile -Entries @(
+            [ordered]@{
+                type = "drs"
+                step = "DRS Test Step"
+                profile = "CS2"
+                profileCreated = $false
+                settings = @([ordered]@{ id = 1; previousValue = 1; existed = $true })
+                timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            }
+        )
+
+        Mock Restore-DrsSettings { $true }
+
+        $result = Restore-StepChanges -StepTitle "DRS Test Step"
+
+        $result | Should -Be $true
+        Should -Invoke Restore-DrsSettings -Exactly 1
+    }
+
+    It "retains drs entries when Restore-DrsSettings reports failure" {
+        New-TestBackupFile -Entries @(
+            [ordered]@{
+                type = "drs"
+                step = "DRS Test Step"
+                profile = "CS2"
+                profileCreated = $false
+                settings = @([ordered]@{ id = 1; previousValue = 1; existed = $true })
+                timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            }
+        )
+
+        Mock Restore-DrsSettings { $false }
+
+        $result = Restore-StepChanges -StepTitle "DRS Test Step"
+
+        $result | Should -Be $false
+        @((Get-Content $CFG_BackupFile -Raw | ConvertFrom-Json).entries).Count | Should -Be 1
     }
 }

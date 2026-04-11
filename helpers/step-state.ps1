@@ -7,7 +7,7 @@ function Load-Progress {
         try { return (Get-Content $CFG_ProgressFile -Raw -ErrorAction Stop | ConvertFrom-Json) }
         catch {
             Write-Warn "Progress tracking file was corrupted — starting fresh. (Your optimizations are not affected.)"
-            try { Copy-Item $CFG_ProgressFile "$CFG_ProgressFile.corrupt" -Force -ErrorAction Stop } catch { Write-Debug "Could not preserve corrupted progress file." }
+            try { Copy-Item $CFG_ProgressFile "$CFG_ProgressFile.corrupt" -Force -ErrorAction Stop } catch { Write-DebugLog "Could not preserve corrupted progress file." }
         }
     }
     return $null
@@ -15,11 +15,12 @@ function Load-Progress {
 
 function Save-Progress($prog) {
     Save-JsonAtomic -Data $prog -Path $CFG_ProgressFile
-    Write-Debug "Progress saved: Phase $($prog.phase) Step $($prog.lastCompletedStep)"
+    Set-SecureAcl -Path $CFG_ProgressFile
+    Write-DebugLog "Progress saved: Phase $($prog.phase) Step $($prog.lastCompletedStep)"
 }
 
 function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
-    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Step $stepNum ($stepName) not recorded."; return }
+    if ($SCRIPT:DryRun) { Write-DebugLog "DRY-RUN: Step $stepNum ($stepName) not recorded."; return }
     # Flush backup buffer BEFORE persisting progress — if we crash between flush and
     # Save-Progress, the worst case is re-running a completed step (safe). The reverse
     # (progress saved, backup lost) means we can't rollback a step we recorded as done.
@@ -48,11 +49,11 @@ function Complete-Step([int]$phase, [int]$stepNum, [string]$stepName) {
     $prog.timestamps | Add-Member -NotePropertyName "$phase-$stepNum" `
         -NotePropertyValue (Get-Date -Format "yyyy-MM-dd HH:mm:ss") -Force
     Save-Progress $prog
-    Write-Debug "Step $stepNum completed: $stepName"
+    Write-DebugLog "Step $stepNum completed: $stepName"
 }
 
 function Skip-Step([int]$phase, [int]$stepNum, [string]$stepName) {
-    if ($SCRIPT:DryRun) { Write-Debug "DRY-RUN: Skip-Step $stepNum ($stepName) not recorded."; return }
+    if ($SCRIPT:DryRun) { Write-DebugLog "DRY-RUN: Skip-Step $stepNum ($stepName) not recorded."; return }
     $prog = Load-Progress
     if (-not $prog) {
         $prog = [PSCustomObject]@{ phase=0; lastCompletedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
@@ -171,11 +172,11 @@ function Clear-Progress($phase = $null) {
         # and makes intent clear (file exists but no steps are done)
         $empty = [PSCustomObject]@{ phase=0; lastCompletedStep=0; lastSkippedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
         Save-Progress $empty
-        Write-Debug "Progress reset$(if($phase){" (Phase $phase)"})"
+        Write-DebugLog "Progress reset$(if($phase){" (Phase $phase)"})"
     } else {
         # Cross-phase re-run: progress file has a different phase than requested.
         # Still reset — the user explicitly asked to start over from this phase.
-        Write-Debug "Cross-phase reset: progress had Phase $($prog.phase), resetting for Phase $phase"
+        Write-DebugLog "Cross-phase reset: progress had Phase $($prog.phase), resetting for Phase $phase"
         $empty = [PSCustomObject]@{ phase=0; lastCompletedStep=0; lastSkippedStep=0; completedSteps=@(); skippedSteps=@(); timestamps=[PSCustomObject]@{} }
         Save-Progress $empty
     }

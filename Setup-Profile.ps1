@@ -240,7 +240,7 @@ if (-not $state -or $startStep -eq 1) {
             if ($gpu.Name -match "AMD|Radeon")                      { $gpuInput = "3" }
             elseif ($gpu.Name -match "Intel.*Arc|Intel.*Graphics")   { $gpuInput = "4" }
             elseif ($gpu.Name -match "RTX\s*5\d{3}")                { $gpuInput = "1" }
-        } catch { Write-Debug "YOLO GPU auto-detect failed, defaulting to NVIDIA: $_" }
+        } catch { Write-DebugLog "YOLO GPU auto-detect failed, defaulting to NVIDIA: $_" }
         $gpuName = switch ($gpuInput) { "1" {"NVIDIA RTX 5000"} "2" {"NVIDIA RTX 4000/older"} "3" {"AMD"} "4" {"Intel Arc"} }
         Write-Info "YOLO: GPU auto-detected as [$gpuInput] $gpuName"
     } else {
@@ -268,7 +268,8 @@ if (-not $state -or $startStep -eq 1) {
         gpuInput = $gpuInput; pagefileMB = 0
         workDir = $CFG_WorkDir; scriptRoot = $ScriptRoot
     }
-    Save-State $state $CFG_StateFile
+    Save-JsonAtomic -Data $state -Path $CFG_StateFile
+    Set-SecureAcl -Path $CFG_StateFile
     Complete-Step $PHASE 1 "Configuration"
 } else {
     # Restore saved config but honor the fresh profile/DRY-RUN choice made above
@@ -281,6 +282,7 @@ if (-not $state -or $startStep -eq 1) {
     # Update state file with the fresh profile choice
     $state.mode     = $SCRIPT:Mode
     $state.profile  = $SCRIPT:Profile
-    Save-State $state $CFG_StateFile
+    Save-JsonAtomic -Data $state -Path $CFG_StateFile
+    Set-SecureAcl -Path $CFG_StateFile
     Write-Info "Configuration loaded from previous session (Profile: $($SCRIPT:Profile)$(if($SCRIPT:DryRun){' [DRY-RUN]'}))."
 }

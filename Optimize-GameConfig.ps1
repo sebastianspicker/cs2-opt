@@ -209,14 +209,14 @@ if ($startStep -le 34) {
                                     Write-Host "  [DRY-RUN] Would copy: $cfgFile -> $cfgDir\" -ForegroundColor Magenta
                                 }
                             } else {
-                                Write-Debug "Network CFG not found at source: $src"
+                                Write-DebugLog "Network CFG not found at source: $src"
                             }
                         }
                         if ($netCfgsDeployed -gt 0) {
                             Write-OK "$netCfgsDeployed network condition CFGs deployed to game\csgo\cfg\"
                         }
                     } else {
-                        Write-Debug "cfgs\ directory not found at: $cfgSourceDir — network CFGs not deployed."
+                        Write-DebugLog "cfgs\ directory not found at: $cfgSourceDir — network CFGs not deployed."
                     }
 
                     # ── Network CFG usage guide ──────────────────────────────────────────────
@@ -299,7 +299,7 @@ if ($startStep -le 34) {
                         }
                     }
                 }
-            } catch { Write-Debug "Steam Cloud check failed: $_" }
+            } catch { Write-DebugLog "Steam Cloud check failed: $_" }
 
             $cloudColor = if ($cloudLooksEnabled) { "Red" } else { "Yellow" }
             Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor $cloudColor
@@ -389,7 +389,7 @@ if ($startStep -le 35) {
                     Write-Info "Version:        $($chipsetDrv.DriverVersion)"
                     Write-Info "Date:           $($chipsetDrv.DriverDate)"
                 }
-            } catch { Write-Debug "Chipset driver info not readable." }
+            } catch { Write-DebugLog "Chipset driver info not readable." }
 
             $url = switch ($vendor) {
                 "AMD"   { $CFG_URL_AMD_Chipset }
@@ -618,7 +618,7 @@ if ($startStep -le 37) {
                     }
                     # 32GB+: compression rarely triggers — no advisory needed
                 }
-            } catch { Write-Debug "MMAgent check failed." }
+            } catch { Write-DebugLog "MMAgent check failed." }
 
             Write-Info "Undo: Set-Service <name> -StartupType Manual (or Automatic for SysMain/WSearch)"
             Complete-Step $PHASE 37 "SysMainSearch"
@@ -646,14 +646,14 @@ if ($startStep -le 38) {
         # Capture exit code before piping (| Out-String resets $LASTEXITCODE in PS 5.1).
         $bcdOut = bcdedit /set "{current}" safeboot minimal 2>&1
         $bcdExit = $LASTEXITCODE
-        Write-Debug "bcdedit /set {current} safeboot minimal — exit $bcdExit — $($bcdOut | Out-String)"
+        Write-DebugLog "bcdedit /set {current} safeboot minimal — exit $bcdExit — $($bcdOut | Out-String)"
 
         # If first attempt failed, retry without {current}
         if ($bcdExit -ne 0) {
             Write-Warn "bcdedit /set exited with code $bcdExit — retrying without {current}..."
             $bcdOut = bcdedit /set safeboot minimal 2>&1
             $bcdExit = $LASTEXITCODE
-            Write-Debug "bcdedit retry exit $bcdExit — $($bcdOut | Out-String)"
+            Write-DebugLog "bcdedit retry exit $bcdExit — $($bcdOut | Out-String)"
         }
 
         # Trust bcdedit exit code 0 as success. Only use Test-BootConfigSet as a

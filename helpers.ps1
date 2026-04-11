@@ -4,6 +4,10 @@
 #  SECURITY: This file and all helpers/*.ps1 are dot-sourced — same trust boundary
 #  as config.env.ps1. See config.env.ps1 header for dot-sourcing security analysis.
 
+# Ensure strict mode is active even when loaded in a runspace pool (GUI async)
+# where the entry point's Set-StrictMode is not inherited.
+Set-StrictMode -Version Latest
+
 $helpersRoot = if ($PSScriptRoot) { "$PSScriptRoot\helpers" }
                elseif ((Get-Variable -Name ScriptRoot -ErrorAction SilentlyContinue) -and $ScriptRoot) { "$ScriptRoot\helpers" }
                else { ".\helpers" }

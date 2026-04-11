@@ -10,6 +10,144 @@
 #  Shared: Launch-Terminal, Save-SettingsToState
 
 $Script:DashboardLastLoad = [datetime]::MinValue
+$Script:StartupDriftChecked = $false
+
+function Get-StateDataSafe {
+    try {
+        if (Test-Path $CFG_StateFile) {
+            return Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        }
+    } catch {
+        Write-DebugLog "State load failed: $($_.Exception.Message)"
+    }
+    return $null
+}
+
+function Save-StateDataSafe {
+    param([Parameter(Mandatory)]$State)
+    Save-JsonAtomic -Data $State -Path $CFG_StateFile
+    Set-SecureAcl -Path $CFG_StateFile
+}
+
+function New-DefaultState {
+    return [PSCustomObject]@{
+        mode    = "AUTO"
+        profile = "RECOMMENDED"
+    }
+}
+
+function Should-SkipStartupDriftCheck {
+    param(
+        $State,
+        [datetime]$Now = (Get-Date)
+    )
+    if (-not $State -or -not $State.PSObject.Properties['startup_last_verified']) { return $false }
+    try {
+        $lastVerified = [datetime]::Parse([string]$State.startup_last_verified)
+        return (($Now - $lastVerified).TotalMinutes -lt 60)
+    } catch {
+        return $false
+    }
+}
+
+function Test-StartupConfigDrift {
+    $state = Get-StateDataSafe
+    $now = Get-Date
+    if (Should-SkipStartupDriftCheck -State $state -Now $now) {
+        return [PSCustomObject]@{
+            Skipped      = $true
+            HasDrift     = $false
+            DriftCount   = 0
+            CheckedCount = 0
+            DriftLabels  = @()
+            CheckedAt    = [string]$state.startup_last_verified
+        }
+    }
+
+    $checks = @(
+        @{ Path = "HKLM:\SOFTWARE\Microsoft\Windows\Dwm"; Name = "OverlayTestMode"; Expected = 5; Label = "MPO disabled" }
+        @{ Path = "HKCU:\SOFTWARE\Microsoft\GameBar"; Name = "AutoGameModeEnabled"; Expected = 1; Label = "Game Mode enabled" }
+        @{ Path = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR"; Name = "AppCaptureEnabled"; Expected = 0; Label = "Game DVR capture disabled" }
+        @{ Path = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel"; Name = "GlobalTimerResolutionRequests"; Expected = 1; Label = "Timer Resolution enabled" }
+        @{ Path = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"; Name = "HiberbootEnabled"; Expected = 0; Label = "Fast Startup disabled" }
+    )
+
+    $driftLabels = [System.Collections.Generic.List[string]]::new()
+    foreach ($check in $checks) {
+        $result = Test-RegistryCheck $check.Path $check.Name $check.Expected $check.Label -Quiet
+        if ($result.Status -ne "OK") {
+            $driftLabels.Add($check.Label) | Out-Null
+        }
+    }
+
+    if (-not $state) {
+        $state = New-DefaultState
+    }
+    $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ($now.ToString("o")) -Force
+    try {
+        Save-StateDataSafe -State $state
+    } catch {
+        Write-DebugLog "Startup drift state save failed: $($_.Exception.Message)"
+    }
+
+    return [PSCustomObject]@{
+        Skipped      = $false
+        HasDrift     = ($driftLabels.Count -gt 0)
+        DriftCount   = $driftLabels.Count
+        CheckedCount = $checks.Count
+        DriftLabels  = @($driftLabels)
+        CheckedAt    = $now.ToString("yyyy-MM-dd HH:mm")
+    }
+}
+
+function Update-StartupDriftBanner {
+    if ($Script:StartupDriftChecked) { return }
+    $Script:StartupDriftChecked = $true
+
+    $result = Test-StartupConfigDrift
+    if ($result.Skipped -or -not $result.HasDrift) {
+        (El "DashDriftBanner").Visibility = "Collapsed"
+        return
+    }
+
+    (El "DashDriftBannerTitle").Text = "Configuration Drift Detected"
+    (El "DashDriftBannerText").Text = "$($result.DriftCount) of $($result.CheckedCount) quick checks drifted. Run Verify-Settings to review and repair the full set."
+    (El "DashDriftBanner").Visibility = "Visible"
+}
+
+function Get-BenchmarkCapFromText {
+    param([string]$Text)
+    if ($Text -notmatch "Avg\s*=\s*([\d.]+)") { return $null }
+
+    $avg = [double]$Matches[1]
+    $cap = [math]::Max($CFG_FpsCap_Min, [math]::Floor($avg - [math]::Floor($avg * $CFG_FpsCap_Percent)))
+    return [PSCustomObject]@{
+        AvgFps = $avg
+        Cap    = $cap
+    }
+}
+
+function Get-BenchmarkResultFromText {
+    param([string]$Text)
+    if ($Text -notmatch "Avg\s*=\s*([\d.]+).*P1\s*=\s*([\d.]+)") { return $null }
+
+    return [PSCustomObject]@{
+        AvgFps = [double]$Matches[1]
+        P1Fps  = [double]$Matches[2]
+    }
+}
+
+function Switch-Panel {
+    param([string]$PanelName, [scriptblock]$OnSwitch = $null)
+    foreach ($p in $Script:AllPanels) {
+        (El $p).Visibility = if ($p -eq $PanelName) { "Visible" } else { "Collapsed" }
+    }
+    foreach ($kv in $Script:NavMap.GetEnumerator()) {
+        (El $kv.Value).Style = if ($kv.Key -eq $PanelName) { $ActiveStyle } else { $InactiveStyle }
+    }
+    $Script:ActivePanel = $PanelName
+    if ($OnSwitch) { & $OnSwitch }
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DASHBOARD
@@ -39,7 +177,7 @@ function Load-Dashboard {
                 (El "ProgressP3Txt").Text = "$p3Done / 13"
             })
         }
-    } catch { Write-Debug "Dashboard progress load failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "Dashboard progress load failed: $($_.Exception.Message)" }
 
     # Benchmark history
     try {
@@ -63,7 +201,7 @@ function Load-Dashboard {
                 (El "DashPerfDelta").Text = ""
             })
         }
-    } catch { Write-Debug "Dashboard benchmark history load failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "Dashboard benchmark history load failed: $($_.Exception.Message)" }
 
     # Hardware (async)
     Invoke-Async -Work {
@@ -71,7 +209,7 @@ function Load-Dashboard {
         . "$ScriptRoot\config.env.ps1"
         . "$ScriptRoot\helpers.ps1"
         try {
-            $cpu  = (Get-CimInstance Win32_Processor -Property Name -ErrorAction SilentlyContinue | Select-Object -First 1).Name
+            $cpu  = (Get-CachedCpuInfo).Name
             $gpu  = Get-NvidiaDriverVersion
             $gpuN = if ($gpu) { $gpu.Name } else {
                 (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1).Caption }
@@ -212,7 +350,7 @@ function Start-Analysis {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Optimize {
     $prog = $null
-    try { $prog = Load-Progress } catch { Write-Debug "Optimize progress load failed: $($_.Exception.Message)" }
+    try { $prog = Load-Progress } catch { Write-DebugLog "Optimize progress load failed: $($_.Exception.Message)" }
     $completed = if ($prog) { $prog.completedSteps } else { @() }
     $skipped   = if ($prog) { $prog.skippedSteps }   else { @() }
 
@@ -397,11 +535,21 @@ function Start-InlineVerify {
             }
         }
         if ($added -gt 0) {
-            $maxPhase = ($verified | ForEach-Object {
-                if ($_ -match "^P(\d+):") { [int]$Matches[1] } else { 0 }
-            } | Measure-Object -Maximum).Maximum
-            if ($maxPhase -gt $prog.phase) { $prog.phase = $maxPhase }
-            Save-Progress $prog
+            if (Test-BackupLock) {
+                Write-DebugLog "Inline verify: skipping progress save — backup lock held by another process"
+            } else {
+                $maxPhase = ($verified | ForEach-Object {
+                    if ($_ -match "^P(\d+):") { [int]$Matches[1] } else { 0 }
+                } | Measure-Object -Maximum).Maximum
+                if ($maxPhase -gt $prog.phase) { $prog.phase = $maxPhase }
+                Save-Progress $prog
+                $state = Get-StateDataSafe
+                if (-not $state) {
+                    $state = New-DefaultState
+                }
+                $state | Add-Member -NotePropertyName "startup_last_verified" -NotePropertyValue ((Get-Date).ToString("o")) -Force
+                Save-StateDataSafe -State $state
+            }
         }
 
         # Reload grid with updated progress
@@ -443,7 +591,13 @@ if ($env:SAFEBOOT_OPTION) {
             "This will remove the Safe Mode boot flag and restart into Normal Mode.`n`nRestart now?",
             "Boot to Normal Mode", "YesNo", "Question")
         if ($confirm -eq "Yes") {
-            Start-Process bcdedit -ArgumentList "/deletevalue safeboot" -Wait -NoNewWindow
+            $bcdOut = bcdedit /deletevalue safeboot 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                [System.Windows.MessageBox]::Show(
+                    "Failed to remove Safe Mode flag (bcdedit exit $LASTEXITCODE).`n`n$($bcdOut | Out-String)`nReboot aborted — you are still in Safe Mode.",
+                    "bcdedit Error", "OK", "Error")
+                return
+            }
             shutdown /r /t 5 /f
         }
     })
@@ -526,6 +680,7 @@ function Load-Backup {
     }
     $r = [System.Windows.MessageBox]::Show("Restore ALL backed-up settings?`nThis will undo every change the suite made.","Restore All","YesNo","Warning")
     if ($r -eq "Yes") {
+        Set-BackupLock
         try {
             # Call step restores directly — Restore-AllChanges uses Read-Host which blocks GUI (no console)
             $bd = Get-BackupData
@@ -539,6 +694,8 @@ function Load-Backup {
             Load-Backup
         } catch {
             [System.Windows.MessageBox]::Show("Restore error: $($_.Exception.Message)","Restore Failed","OK","Error")
+        } finally {
+            Remove-BackupLock
         }
     }
 })
@@ -555,6 +712,7 @@ function Load-Backup {
     $stepTitle = $sel.Step
     $r = [System.Windows.MessageBox]::Show("Restore all changes from:`n`"$stepTitle`"?","Restore Step","YesNo","Question")
     if ($r -eq "Yes") {
+        Set-BackupLock
         try {
             $ok = Restore-StepChanges $stepTitle
             if ($ok) {
@@ -564,6 +722,7 @@ function Load-Backup {
             }
             Load-Backup
         } catch { [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)","Restore Failed") }
+        finally { Remove-BackupLock }
     }
 })
 
@@ -615,7 +774,7 @@ function Load-Benchmark {
         }
         (El "BenchGrid").ItemsSource = $rows
         Draw-BenchChart $hist
-    } catch { Write-Debug "Benchmark history load failed: $($_.Exception.Message)" }
+    } catch { Write-DebugLog "Benchmark history load failed: $($_.Exception.Message)" }
 }
 
 function Draw-BenchChart {
@@ -706,12 +865,11 @@ function Draw-BenchChart {
 # FPS Cap
 (El "BtnBenchParse").Add_Click({
     $raw = (El "BenchVprof").Text.Trim()
-    if ($raw -match "Avg\s*=\s*([\d.]+)") {
-        $avg = [double]$Matches[1]
-        $cap = [math]::Max($CFG_FpsCap_Min, [math]::Floor($avg - [math]::Floor($avg * $CFG_FpsCap_Percent)))
+    $parsed = Get-BenchmarkCapFromText $raw
+    if ($parsed) {
         (El "BenchCapLabel").Text = "→  Cap:"
-        (El "BenchCapValue").Text = "$cap"
-        $Script:UISync.LastCap = $cap
+        (El "BenchCapValue").Text = "$($parsed.Cap)"
+        $Script:UISync.LastCap = $parsed.Cap
     } else {
         (El "BenchCapLabel").Text = "⚠  No [VProf] FPS line detected"
         (El "BenchCapValue").Text = ""
@@ -722,16 +880,16 @@ function Draw-BenchChart {
     $cap = $Script:UISync.LastCap
     if ($cap) {
         try { [System.Windows.Clipboard]::SetText("$cap") }
-        catch { Write-Debug "Clipboard copy failed: $_" }
+        catch { Write-DebugLog "Clipboard copy failed: $_" }
     }
 })
 
 (El "BtnBenchAdd").Add_Click({
     $raw = (El "BenchVprof").Text.Trim()
-    if ($raw -match "Avg\s*=\s*([\d.]+).*P1\s*=\s*([\d.]+)") {
-        $avg = [double]$Matches[1]; $p1 = [double]$Matches[2]
+    $parsed = Get-BenchmarkResultFromText $raw
+    if ($parsed) {
         $lbl = [Microsoft.VisualBasic.Interaction]::InputBox("Label for this benchmark result:", "Add Result", "")
-        Add-BenchmarkResult -AvgFps $avg -P1Fps $p1 -Label $lbl -Runs 1
+        Add-BenchmarkResult -AvgFps $parsed.AvgFps -P1Fps $parsed.P1Fps -Label $lbl -Runs 1
         Load-Benchmark
     } else {
         [System.Windows.MessageBox]::Show("Paste a [VProf] FPS: Avg=… P1=… line first.","Add Result")
@@ -912,6 +1070,16 @@ $writeVideo = {
             $lines += "    `"$($kv.Key)`"`t`"$($kv.Value)`""
         }
         $lines += "}"
+        # Steam Cloud can set video.txt read-only — clear the flag before writing
+        if ((Test-Path $Script:VideoTxtPath) -and (Get-Item $Script:VideoTxtPath).IsReadOnly) {
+            try { (Get-Item $Script:VideoTxtPath).IsReadOnly = $false }
+            catch {
+                [System.Windows.MessageBox]::Show(
+                    "video.txt is read-only (Steam Cloud may be syncing).`n`nTry disabling Steam Cloud sync for CS2:`nSteam → CS2 → Properties → General → Steam Cloud",
+                    "Read-Only File", "OK", "Warning")
+                return
+            }
+        }
         [System.IO.File]::WriteAllLines($Script:VideoTxtPath, [string[]]$lines, [System.Text.UTF8Encoding]::new($false))
 
         $backupMsg = if ($bakMade) { "Original saved as video.txt.bak" } else { "Backup preserved as video.txt.bak (from first run)" }
@@ -927,7 +1095,7 @@ $writeVideo = {
 # ══════════════════════════════════════════════════════════════════════════════
 function Load-Settings {
     $state = $null
-    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-Debug "Settings state load failed: $($_.Exception.Message)" }
+    try { if (Test-Path $CFG_StateFile) { $state = Get-Content $CFG_StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } } catch { Write-DebugLog "Settings state load failed: $($_.Exception.Message)" }
 
     $prof = if ($state) { $state.profile } else { "RECOMMENDED" }
     switch ($prof) {
@@ -961,8 +1129,9 @@ function Save-SettingsToState {
         $state | Add-Member -NotePropertyName "profile" -NotePropertyValue $prof -Force
         $state | Add-Member -NotePropertyName "mode"    -NotePropertyValue $mode -Force
         Save-JsonAtomic -Data $state -Path $CFG_StateFile
+        Set-SecureAcl -Path $CFG_StateFile
     } catch {
-        Write-Debug "Settings state save failed: $($_.Exception.Message)"
+        Write-DebugLog "Settings state save failed: $($_.Exception.Message)"
         [System.Windows.MessageBox]::Show(
             "Failed to save settings:`n$($_.Exception.Message)`n`nYour profile/mode change was NOT persisted. Terminal operations may use the previous settings.",
             "Settings Save Error", "OK", "Warning")

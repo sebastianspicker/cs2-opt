@@ -32,7 +32,7 @@ Describe "Complete-Step / Test-StepDone round-trip" {
 
     It "does not mark step done in DRY-RUN mode" {
         $SCRIPT:DryRun = $true
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         Complete-Step -phase 1 -stepNum 3 -stepName "DryRun Step"
 
@@ -151,7 +151,7 @@ Describe "Skip-Step" {
 
     It "does not record in DRY-RUN mode" {
         $SCRIPT:DryRun = $true
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         Skip-Step -phase 1 -stepNum 4 -stepName "DryRun Skip"
 
@@ -233,7 +233,7 @@ Describe "Load-Progress with corrupted JSON" {
         "corrupted data here" | Set-Content $CFG_ProgressFile -Encoding UTF8
 
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         Load-Progress | Out-Null
 
@@ -249,7 +249,7 @@ Describe "Load-Progress with corrupted JSON" {
         "" | Set-Content $CFG_ProgressFile -Encoding UTF8
 
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         # Empty content will fail ConvertFrom-Json
         $result = Load-Progress

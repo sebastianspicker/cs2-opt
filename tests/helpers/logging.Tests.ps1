@@ -64,15 +64,15 @@ Describe "Write-Err" {
     }
 }
 
-# ── Write-Debug suppression ────────────────────────────────────────────────
-Describe "Write-Debug (custom)" {
+# ── Write-DebugLog suppression ────────────────────────────────────────────────
+Describe "Write-DebugLog (custom)" {
 
     BeforeEach { Reset-TestState }
 
     It "writes to log file at MINIMAL level but does not throw" {
         $SCRIPT:LogLevel = "MINIMAL"
         Initialize-Log
-        { Write-Debug "debug at minimal" } | Should -Not -Throw
+        { Write-DebugLog "debug at minimal" } | Should -Not -Throw
         # Write-Log always writes to file regardless of level; only console output is gated
         $logContent = Get-Content $CFG_LogFile -Raw
         $logContent | Should -Match "debug at minimal"
@@ -81,7 +81,7 @@ Describe "Write-Debug (custom)" {
     It "is shown at VERBOSE log level" {
         $SCRIPT:LogLevel = "VERBOSE"
         Initialize-Log
-        Write-Debug "verbose debug message"
+        Write-DebugLog "verbose debug message"
         $logContent = Get-Content $CFG_LogFile -Raw
         $logContent | Should -Match "verbose debug message"
     }
@@ -228,5 +228,23 @@ Describe "Initialize-Log" {
         # Newest rotated file should contain the original content
         $rotatedContent = Get-Content $rotatedFiles[0].FullName -Raw
         $rotatedContent | Should -Match "first run content"
+    }
+
+    It "writes logs for Windows-style paths on non-Windows hosts" {
+        $originalLogDir = $CFG_LogDir
+        $originalLogFile = $CFG_LogFile
+        try {
+            $CFG_LogDir = "$SCRIPT:TestTempRoot\WinStyle\Logs"
+            $CFG_LogFile = "$CFG_LogDir\test.log"
+
+            Initialize-Log
+            Write-Log "INFO" "windows style log path"
+
+            Test-Path $CFG_LogFile | Should -Be $true
+            (Get-Content $CFG_LogFile -Raw) | Should -Match "windows style log path"
+        } finally {
+            $CFG_LogDir = $originalLogDir
+            $CFG_LogFile = $originalLogFile
+        }
     }
 }

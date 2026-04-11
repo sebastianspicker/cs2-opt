@@ -30,14 +30,14 @@ $SCRIPT:TestTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "cs2opt-tests
 New-Item -ItemType Directory -Path $SCRIPT:TestTempRoot -Force | Out-Null
 
 # Redirect all working paths to temp
-$CFG_WorkDir      = $SCRIPT:TestTempRoot
-$CFG_LogDir       = "$SCRIPT:TestTempRoot\Logs"
-$CFG_LogFile      = "$CFG_LogDir\test.log"
-$CFG_StateFile    = "$SCRIPT:TestTempRoot\state.json"
-$CFG_ProgressFile = "$SCRIPT:TestTempRoot\progress.json"
-$CFG_BackupFile   = "$SCRIPT:TestTempRoot\backup.json"
-$CFG_BackupLockFile = "$SCRIPT:TestTempRoot\backup.lock"
-$CFG_BenchmarkFile = "$SCRIPT:TestTempRoot\benchmark_history.json"
+$CFG_WorkDir        = $SCRIPT:TestTempRoot
+$CFG_LogDir         = Join-Path $SCRIPT:TestTempRoot "Logs"
+$CFG_LogFile        = Join-Path $CFG_LogDir "test.log"
+$CFG_StateFile      = Join-Path $SCRIPT:TestTempRoot "state.json"
+$CFG_ProgressFile   = Join-Path $SCRIPT:TestTempRoot "progress.json"
+$CFG_BackupFile     = Join-Path $SCRIPT:TestTempRoot "backup.json"
+$CFG_BackupLockFile = Join-Path $SCRIPT:TestTempRoot "backup.lock"
+$CFG_BenchmarkFile  = Join-Path $SCRIPT:TestTempRoot "benchmark_history.json"
 
 # Ensure log directory exists (logging.ps1 functions reference it)
 New-Item -ItemType Directory -Path $CFG_LogDir -Force | Out-Null
@@ -77,6 +77,88 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
     }
     if (-not (Get-Command Start-Service -ErrorAction SilentlyContinue)) {
         function global:Start-Service { param($Name) $null }
+    }
+    if (-not (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) {
+        function global:Get-NetAdapter {
+            param($Name, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Get-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
+        function global:Get-NetAdapterAdvancedProperty {
+            param($Name, $DisplayName, $RegistryKeyword, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Set-NetAdapterAdvancedProperty -ErrorAction SilentlyContinue)) {
+        function global:Set-NetAdapterAdvancedProperty {
+            param($Name, $RegistryKeyword, $RegistryValue, $DisplayName, $DisplayValue, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+        }
+    }
+    if (-not (Get-Command Get-NetQosPolicy -ErrorAction SilentlyContinue)) {
+        function global:Get-NetQosPolicy {
+            param($Name, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Remove-NetQosPolicy -ErrorAction SilentlyContinue)) {
+        function global:Remove-NetQosPolicy {
+            [CmdletBinding(SupportsShouldProcess = $true)]
+            param($Name, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            if ($PSCmdlet.ShouldProcess($Name, 'Remove QoS policy')) {
+                $null
+            }
+            $null
+        }
+    }
+    if (-not (Get-Command Remove-MpPreference -ErrorAction SilentlyContinue)) {
+        function global:Remove-MpPreference {
+            param($ExclusionPath, $ExclusionProcess, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Set-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
+        function global:Set-DnsClientServerAddress {
+            param($InterfaceIndex, $ServerAddresses, [switch]$ResetServerAddresses, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Get-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
+        function global:Get-DnsClientServerAddress {
+            param($InterfaceIndex, $AddressFamily, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Stop-ScheduledTask -ErrorAction SilentlyContinue)) {
+        function global:Stop-ScheduledTask {
+            param($TaskName, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Set-WmiInstance -ErrorAction SilentlyContinue)) {
+        function global:Set-WmiInstance {
+            param($Class, $Arguments, $EnableAllPrivileges, $Path, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command bcdedit -ErrorAction SilentlyContinue)) {
+        function global:bcdedit { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command powercfg -ErrorAction SilentlyContinue)) {
+        function global:powercfg { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command netsh -ErrorAction SilentlyContinue)) {
+        function global:netsh { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command wmic -ErrorAction SilentlyContinue)) {
+        function global:wmic { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+
+    if (-not (Get-Command Set-CimInstance -ErrorAction SilentlyContinue)) {
+        function global:Set-CimInstance {
+            param($InputObject, $Property, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
     }
 
     # On macOS/Linux, Set-ItemProperty does not have the -Type parameter
@@ -190,6 +272,10 @@ function Reset-TestState {
     Remove-Item $CFG_ProgressFile -Force -ErrorAction SilentlyContinue
     Remove-Item $CFG_BackupFile   -Force -ErrorAction SilentlyContinue
     Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.*.json") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.corrupt.*.json") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "state.json.corrupt*") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $SCRIPT:TestTempRoot "progress.json.corrupt*") -Force -ErrorAction SilentlyContinue
 }
 
 # ── Cleanup hook ──────────────────────────────────────────────────────────────

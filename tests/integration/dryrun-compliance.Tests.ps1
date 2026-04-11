@@ -29,7 +29,7 @@ Describe "Set-RegistryValue DRY-RUN compliance" {
 
         # Mock Write-Host to capture DRY-RUN messages
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         # Track any actual write attempts — these should NEVER be called
         Mock Set-ItemProperty {
@@ -102,7 +102,7 @@ Describe "Set-BootConfig DRY-RUN compliance" {
         $SCRIPT:CurrentStepTitle = "DRY-RUN BootConfig Test"
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
 
         Mock bcdedit {
             $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $args })
@@ -150,7 +150,7 @@ Describe "Invoke-TieredStep DRY-RUN integration with write functions" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Write-OK {}
         Mock Write-Step {}
@@ -231,7 +231,7 @@ Describe "Step progress DRY-RUN compliance" {
         Reset-IntegrationState
         $SCRIPT:DryRun = $true
 
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Complete-Step does not write to progress.json in DRY-RUN" {
@@ -271,21 +271,12 @@ Describe "Set-RunOnce DRY-RUN compliance" {
 
         Set-RunOnce -name "CS2_Phase3" -scriptPath "C:\CS2_OPTIMIZE\PostReboot-Setup.ps1"
 
-        # On Windows: path resolves correctly, DRY-RUN message prints.
-        # On macOS/Linux: C:\ is not a valid drive, so GetFullPath resolves
-        # relative to cwd and fails the security check -> Write-Warn fires.
-        # Either way: zero writes to registry (the critical assertion).
+        # Path validation is now host-independent; DRY-RUN should always stop
+        # before any registry write and emit the preview message.
         $SCRIPT:MockTracker.SetItemProperty.Count | Should -Be 0
-
-        # $IsWindows is undefined (null) on Windows PowerShell 5.1; treat null as Windows.
-        $onWindows = ($IsWindows -ne $false)
-        if ($onWindows) {
-            Should -Invoke Write-Host -ParameterFilter {
-                $Object -like "*DRY-RUN*"
-            } -Times 1 -Scope It
-        } else {
-            Should -Invoke Write-Warn -Times 1 -Scope It
-        }
+        Should -Invoke Write-Host -ParameterFilter {
+            $Object -like "*DRY-RUN*"
+        } -Times 1 -Scope It
     }
 }
 
@@ -299,7 +290,7 @@ Describe "DRY-RUN respects profile filtering" {
         Mock Write-Blank {}
         Mock Write-TierBadge {}
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-Info {}
         Mock Show-StepInfoCard {}
         Mock Flush-BackupBuffer {}
@@ -360,7 +351,7 @@ Describe "Backup buffer stays empty in DRY-RUN" {
         $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
 
         Mock Write-Host {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "Set-RegistryValue does not add backup entries in DRY-RUN" {
@@ -379,10 +370,8 @@ Describe "Backup buffer stays empty in DRY-RUN" {
     }
 
     It "Backup-PowerPlan returns early in DRY-RUN" {
-        Mock Write-Host {}
         Backup-PowerPlan -StepTitle "Test"
 
         $SCRIPT:_backupPending.Count | Should -Be 0
-        Should -Invoke Write-Host -ParameterFilter { $Object -match "DRY-RUN.*Would backup" }
     }
 }

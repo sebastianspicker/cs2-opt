@@ -27,7 +27,7 @@ Describe "Set-RegistryValue security validation" {
         $SCRIPT:DryRun = $false
         $SCRIPT:CurrentStepTitle = "Security Test"
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Write-OK {}
         Mock Backup-RegistryValue {}
         Mock Test-Path { $true }
@@ -245,7 +245,7 @@ Describe "Get-ActiveNicGuid GUID validation" {
     BeforeEach {
         Reset-TestState
         Mock Write-Warn {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
     }
 
     It "returns null for malformed GUID with injection characters" {
@@ -295,7 +295,7 @@ Describe "Test-SystemCompatibility" {
         Reset-TestState
         Mock Write-Warn {}
         Mock Write-Info {}
-        Mock Write-Debug {}
+        Mock Write-DebugLog {}
         Mock Get-CimInstance { [PSCustomObject]@{ ProductType = 1 } }
         Mock Get-Command { $true }
     }

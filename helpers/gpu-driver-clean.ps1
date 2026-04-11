@@ -13,6 +13,7 @@ function Remove-GpuDriverClean {
         4. Removes DriverStore orphans
         5. Cleans shader caches and temp folders
     #>
+    [CmdletBinding()]
     param(
         [ValidateSet("NVIDIA","AMD","Intel")]
         [string]$GpuVendor = "NVIDIA"
@@ -67,7 +68,7 @@ function Remove-GpuDriverClean {
                 Set-Service $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
                 Write-OK "Stopped + disabled: $($svc.Name)"
             } catch {
-                Write-Debug "Service $($svc.Name): $_"
+                Write-DebugLog "Service $($svc.Name): $_"
             }
         }
     }
@@ -91,7 +92,7 @@ function Remove-GpuDriverClean {
                 $nvAppx = Get-AppxPackage -AllUsers -ErrorAction Stop |
                     Where-Object { $_.Name -match "NVIDIA" }
             } catch {
-                Write-Debug "AppX enumeration unavailable (expected in Safe Mode): $_"
+                Write-DebugLog "AppX enumeration unavailable (expected in Safe Mode): $_"
                 $nvAppx = @()
             }
             foreach ($pkg in $nvAppx) {
@@ -100,7 +101,7 @@ function Remove-GpuDriverClean {
                     Write-OK "Removed AppX: $($pkg.Name)"
                     $removedApps++
                 } catch {
-                    Write-Debug "AppX removal (expected in Safe Mode): $($pkg.Name) — $_"
+                    Write-DebugLog "AppX removal (expected in Safe Mode): $($pkg.Name) — $_"
                 }
             }
             # Remove provisioned packages to prevent reinstall on feature updates
@@ -112,12 +113,12 @@ function Remove-GpuDriverClean {
                         $pkg | Remove-AppxProvisionedPackage -Online -ErrorAction Stop | Out-Null
                         Write-OK "Removed provisioned: $($pkg.DisplayName)"
                     } catch {
-                        Write-Debug "Provisioned removal: $($pkg.DisplayName) — $_"
+                        Write-DebugLog "Provisioned removal: $($pkg.DisplayName) — $_"
                     }
                 }
-            } catch { Write-Debug "Provisioned package enumeration: $_" }
+            } catch { Write-DebugLog "Provisioned package enumeration: $_" }
         } else {
-            Write-Debug "AppX cmdlets not available — skipping AppX removal."
+            Write-DebugLog "AppX cmdlets not available — skipping AppX removal."
         }
 
         # ── NVIDIA scheduled tasks ──────────────────────────────────────────
@@ -129,7 +130,7 @@ function Remove-GpuDriverClean {
                 try {
                     Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false -ErrorAction Stop
                     Write-OK "Removed task: $($t.TaskName)"
-                } catch { Write-Debug "Task removal: $($t.TaskName) — $_" }
+                } catch { Write-DebugLog "Task removal: $($t.TaskName) — $_" }
             }
         }
         # Also check \NVIDIA\ task folder
@@ -138,7 +139,7 @@ function Remove-GpuDriverClean {
             try {
                 Unregister-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -Confirm:$false -ErrorAction Stop
                 Write-OK "Removed task: $($t.TaskPath)$($t.TaskName)"
-            } catch { Write-Debug "Task removal: $($t.TaskName) — $_" }
+            } catch { Write-DebugLog "Task removal: $($t.TaskName) — $_" }
         }
 
         # ── NVIDIA program directories ──────────────────────────────────────
@@ -183,10 +184,10 @@ function Remove-GpuDriverClean {
                 if ($pub -match "NVIDIA" -or $dn -match "^NVIDIA ") {
                     try {
                         Remove-Item $_.PSPath -Recurse -Force -ErrorAction Stop
-                        Write-Debug "Cleaned uninstall entry: $dn"
+                        Write-DebugLog "Cleaned uninstall entry: $dn"
                         $cleanedEntries++
                     } catch {
-                        Write-Debug "Failed to clean uninstall entry: $dn — $_"
+                        Write-DebugLog "Failed to clean uninstall entry: $dn — $_"
                     }
                 }
             }
@@ -248,10 +249,10 @@ function Remove-GpuDriverClean {
         if ($driverPackages.Count -gt 0) {
             Write-OK "CIM enumeration found $($driverPackages.Count) $GpuVendor display driver(s)."
         } else {
-            Write-Debug "CIM query returned no matching display drivers."
+            Write-DebugLog "CIM query returned no matching display drivers."
         }
     } catch {
-        Write-Debug "CIM enumeration failed: $_ — falling back to pnputil parsing"
+        Write-DebugLog "CIM enumeration failed: $_ — falling back to pnputil parsing"
     }
 
     # Fallback: parse pnputil text output. Field labels are English-only
@@ -259,7 +260,7 @@ function Remove-GpuDriverClean {
     # will not find drivers on non-English Windows installations. The CIM method
     # above is locale-independent and should be preferred.
     if ($driverPackages.Count -eq 0) {
-        Write-Debug "Trying pnputil text parsing fallback..."
+        Write-DebugLog "Trying pnputil text parsing fallback..."
         $pnpOutput = pnputil /enum-drivers 2>&1
         $currentInf = $null
         $currentClass = $null
@@ -296,7 +297,7 @@ function Remove-GpuDriverClean {
         if ($driverPackages.Count -gt 0) {
             Write-OK "pnputil fallback found $($driverPackages.Count) $GpuVendor display driver(s)."
         } else {
-            Write-Debug "pnputil parsing found no matching drivers (expected on non-English Windows)."
+            Write-DebugLog "pnputil parsing found no matching drivers (expected on non-English Windows)."
         }
     }
 
@@ -364,7 +365,7 @@ function Remove-GpuDriverClean {
                     Write-OK "Registry cleaned: $($key.PSChildName) ($desc)"
                 }
             } catch {
-                Write-Debug "Registry key $($key.PSChildName): $_"
+                Write-DebugLog "Registry key $($key.PSChildName): $_"
             }
         }
     }
