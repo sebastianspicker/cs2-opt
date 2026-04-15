@@ -52,7 +52,7 @@ function Get-BackupVersionFiles {
 
 function Prune-BackupVersions {
     $maxVersions = [Math]::Max(1, [int]$CFG_BackupMaxVersions)
-    $versionFiles = Get-BackupVersionFiles
+    $versionFiles = @(Get-BackupVersionFiles)
     if ($versionFiles.Count -le $maxVersions) { return }
 
     $versionFiles |
@@ -71,6 +71,7 @@ function Initialize-Backup {
         Write-Warn "Another CS2 Optimization window appears to be open already."
         Write-Host "  $([char]0x2139) What to do: Close the other window first, then try again." -ForegroundColor Cyan
         Write-Host "    If no other window is open, this will clear itself automatically." -ForegroundColor DarkGray
+        throw "Backup lock is already held by another active CS2 Optimization process."
     }
     Set-BackupLock
 
@@ -162,13 +163,13 @@ function Flush-BackupBuffer {
         foreach ($existing in $entries) {
             if ($existing.step -eq $e.step -and $existing.type -eq $e.type) {
                 switch ($e.type) {
-                    "registry"      { $isDupe = ($existing.path -eq $e.path -and $existing.name -eq $e.name) }
+                    "registry"      { $isDupe = ($existing.PSObject.Properties['path'] -and $e.Contains('path') -and $existing.path -eq $e.path -and $existing.name -eq $e.name) }
                     "service"       { $isDupe = ($existing.name -eq $e.name) }
-                    "scheduledtask" { $isDupe = ($existing.taskName -eq $e.taskName) }
-                    "bootconfig"    { $isDupe = ($existing.key -eq $e.key) }
-                    "powerplan"     { $isDupe = ($existing.originalGuid -eq $e.originalGuid) }
-                    "nic_adapter"   { $isDupe = ($existing.adapterName -eq $e.adapterName -and $existing.propertyName -eq $e.propertyName) }
-                    "dns"           { $isDupe = ($existing.adapterName -eq $e.adapterName) }
+                    "scheduledtask" { $isDupe = ($existing.PSObject.Properties['taskName'] -and $e.Contains('taskName') -and $existing.taskName -eq $e.taskName) }
+                    "bootconfig"    { $isDupe = ($existing.PSObject.Properties['key'] -and $e.Contains('key') -and $existing.key -eq $e.key) }
+                    "powerplan"     { $isDupe = ($existing.PSObject.Properties['originalGuid'] -and $e.Contains('originalGuid') -and $existing.originalGuid -eq $e.originalGuid) }
+                    "nic_adapter"   { $isDupe = ($existing.PSObject.Properties['adapterName'] -and $e.Contains('adapterName') -and $existing.adapterName -eq $e.adapterName -and $existing.propertyName -eq $e.propertyName) }
+                    "dns"           { $isDupe = ($existing.PSObject.Properties['adapterName'] -and $e.Contains('adapterName') -and $existing.adapterName -eq $e.adapterName) }
                     default         { $isDupe = $false }
                 }
                 if ($isDupe) { break }
@@ -825,7 +826,8 @@ function Restore-StepChanges {
                             # Remove-ItemProperty throws, the entry stays in backup.json, and
                             # subsequent restore attempts fail forever on this entry.
                             $existingVal = Get-ItemProperty -Path $e.path -Name $e.name -ErrorAction SilentlyContinue
-                            if ($null -ne $existingVal.$($e.name)) {
+                            $valueProperty = if ($existingVal) { $existingVal.PSObject.Properties[[string]$e.name] } else { $null }
+                            if ($null -ne $valueProperty) {
                                 Remove-ItemProperty -Path $e.path -Name $e.name -ErrorAction Stop
                                 Write-OK "Removed: $($e.name) (was not set before)"
                             } else {
@@ -969,7 +971,7 @@ function Restore-StepChanges {
                         # Task existed before — restore its enabled/disabled state
                         # Use wasEnabled field (added in batch buffer update) to avoid
                         # blindly re-enabling tasks that were already disabled before optimization.
-                        $shouldBeEnabled = if ($null -ne $e.wasEnabled) { $e.wasEnabled } else { $true }
+                        $shouldBeEnabled = if ($e.PSObject.Properties['wasEnabled'] -and $null -ne $e.wasEnabled) { $e.wasEnabled } else { $true }
                         try {
                             $task = Get-ScheduledTask -TaskName $e.taskName -ErrorAction SilentlyContinue
                             if (-not $task) {
@@ -1124,7 +1126,18 @@ function Restore-StepChanges {
             }
         } catch {
             $restoreFail++
-            Write-Warn "Restore failed for $($e.type) $(if($e.name){$e.name}elseif($e.profile){$e.profile}elseif($e.originalName){$e.originalName}elseif($e.taskName){$e.taskName}else{$e.type}): $_"
+            $entryLabel = if ($e.PSObject.Properties['name'] -and $e.name) {
+                $e.name
+            } elseif ($e.PSObject.Properties['profile'] -and $e.profile) {
+                $e.profile
+            } elseif ($e.PSObject.Properties['originalName'] -and $e.originalName) {
+                $e.originalName
+            } elseif ($e.PSObject.Properties['taskName'] -and $e.taskName) {
+                $e.taskName
+            } else {
+                $e.type
+            }
+            Write-Warn ("Restore failed for {0} {1}: {2}" -f $e.type, $entryLabel, $_)
         }
         if ($restoreFail -gt $failBefore) { $failedEntries.Add($e) }
         if ($restorePartial -gt $partialBefore) { $partialEntries.Add($e) }

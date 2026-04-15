@@ -37,7 +37,7 @@ if ($startStep -le 2) {
                 Write-Info "RAM:           $($ram.TotalGB) GB | $($ram.Sticks) stick(s)"
                 if ($ram.IsDDR5) {
                     Write-Info "Rated speed:   $($ram.SpeedMhz) MT/s  (per SPD)"
-                    Write-Info "Active:        $($ram.ActiveMhz * 2) MT/s  ($($ram.ActiveMhz) MHz clock)"
+                    Write-Info "Active:        $($ram.ActiveMhz) MT/s  ($([math]::Floor($ram.ActiveMhz / 2)) MHz clock)"
                 } else {
                     Write-Info "Rated speed:   $($ram.SpeedMhz) MHz  (per SPD)"
                     Write-Info "Active:        $($ram.ActiveMhz) MHz  (actual)"
@@ -50,7 +50,7 @@ if ($startStep -le 2) {
                     Write-Err "XMP/EXPO is NOT active!"
                     Write-Blank
                     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
-                    $activeLabel = if ($ram.IsDDR5) { "$($ram.ActiveMhz * 2) MT/s" } else { "$($ram.ActiveMhz) MHz" }
+                    $activeLabel = if ($ram.IsDDR5) { "$($ram.ActiveMhz) MT/s" } else { "$($ram.ActiveMhz) MHz" }
                     $ratedLabel  = if ($ram.IsDDR5) { "$($ram.SpeedMhz) MT/s" } else { "$($ram.SpeedMhz) MHz" }
                     Write-Host "  │  $("RAM running at $activeLabel instead of $ratedLabel".PadRight(60))│" -ForegroundColor Yellow
                     Write-Host "  │                                                              │" -ForegroundColor Yellow

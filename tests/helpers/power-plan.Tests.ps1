@@ -36,6 +36,15 @@ Describe "Power Plan GUID Constants" {
         $PP_SUB_PROCESSOR | Should -Be "54533251-82be-4824-96c1-47b60b740d00"
     }
 
+    It "maps dab60367... as the AHCI adaptive link-power setting" {
+        $PP_DISKAHCIADAPTIVE | Should -Be "dab60367-53fe-4fbc-825e-521d069d2456"
+    }
+
+    It "uses documented processor timing setting GUIDs" {
+        $PP_PERFINCRTIME | Should -Be "984cf492-3bed-4488-a8f9-4286c97bf5aa"
+        $PP_PERFDECRTIME | Should -Be "d8edeb9b-95cf-4f95-a73c-b061973693c8"
+    }
+
     It "all GUIDs match 36-char GUID format" {
         $guidVars = @(
             $PP_SUB_PROCESSOR, $PP_SUB_DISK, $PP_SUB_USB, $PP_SUB_SLEEP,
@@ -45,7 +54,7 @@ Describe "Power Plan GUID Constants" {
             $PP_IDLESTATEMAX, $PP_DUTYCYCLING, $PP_PERFHISTCOUNT,
             $PP_PERFINCRTIME, $PP_PERFDECRTIME, $PP_CPMINCORES, $PP_CPMAXCORES,
             $PP_CPMINCORES1, $PP_DISKIDLE, $PP_DISKPOWERMGMT, $PP_DISKLPM,
-            $PP_DISKNV, $PP_DISKNVIDLE, $PP_DISKADAPTIVE, $PP_USBSS,
+            $PP_DISKAHCIADAPTIVE, $PP_DISKNVIDLE, $PP_DISKADAPTIVE, $PP_USBSS,
             $PP_USBHUB, $PP_USBC, $PP_WIFIPOWERSAVE, $PP_GPUPREF,
             $PP_SYSCOOLPOL, $PP_STANDBYIDLE, $PP_HIBERNATEIDLE, $PP_ASPM
         )
@@ -233,6 +242,26 @@ Describe "Apply-PowerPlan" {
 
             $idleCall = $script:ppCalls | Where-Object { $_.Label -match "idle disable" }
             $idleCall | Should -BeNullOrEmpty
+        }
+
+        It "uses documented in-range interval values for perf increase and decrease time" {
+            $SCRIPT:Profile = "COMPETITIVE"
+            $SCRIPT:DryRun = $true
+            Mock Get-ChipsetVendor { return "Intel" }
+            Mock Get-AmdCpuInfo { return $null }
+            Mock Write-Step {}
+            Mock Write-OK {}
+            Mock Write-Host {}
+
+            $script:ppCalls = [System.Collections.Generic.List[hashtable]]::new()
+            Mock Set-PowerPlanValue {
+                $script:ppCalls.Add(@{ Label = $Label; Value = $Value; SettingGuid = $SettingGuid })
+            }
+
+            Apply-PowerPlan "DRY-RUN-GUID"
+
+            ($script:ppCalls | Where-Object SettingGuid -eq $PP_PERFINCRTIME | Select-Object -ExpandProperty Value) | Should -Be 0
+            ($script:ppCalls | Where-Object SettingGuid -eq $PP_PERFDECRTIME | Select-Object -ExpandProperty Value) | Should -Be 100
         }
     }
 
