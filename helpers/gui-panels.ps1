@@ -321,6 +321,7 @@ function Start-Analysis {
         if ($warn + $err -gt 0) {
             (El "DashIssueHint").Text = "⚠  $($warn+$err) item(s) need attention — see Analyze panel"
         }
+        Refresh-StorageHealthCard
         # Clear for next run
         $Script:UISync.AnalysisError   = $null
         $Script:UISync.AnalysisResults = $null
@@ -343,6 +344,58 @@ function Start-Analysis {
             [System.Windows.MessageBox]::Show("Export failed:`n$_`n`nCheck that the file is not open in another program.", "Export Error", "OK", "Error")
         }
     }
+})
+
+function Refresh-StorageHealthCard {
+    try {
+        $trim = Get-TrimHealthStatus
+        (El "AnalyzeStorageHealth").Text = "Storage maintenance: $($trim.Summary)"
+        (El "BtnAnalyzeTrimEnable").IsEnabled = $trim.AnyTrimDisabled
+        (El "BtnAnalyzeRetrim").IsEnabled = $trim.RetrimAvailable
+        if ($trim.RetrimAvailable) {
+            (El "BtnAnalyzeRetrim").ToolTip = "ReTrim available on: $(@($trim.RetrimmableVolumes) -join ', ')"
+        }
+    } catch {
+        (El "AnalyzeStorageHealth").Text = "Storage maintenance: state not readable"
+        (El "BtnAnalyzeTrimEnable").IsEnabled = $false
+        (El "BtnAnalyzeRetrim").IsEnabled = $false
+    }
+}
+
+(El "BtnAnalyzeStorageRefresh").Add_Click({ Refresh-StorageHealthCard })
+(El "BtnAnalyzeTrimEnable").Add_Click({
+    try {
+        $result = Enable-TrimSupport
+        if ($result.Success) {
+            [System.Windows.MessageBox]::Show("TRIM support enabled. This is storage maintenance/correctness, not a gaming-meta claim.", "Storage Health")
+        } else {
+            [System.Windows.MessageBox]::Show("Enable TRIM failed.`n$(@($result.Output) -join [Environment]::NewLine)", "Storage Health", "OK", "Warning")
+        }
+    } catch {
+        [System.Windows.MessageBox]::Show("Enable TRIM failed:`n$($_.Exception.Message)", "Storage Health", "OK", "Error")
+    }
+    Refresh-StorageHealthCard
+})
+(El "BtnAnalyzeRetrim").Add_Click({
+    try {
+        $trim = Get-TrimHealthStatus
+        $volumes = @($trim.RetrimmableVolumes)
+        if ($volumes.Count -eq 0) {
+            [System.Windows.MessageBox]::Show("No eligible fixed volumes were detected for ReTrim.", "Storage Health", "OK", "Warning")
+            return
+        }
+        $confirm = [System.Windows.MessageBox]::Show(
+            "Run ReTrim on: $($volumes -join ', ')?`n`nThis is a storage-maintenance action, not an FPS optimization.",
+            "Storage Health", "YesNo", "Question")
+        if ($confirm -ne "Yes") { return }
+        foreach ($drive in $volumes) {
+            Invoke-StorageRetrim -DriveLetter $drive
+        }
+        [System.Windows.MessageBox]::Show("ReTrim completed for: $($volumes -join ', ')", "Storage Health")
+    } catch {
+        [System.Windows.MessageBox]::Show("ReTrim failed:`n$($_.Exception.Message)", "Storage Health", "OK", "Error")
+    }
+    Refresh-StorageHealthCard
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -893,6 +946,106 @@ function Draw-BenchChart {
         Load-Benchmark
     } else {
         [System.Windows.MessageBox]::Show("Paste a [VProf] FPS: Avg=… P1=… line first.","Add Result")
+    }
+})
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NETWORK
+# ══════════════════════════════════════════════════════════════════════════════
+function Load-NetworkDiagnostics {
+    $summary = Get-NetworkDiagnosticSummary
+    if (-not $summary.AdapterFound) {
+        (El "NetDiagAdapterSummary").Text = "Adapter: no active adapter found"
+        (El "NetDiagDnsSummary").Text = "DNS: unavailable"
+    } else {
+        $dnsText = if (@($summary.DnsServers).Count -gt 0) { @($summary.DnsServers) -join ', ' } else { "automatic / DHCP" }
+        (El "NetDiagAdapterSummary").Text = "Adapter: $($summary.AdapterName)  ·  $($summary.AdapterType)"
+        (El "NetDiagDnsSummary").Text = "DNS: $($summary.DnsProvider)  ·  $dnsText"
+    }
+
+    $historyRows = @(Get-LatencyHistoryRows)
+    (El "NetDiagHistoryGrid").ItemsSource = $historyRows
+    (El "NetDiagComparisonGrid").ItemsSource = @(Get-ValveLatencyComparisonRows)
+    (El "NetDiagHistorySummary").Text = if ($historyRows.Count -gt 0) {
+        "Latest run: $($historyRows[-1].Timestamp)  ·  $($historyRows[-1].Kind)"
+    } else {
+        "No latency diagnostics recorded yet."
+    }
+}
+
+function Start-LatencyDiagnostic {
+    param(
+        [ValidateSet("baseline", "post")][string]$Kind
+    )
+
+    $buttonName = if ($Kind -eq "baseline") { "BtnNetBaseline" } else { "BtnNetPost" }
+    (El "BtnNetBaseline").IsEnabled = $false
+    (El "BtnNetPost").IsEnabled = $false
+    (El $buttonName).Content = if ($Kind -eq "baseline") { "Running…" } else { "Retesting…" }
+
+    Invoke-Async -Work {
+        param($ScriptRoot, $UISync, $RunKind)
+        . "$ScriptRoot\config.env.ps1"
+        . "$ScriptRoot\helpers.ps1"
+        try {
+            $UISync.LatencyRun = Invoke-ValveRegionLatencyDiagnostic -Kind $RunKind
+        } catch {
+            $UISync.LatencyError = $_.Exception.Message
+        }
+    } -WorkArgs @($Script:Root, $Script:UISync, $Kind) -OnDone {
+        $err = $Script:UISync.LatencyError
+        Load-NetworkDiagnostics
+        (El "BtnNetBaseline").IsEnabled = $true
+        (El "BtnNetPost").IsEnabled = $true
+        (El "BtnNetBaseline").Content = "Baseline Test"
+        (El "BtnNetPost").Content = "Post-Change Retest"
+        if ($err) {
+            [System.Windows.MessageBox]::Show("Latency diagnostic failed:`n$err", "Network Diagnostic", "OK", "Error")
+        } else {
+            $run = $Script:UISync.LatencyRun
+            $okRegions = @($run.Results | Where-Object { $null -ne $_.AvgRttMs }).Count
+            [System.Windows.MessageBox]::Show("Saved $($run.Kind) run at $($run.Timestamp).`nResponsive regions: $okRegions / $(@($run.Results).Count)", "Network Diagnostic")
+        }
+        $Script:UISync.LatencyRun = $null
+        $Script:UISync.LatencyError = $null
+    }
+}
+
+function Invoke-GuiDnsProfileChange {
+    param(
+        [ValidateSet("Cloudflare", "Google", "DHCP")][string]$Provider
+    )
+
+    try {
+        $result = Set-NetworkDiagnosticDnsProfile -Provider $Provider
+        Load-NetworkDiagnostics
+        if ($result.Changed) {
+            [System.Windows.MessageBox]::Show("DNS updated on $($result.AdapterName): $Provider", "DNS Updated")
+        } else {
+            [System.Windows.MessageBox]::Show("DNS is already set to $Provider on $($result.AdapterName).", "DNS Unchanged")
+        }
+    } catch {
+        [System.Windows.MessageBox]::Show("DNS update failed:`n$($_.Exception.Message)", "DNS Error", "OK", "Error")
+    }
+}
+
+(El "BtnNetRefresh").Add_Click({ Load-NetworkDiagnostics })
+(El "BtnNetBaseline").Add_Click({ Start-LatencyDiagnostic -Kind baseline })
+(El "BtnNetPost").Add_Click({ Start-LatencyDiagnostic -Kind post })
+(El "BtnNetDnsCloudflare").Add_Click({ Invoke-GuiDnsProfileChange -Provider Cloudflare })
+(El "BtnNetDnsGoogle").Add_Click({ Invoke-GuiDnsProfileChange -Provider Google })
+(El "BtnNetDnsDhcp").Add_Click({ Invoke-GuiDnsProfileChange -Provider DHCP })
+(El "BtnNetDnsRestore").Add_Click({
+    try {
+        $ok = Restore-LatestDnsBackup
+        Load-NetworkDiagnostics
+        if ($ok) {
+            [System.Windows.MessageBox]::Show("Restored the latest GUI DNS backup.", "DNS Restore")
+        } else {
+            [System.Windows.MessageBox]::Show("No GUI DNS backup was found.", "DNS Restore", "OK", "Warning")
+        }
+    } catch {
+        [System.Windows.MessageBox]::Show("DNS restore failed:`n$($_.Exception.Message)", "DNS Restore", "OK", "Error")
     }
 })
 

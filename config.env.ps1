@@ -21,6 +21,7 @@ $CFG_LogDir         = "$CFG_WorkDir\Logs"
 $CFG_LogFile        = "$CFG_LogDir\optimize_current.log"
 $CFG_StateFile      = "$CFG_WorkDir\state.json"
 $CFG_ProgressFile   = "$CFG_WorkDir\progress.json"
+$CFG_LatencyHistoryFile = "$CFG_WorkDir\latency_history.json"
 $CFG_LogMaxFiles    = 5
 $CFG_BackupMaxVersions = 3
 # Bypass is the default because the suite runs locally and is already admin-elevated.
@@ -123,42 +124,40 @@ $CFG_TimerResolution_Desired = 5000        # 0.5ms in 100ns units
 # ── DNS Servers ──────────────────────────────────────────────────────────────
 $CFG_DNS_Cloudflare = @("1.1.1.1", "1.0.0.1")
 $CFG_DNS_Google     = @("8.8.8.8", "8.8.4.4")
+$CFG_LatencyTargetsFile = if ($PSScriptRoot) { Join-Path $PSScriptRoot "cfgs\valve-latency-targets.json" } else { ".\cfgs\valve-latency-targets.json" }
 
 # ── CS2 Autoexec Defaults ────────────────────────────────────────────────────
 # Notes:
 #   rate 1000000      — actual CS2 max; 786432 shows "Extremely restricted" in UI (display bug).
 #   cl_net_buffer_ticks 0 — authoritative interp control in CS2; cl_interp_ratio/cl_interp are
-#     belt-and-suspenders. engine_low_latency_sleep_after_client_tick 1 REQUIRES fps_max cap:
-#     without a cap, sleep target = 0 (no-op). fps_max 0 = uncapped default; for minimum
-#     latency pair with fps_max [refresh+20%] + NVIDIA Low Latency Mode On.
+#     belt-and-suspenders. engine_low_latency_sleep_after_client_tick remains in the current
+#     public convar surface and is documented as interacting with r_low_latency; the repo keeps
+#     it enabled as a suite default without claiming fps_max 0 is what activates it.
+#   fps_max 0 — uncapped default. If you prefer a cap, set it explicitly after benchmarking or
+#     via the FPS Cap Calculator guidance.
 #   net_client_steamdatagram_enable_override 1 — forces Valve SDR routing (helps most regions).
 #     Set to 0 here if your direct connection is already clean/low-latency.
-#   speaker_config 1 — Headphones mode, REQUIRED for HRTF (Advanced 3D Audio) to work correctly.
-#     Stereo/Surround+HRTF routes through a matrix decoder first, degrading spatial accuracy.
+#   speaker_config 1 — Headphones mode. The repo treats this as the current headphone-focused
+#     spatial baseline, but does not claim a separate snd_use_hrtf toggle exists in the current
+#     public convar surface.
 #   snd_headphone_eq 0 — Natural (unprocessed). 2026 pro study (esportfire.com, 30+ players):
 #     62.5% Natural, 37.5% Crisp. Crisp (1) boosts 2-4kHz highs for footstep clarity but
 #     causes ear fatigue over long sessions. Change to 1 to prefer Crisp.
-#   snd_use_hrtf 1 — explicitly enables Steam Audio HRTF. speaker_config 1 is a prerequisite
-#     (headphone layout required) but does not activate HRTF by itself. All other spatial CVars
-#     (snd_spatialize_lerp 0, perspective_correction 1) are tuned for HRTF-on; without this
-#     line those settings are misconfigured. Change to 0 if using external head-tracking or
-#     surround sound DSP (adjust speaker_config and snd_spatialize_lerp accordingly).
-#   snd_spatialize_lerp 0 — no additional L/R isolation. With HRTF enabled (snd_use_hrtf 1),
-#     Steam Audio already provides directional cues; adding isolation creates redundant hard panning.
-#     2026 pro data: 62.5% use 0 (physically accurate with HRTF). Change to 0.5 for harder
-#     left/right separation without HRTF.
-#   snd_mixahead 0.05 — 50ms audio lookahead. Competitive standard. 0.001 risks audible
-#     dropouts from CPU scheduling jitter on anything below top-end hardware.
+#   snd_spatialize_lerp 0 — current suite default for the headphone-focused spatial path.
+#     This is a community-preferred setting, not a Valve-documented competitive requirement.
+#   snd_mixahead 0.05 — conservative community-preferred audio buffer. The current public
+#     convar dump shows a much lower engine default, so the repo treats 0.05 as a stability-
+#     oriented suite default rather than as Valve's current default.
 #   mm_dedicated_search_maxping 80 — tune by region: EU → 40, SEA → 80-150.
 #   r_fullscreen_gamma 2.2 — exclusive fullscreen only (no-op in fullscreen windowed).
 #     Competitive players use 1.6-1.8 to brighten dark corners. 2.2 = system default.
-#   r_player_visibility_mode 1 — Boost Player Contrast. ThourCS2 confirmed: zero FPS cost,
-#     measurable enemy model visibility improvement. Was broken in 2023, fixed since 2024.
-#   m_rawinput 1 — reads directly from HID device, bypasses Windows pointer acceleration.
-#     Without this, CS2 reads the already-processed Windows cursor position; EnhancePointerPrecision
-#     would apply even if Step 29 disabled it in registry (a user re-enabling it in Win settings
-#     would silently affect CS2 again). m_rawinput is the correct layer to enforce this.
-#     m_mouseaccel1/2/customaccel 0 — disable all CS2-side acceleration on top of raw input.
+#   r_player_visibility_mode 1 — Boost Player Contrast. Community benchmarking reports low
+#     overhead on many systems, but the repo now treats it as a suite default rather than a
+#     universal rule.
+#   m_rawinput 1 — kept only as a harmless documentation/forward-compatibility stub.
+#     Current CS2 builds force raw input on already, so this line is a no-op today.
+#     Step 29 handles the Windows-side pointer-acceleration setting; m_mouseaccel1/2/customaccel 0
+#     remain the active CS2-side acceleration guards inside the generated config.
 $CFG_CS2_Autoexec = [ordered]@{
     # ── Network / Interpolation ────────────────────────────────────────────
     # NOTE: cl_interp_ratio, cl_interp, cl_updaterate are deprecated in CS2 Source 2.
@@ -176,7 +175,7 @@ $CFG_CS2_Autoexec = [ordered]@{
     "cl_timeout"                                   = "30"
     "net_client_steamdatagram_enable_override"     = "1"
     # ── Engine / FPS ──────────────────────────────────────────────────────
-    "engine_low_latency_sleep_after_client_tick"   = "1"     # NOTE: no-op with fps_max 0 — activates when user sets fps_max via FPS Cap Calculator
+    "engine_low_latency_sleep_after_client_tick"   = "1"     # Current convar exists; kept as a suite default without claiming fps_max 0 activates it
     "engine_no_focus_sleep"                        = "0"
     "fps_max"                                      = "0"     # Uncapped default — use FPS Cap Calculator to set optimal cap (enables low_latency_sleep above)
     "fps_max_ui"                                   = "200"
@@ -221,7 +220,6 @@ $CFG_CS2_Autoexec = [ordered]@{
     "cl_hud_telemetry_serverrecvmargin_graph_show" = "0"
     # ── Audio — Spatial / System ───────────────────────────────────────────
     "speaker_config"                               = "1"
-    "snd_use_hrtf"                                 = "1"
     "snd_mixahead"                                 = "0.05"
     "snd_headphone_eq"                             = "0"
     "snd_spatialize_lerp"                          = "0"
@@ -275,13 +273,13 @@ $CFG_ImprovementEstimates = @{
     # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "FPS Cap"                    = @{ P1LowMin=5;  P1LowMax=20; AvgMin=-9;AvgMax=-9; Confidence="HIGH";   Note="Stabilizes frametimes. Avg drops by cap." }
     "Timer Resolution"           = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="More precise system timer" }
-    "HAGS Toggle"                = @{ P1LowMin=-3; P1LowMax=5;  AvgMin=-2;AvgMax=3;  Confidence="MEDIUM"; Note="2026: ON recommended for RTX 40/50 + AMD 9000 (MPO removal fixed stutters). Older GPUs: benchmark both" }
+    "HAGS Toggle"                = @{ P1LowMin=-3; P1LowMax=5;  AvgMin=-2;AvgMax=3;  Confidence="MEDIUM"; Note="Suite default favors ON on newer GPUs based on current community benchmarking; benchmark both on your own system" }
     "NIC Tweaks"                 = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=0;  Confidence="LOW";    Note="Only if LatencyMon shows NIC DPC" }
     "MSI Interrupts"             = @{ P1LowMin=0;  P1LowMax=5;  AvgMin=0; AvgMax=1;  Confidence="MEDIUM"; Note="Reduces DPC latency" }
     # The following entry is referenced by step-catalog.ps1 for GUI display
     # but is not directly used as -EstimateKey in Invoke-TieredStep calls.
     "Clean Driver Install"       = @{ P1LowMin=2;  P1LowMax=10; AvgMin=0; AvgMax=5;  Confidence="HIGH";   Note="Bloat-free driver" }
-    "Autoexec CVars"             = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="74 CVars: network, engine latency sleep, mouse raw input, audio spatial+HRTF, music mute, video, gameplay" }
+    "Autoexec CVars"             = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=0;  Confidence="MEDIUM"; Note="73 CVars: network, engine latency sleep, CS2-side mouse acceleration guards, audio spatial defaults, music mute, video, gameplay" }
     "SysMain Disable"            = @{ P1LowMin=0;  P1LowMax=3;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Only on HDD or low RAM" }
     "Debloat"                    = @{ P1LowMin=0;  P1LowMax=2;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="Fewer background processes" }
     "Visual Effects"             = @{ P1LowMin=0;  P1LowMax=1;  AvgMin=0; AvgMax=1;  Confidence="LOW";    Note="DWM overhead reduction" }
