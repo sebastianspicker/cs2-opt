@@ -548,6 +548,7 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
             <Button x:Name="NavOptimize"  Content="⚡   Optimize"   Style="{StaticResource NavBtn}"/>
             <Button x:Name="NavBackup"    Content="⟳   Backup"     Style="{StaticResource NavBtn}"/>
             <Button x:Name="NavBenchmark" Content="◈   Benchmark"  Style="{StaticResource NavBtn}"/>
+            <Button x:Name="NavNetwork"   Content="⇄   Network"    Style="{StaticResource NavBtn}"/>
             <Button x:Name="NavVideo"     Content="▣   Video"      Style="{StaticResource NavBtn}"/>
             <Button x:Name="NavSettings"  Content="⚙   Settings"   Style="{StaticResource NavBtn}"/>
           </StackPanel>
@@ -742,6 +743,10 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
             <StackPanel Orientation="Horizontal">
               <Button x:Name="BtnAnalyzeGotoOpt" Content="→  Open in Optimize" Style="{StaticResource AccBtn}" Margin="0,0,10,0"/>
               <Button x:Name="BtnAnalyzeExport"  Content="⤓  Export Report"    Style="{StaticResource SecBtn}"/>
+              <Button x:Name="BtnAnalyzeStorageRefresh" Content="↺  Storage Health" Style="{StaticResource SecBtn}" Margin="10,0,10,0"/>
+              <Button x:Name="BtnAnalyzeTrimEnable" Content="Enable TRIM" Style="{StaticResource SecBtn}" Margin="0,0,10,0"/>
+              <Button x:Name="BtnAnalyzeRetrim" Content="ReTrim…" Style="{StaticResource SecBtn}" Margin="0,0,10,0"/>
+              <TextBlock x:Name="AnalyzeStorageHealth" Text="" VerticalAlignment="Center" FontSize="12" Foreground="#9ca3af" TextWrapping="Wrap"/>
             </StackPanel>
           </Border>
         </Grid>
@@ -920,6 +925,59 @@ function New-Brush { [System.Windows.Media.BrushConverter]::new().ConvertFromStr
           </Border>
         </Grid>
 
+        <!-- ═══ NETWORK ═══ -->
+        <ScrollViewer x:Name="PanelNetwork" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="28,20,28,28">
+            <TextBlock Text="Valve Region Latency Diagnostic" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,10"/>
+            <TextBlock Text="Diagnostic proxy for route quality and relay reachability. This is not a guaranteed in-match CS2 ping." Foreground="#9ca3af" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,18"/>
+
+            <TextBlock Text="NETWORK SUMMARY" Style="{StaticResource SectionHeader}"/>
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,18">
+              <StackPanel>
+                <TextBlock x:Name="NetDiagAdapterSummary" Text="Adapter: loading…" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <TextBlock x:Name="NetDiagDnsSummary" Text="DNS: loading…" FontSize="12" Foreground="#9ca3af"/>
+                <TextBlock x:Name="NetDiagHistorySummary" Text="" FontSize="11" Foreground="#6b7280" Margin="0,8,0,0"/>
+              </StackPanel>
+            </Border>
+
+            <TextBlock Text="DNS WORKFLOW" Style="{StaticResource SectionHeader}"/>
+            <WrapPanel Margin="0,0,0,18">
+              <Button x:Name="BtnNetRefresh" Content="↺  Refresh" Style="{StaticResource SecBtn}" Margin="0,0,10,10"/>
+              <Button x:Name="BtnNetBaseline" Content="Baseline Test" Style="{StaticResource AccBtn}" Margin="0,0,10,10"/>
+              <Button x:Name="BtnNetPost" Content="Post-Change Retest" Style="{StaticResource SecBtn}" Margin="0,0,10,10"/>
+              <Button x:Name="BtnNetDnsCloudflare" Content="Use Cloudflare" Style="{StaticResource SecBtn}" Margin="0,0,10,10"/>
+              <Button x:Name="BtnNetDnsGoogle" Content="Use Google" Style="{StaticResource SecBtn}" Margin="0,0,10,10"/>
+              <Button x:Name="BtnNetDnsDhcp" Content="Reset to DHCP" Style="{StaticResource SecBtn}" Margin="0,0,10,10"/>
+              <Button x:Name="BtnNetDnsRestore" Content="Restore Previous DNS" Style="{StaticResource SecBtn}" Margin="0,0,10,10"/>
+            </WrapPanel>
+
+            <TextBlock Text="LATEST BASELINE VS POST" Style="{StaticResource SectionHeader}"/>
+            <DataGrid x:Name="NetDiagComparisonGrid" SelectionUnit="FullRow" CanUserSortColumns="True" Margin="0,0,0,18">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="Region" Binding="{Binding TargetLabel}" Width="110"/>
+                <DataGridTextColumn Header="Baseline Avg" Binding="{Binding BaselineAvgMs}" Width="95"/>
+                <DataGridTextColumn Header="Post Avg" Binding="{Binding PostAvgMs}" Width="85"/>
+                <DataGridTextColumn Header="Δ ms" Binding="{Binding DeltaMs}" Width="70"/>
+                <DataGridTextColumn Header="Timeouts" Binding="{Binding TimeoutSummary}" Width="90"/>
+                <DataGridTextColumn Header="Protocol" Binding="{Binding ProtocolUsed}" Width="70"/>
+                <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="*"/>
+              </DataGrid.Columns>
+            </DataGrid>
+
+            <TextBlock Text="RUN HISTORY" Style="{StaticResource SectionHeader}"/>
+            <DataGrid x:Name="NetDiagHistoryGrid" SelectionUnit="FullRow" CanUserSortColumns="True">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="Timestamp" Binding="{Binding Timestamp}" Width="135"/>
+                <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="70"/>
+                <DataGridTextColumn Header="Adapter" Binding="{Binding AdapterName}" Width="120"/>
+                <DataGridTextColumn Header="DNS" Binding="{Binding DnsProvider}" Width="90"/>
+                <DataGridTextColumn Header="Avg RTT" Binding="{Binding AvgRttMs}" Width="80"/>
+                <DataGridTextColumn Header="Regions OK" Binding="{Binding RegionsOk}" Width="80"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </StackPanel>
+        </ScrollViewer>
+
         <!-- ═══ VIDEO ═══ -->
         <Grid x:Name="PanelVideo" Visibility="Collapsed">
           <Grid.RowDefinitions>
@@ -1067,13 +1125,14 @@ function El {
 (El "BtnClose").Add_Click({ $Window.Close() })
 
 # ── Navigation ────────────────────────────────────────────────────────────────
-$Script:AllPanels = "PanelDashboard","PanelAnalyze","PanelOptimize","PanelBackup","PanelBenchmark","PanelVideo","PanelSettings"
+$Script:AllPanels = "PanelDashboard","PanelAnalyze","PanelOptimize","PanelBackup","PanelBenchmark","PanelNetwork","PanelVideo","PanelSettings"
 $Script:NavMap    = @{
     "PanelDashboard"  = "NavDashboard"
     "PanelAnalyze"    = "NavAnalyze"
     "PanelOptimize"   = "NavOptimize"
     "PanelBackup"     = "NavBackup"
     "PanelBenchmark"  = "NavBenchmark"
+    "PanelNetwork"    = "NavNetwork"
     "PanelVideo"      = "NavVideo"
     "PanelSettings"   = "NavSettings"
 }
@@ -1087,6 +1146,7 @@ $InactiveStyle = $Window.Resources["NavBtn"]
 (El "NavOptimize" ).Add_Click({ Switch-Panel "PanelOptimize" ; Load-Optimize  })
 (El "NavBackup"   ).Add_Click({ Switch-Panel "PanelBackup"   ; Load-Backup    })
 (El "NavBenchmark").Add_Click({ Switch-Panel "PanelBenchmark"; Load-Benchmark })
+(El "NavNetwork"  ).Add_Click({ Switch-Panel "PanelNetwork"  ; Load-NetworkDiagnostics })
 (El "NavVideo"    ).Add_Click({ Switch-Panel "PanelVideo"    ; Load-Video     })
 (El "NavSettings" ).Add_Click({ Switch-Panel "PanelSettings" ; Load-Settings  })
 

@@ -55,11 +55,12 @@ BeforeAll {
     function Write-DebugLog {}
 
     $Script:UISync = @{}
-    $Script:AllPanels = @("PanelDashboard", "PanelAnalyze", "PanelOptimize")
+    $Script:AllPanels = @("PanelDashboard", "PanelAnalyze", "PanelOptimize", "PanelNetwork")
     $Script:NavMap = @{
         "PanelDashboard" = "NavDashboard"
         "PanelAnalyze"   = "NavAnalyze"
         "PanelOptimize"  = "NavOptimize"
+        "PanelNetwork"   = "NavNetwork"
     }
     $ActiveStyle = "ACTIVE"
     $InactiveStyle = "INACTIVE"
@@ -77,11 +78,12 @@ Describe "Switch-Panel" {
 
     BeforeEach {
         $script:GuiElements = @{}
-        $Script:AllPanels = @("PanelDashboard", "PanelAnalyze", "PanelOptimize")
+        $Script:AllPanels = @("PanelDashboard", "PanelAnalyze", "PanelOptimize", "PanelNetwork")
         $Script:NavMap = @{
             "PanelDashboard" = "NavDashboard"
             "PanelAnalyze"   = "NavAnalyze"
             "PanelOptimize"  = "NavOptimize"
+            "PanelNetwork"   = "NavNetwork"
         }
         $Script:ActivePanel = "PanelDashboard"
     }
@@ -103,6 +105,66 @@ Describe "Switch-Panel" {
 
         $script:called | Should -Be $true
         $Script:ActivePanel | Should -Be "PanelOptimize"
+    }
+}
+
+Describe "Network panel helpers" {
+
+    BeforeEach {
+        $script:GuiElements = @{}
+    }
+
+    It "renders the current adapter, DNS state, comparison rows, and history rows" {
+        Mock Get-NetworkDiagnosticSummary {
+            [PSCustomObject]@{
+                AdapterFound = $true
+                AdapterName  = "Ethernet"
+                AdapterType  = "Physical / wired"
+                DnsProvider  = "Cloudflare"
+                DnsServers   = @("1.1.1.1", "1.0.0.1")
+            }
+        }
+        Mock Get-LatencyHistoryRows {
+            @(
+                [PSCustomObject]@{ Timestamp = "2026-04-15 12:00:00"; Kind = "baseline"; AdapterName = "Ethernet"; DnsProvider = "Cloudflare"; AvgRttMs = 18.3; RegionsOk = 4 }
+            )
+        }
+        Mock Get-ValveLatencyComparisonRows {
+            @(
+                [PSCustomObject]@{ TargetLabel = "Frankfurt"; BaselineAvgMs = 18.3; PostAvgMs = 16.1; DeltaMs = -2.2; TimeoutSummary = "0 → 0"; ProtocolUsed = "ICMP"; Endpoint = "155.133.232.10" }
+            )
+        }
+
+        Load-NetworkDiagnostics
+
+        (El "NetDiagAdapterSummary").Text | Should -Match "Ethernet"
+        (El "NetDiagDnsSummary").Text | Should -Match "Cloudflare"
+        @((El "NetDiagComparisonGrid").ItemsSource).Count | Should -Be 1
+        @((El "NetDiagHistoryGrid").ItemsSource).Count | Should -Be 1
+    }
+}
+
+Describe "Analyze storage helpers" {
+
+    BeforeEach {
+        $script:GuiElements = @{}
+    }
+
+    It "shows storage maintenance status without framing it as performance meta" {
+        Mock Get-TrimHealthStatus {
+            [PSCustomObject]@{
+                Summary = "NTFS: enabled"
+                AnyTrimDisabled = $false
+                RetrimAvailable = $true
+                RetrimmableVolumes = @("C")
+            }
+        }
+
+        Refresh-StorageHealthCard
+
+        (El "AnalyzeStorageHealth").Text | Should -Match "Storage maintenance"
+        (El "BtnAnalyzeTrimEnable").IsEnabled | Should -Be $false
+        (El "BtnAnalyzeRetrim").IsEnabled | Should -Be $true
     }
 }
 

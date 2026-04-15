@@ -2,7 +2,7 @@
 
 > `START-GUI.bat` → Run as Administrator
 
-The GUI dashboard is a non-destructive management layer for the optimization suite. It does not replace the terminal phases — Phase 1, 2, and 3 still run in a terminal window. The dashboard handles everything else: analyzing your current system state, reviewing what has been changed, tracking benchmark results over time, and configuring CS2 video settings.
+The GUI dashboard is a non-destructive management layer for the optimization suite. It does not replace the terminal phases — Phase 1, 2, and 3 still run in a terminal window. The dashboard handles everything else: analyzing your current system state, reviewing what has been changed, tracking benchmark and latency history over time, performing DNS workflow checks, surfacing storage maintenance status, and configuring CS2 video settings.
 
 ---
 
@@ -45,11 +45,13 @@ Runs a non-destructive system health scan. No changes are made. Results take 5�
 - `⚠ Check` (yellow) — present but not optimal, or hardware-dependent
 - `✗ Off / Missing / Default` (red) — not yet optimized
 
-**Categories covered:** Hardware (dual-channel, XMP, VBS/HVCI), Windows Gaming (HAGS, Game Mode, DVR, Fast Startup, MPO, FSE, Auto HDR), System Latency (MMCSS, Win32PrioritySeparation, DisablePagingExecutive, Timer, FTH, Maintenance, NTFS), Input (mouse acceleration, mouclass queue), Network (Nagle, IPv6, QoS NLA, URO), Services (SysMain, WSearch, Xbox, qWave), CS2 Config (autoexec CVars, video.txt settings, launch options).
+**Categories covered:** Hardware (dual-channel, XMP, VBS/HVCI), Windows Gaming (HAGS, Game Mode, DVR, Fast Startup, MPO, FSE, Auto HDR), System Latency (MMCSS, Win32PrioritySeparation, DisablePagingExecutive, Timer, FTH, Maintenance, NTFS), Input (mouse acceleration, mouclass queue), Network (Nagle, IPv6, QoS NLA, URO where supported on Windows 11 24H2+), Services (SysMain, WSearch, Xbox, qWave), CS2 Config (autoexec CVars, video.txt settings, launch options).
 
 **Export CSV** — saves the full results table to `C:\CS2_OPTIMIZE\analysis_<timestamp>.csv`. Useful for before/after comparison or sharing for support.
 
 Each row includes a `StepRef` column showing which step addresses it (e.g., "Phase 1 Step 27") and an `Impact` estimate.
+
+**Storage Health strip** — the Analyze footer also shows TRIM maintenance state. `Enable TRIM` only corrects `DisableDeleteNotify` if it is off. `ReTrim…` is an optional storage-maintenance action for eligible fixed volumes. Neither action is documented as a competitive-performance meta tweak.
 
 ---
 
@@ -92,6 +94,26 @@ Tracks FPS measurements over time and calculates your optimal NVCP frame cap.
 **+ Add Result** — opens a dialog to label the result. If you paste a `[VProf] FPS: Avg=387.2, P1=312.0` line into the text field first, the Avg and P1 values are auto-parsed; you only need to confirm the label.
 
 **FPS Cap Calculator** — paste any `[VProf]` line from the CS2 console into the text field, hit Calc, and the recommended cap is computed (`Avg × 0.91`). Click "Copy cap" to put the value on clipboard for pasting into NVCP.
+
+---
+
+### Network
+
+The Network panel combines DNS switching with the Valve Region Latency Diagnostic.
+
+**What it is:** a route-quality and relay-reachability proxy built on PowerShell-native `Test-Connection`. It stores baseline and post-change runs in `C:\CS2_OPTIMIZE\latency_history.json`.
+
+**What it is not:** a Valve-official or guaranteed in-match CS2 ping reading. Some candidate endpoints will block ICMP, which appears as timeouts rather than a measured RTT.
+
+**Buttons:**
+- **Baseline Test** — records the current adapter/DNS state and measures all configured regions.
+- **Post-Change Retest** — records a second run after a DNS or network change so the latest baseline/post pair can be compared side by side.
+- **Use Cloudflare / Use Google / Reset to DHCP** — applies DNS to the active adapter using documented Windows DNS cmdlets, with backup capture before the write.
+- **Restore Previous DNS** — restores the latest GUI-created DNS backup through the suite's normal rollback path.
+
+**Tables:**
+- **Latest Baseline vs Post** — compares the latest baseline/post pair per region, including average RTT, timeout drift, and whether a later same-region candidate had to be used.
+- **Run History** — timestamped history of recent diagnostic runs.
 
 ---
 
@@ -141,6 +163,8 @@ The GUI does supplement the terminal with:
 - Pre-flight system analysis before you run any phases
 - Backup review and per-step rollback after running phases
 - Benchmark tracking across multiple sessions
+- Valve-region latency diagnostics with DNS A/B workflow
+- Storage health / TRIM maintenance actions
 - video.txt management independently of the optimization phases
 
 ---
