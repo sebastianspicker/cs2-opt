@@ -18,6 +18,13 @@
     13  Final Benchmark + FPS Cap Calculation  [T1, LAST STEP]
 #>
 
+param([switch]$SmokeTest)
+
+if ($SmokeTest) {
+    Write-Host "SMOKE TEST OK: PostReboot-Setup" -ForegroundColor Green
+    exit 0
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path

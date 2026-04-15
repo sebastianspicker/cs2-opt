@@ -49,8 +49,8 @@ $PP_IDLEDISABLE    = "4009efa7-e72d-4cba-9edf-91084ea8cbc3"  # C-state disable: 
 $PP_IDLESTATEMAX   = "9943e905-9a30-4ec1-9b99-44dd3b76f7a2"  # Max idle state: 2=C1/C1E only (<100µs exit)
 $PP_DUTYCYCLING    = "4e4d2049-be1a-4064-b872-bcc8dccebce4"  # Duty cycling: 0=off (inverted vs FPSHeaven)
 $PP_PERFHISTCOUNT  = "7d24baa7-0b84-480f-840c-1b0743c00f5f"  # Perf history count: 1=minimal (faster response)
-$PP_PERFINCRTIME   = "984cf492-3bed-4488-a8f9-4286c97bf5aa"  # Perf increase time: 100µs (fastest ramp-up)
-$PP_PERFDECRTIME   = "d8edeb9b-95cf-4f95-a73c-b061973693c8"  # Perf decrease time: 250000µs (hold boost 250ms)
+$PP_PERFINCRTIME   = "984cf492-3bed-4488-a8f9-4286c97bf5aa"  # Perf increase time: 0 intervals (fastest documented ramp-up)
+$PP_PERFDECRTIME   = "d8edeb9b-95cf-4f95-a73c-b061973693c8"  # Perf decrease time: 100 intervals (slowest documented drop)
 $PP_CPMINCORES     = "0cc5b647-c1df-4637-891a-dec35c318583"  # Core parking min cores %: 100=no parking
 $PP_CPMAXCORES     = "ea062031-0e34-4ff1-9b6d-eb1059334028"  # Core parking max cores %: 100=use all cores
 $PP_CPMINCORES1    = "4d2b0152-7d5c-498b-88e2-34345392a2c5"  # Intel secondary ring min cores (Intel-only)
@@ -62,7 +62,7 @@ $PP_DISKPOWERMGMT  = "0b2d69d7-a2a1-449c-9680-f91c70521c60"  # AHCI LPM: T1→1 
 # T1's partial HIPM-only state with fully-off (0). This is the tier progression:
 # SAFE users get HIPM-only (safer); RECOMMENDED+ get HIPM+DIPM fully off (max latency).
 $PP_DISKLPM        = "0b2d69d7-a2a1-449c-9680-f91c70521c60"  # ALPM/DIPM: 0=fully off (T2 override)
-$PP_DISKNV         = "dab60367-53fe-4fbc-825e-521d069d2456"  # NVMe APST: 0=off (avoids NVMe latency spikes)
+$PP_DISKAHCIADAPTIVE = "dab60367-53fe-4fbc-825e-521d069d2456"  # AHCI adaptive link-power timeout: 0=partial-state only
 $PP_DISKNVIDLE     = "d3d55efd-c1ff-424e-9dc3-441be7833010"  # NVMe idle timeout: 0=never
 $PP_DISKADAPTIVE   = "dbc9e238-6de9-49d9-a138-611ececd40d0"  # Disk adaptive power (DIPM): 0=off
 
@@ -286,8 +286,9 @@ function Apply-PowerPlan {
         # AHCI LPM fully off (T2 overrides T1's HIPM-only with HIPM+DIPM inactive)
         Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKLPM 0 "AHCI HIPM+DIPM (fully off)"
 
-        # NVMe APST off — avoids NVMe latency spikes under mixed workloads
-        Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKNV 0 "NVMe power management (off)"
+        # AHCI adaptive timeout — 0 means "partial state only" when AHCI HIPM/DIPM is enabled.
+        # This is an AHCI/SATA setting, not NVMe APST.
+        Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKAHCIADAPTIVE 0 "AHCI adaptive link-power timeout (0 ms / partial only)"
         Set-PowerPlanValue $PlanGuid $PP_SUB_DISK $PP_DISKNVIDLE 0 "NVMe idle timeout (never)"
 
         # Disk adaptive power (DIPM) off — SATA drives only, prevents adaptive spin-down
@@ -330,10 +331,11 @@ function Apply-PowerPlan {
         # Duty cycling off — prevents periodic forced freq pauses (we invert FPSHeaven's value of 1)
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_DUTYCYCLING 0 "Duty cycling (off)"
 
-        # Fast governor response: minimal history, fastest ramp-up, 250ms hold before dropping clocks
+        # Fast governor response using the documented 0..100 interval range:
+        # 0 = fastest allowed increase, 100 = slowest allowed decrease.
         Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFHISTCOUNT 1 "Perf history count (1 sample)"
-        Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFINCRTIME 100 "Perf increase time (100µs)"
-        Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFDECRTIME 250000 "Perf decrease time (250ms)"
+        Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFINCRTIME 0 "Perf increase time (0 intervals)"
+        Set-PowerPlanValue $PlanGuid $PP_SUB_PROCESSOR $PP_PERFDECRTIME 100 "Perf decrease time (100 intervals)"
 
         $t3Count = if ($skipCstateDisable) { 4 } else { 5 }
         $t3Verb = if ($SCRIPT:DryRun) { "previewed" } else { "applied" }

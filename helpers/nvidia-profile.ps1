@@ -62,13 +62,13 @@ $NV_DRS_SETTINGS = @(
     @{ Id=277041154;  Value=0;          Name="Frame Rate Limiter (legacy): OFF" }
     @{ Id=277041162;  Value=500;        Name="FRL NVCPL: 500 FPS cap (effectively unlimited for most monitors)" }
 
-    # ── VRR / G-SYNC (all disabled for competitive) ─────────────────────────
-    @{ Id=278196567;  Value=0;          Name="VRR global feature: OFF" }
-    @{ Id=278196727;  Value=0;          Name="VRR requested state: OFF" }
-    @{ Id=279476652;  Value=1;          Name="G-SYNC: FORCE_OFF" }
+    # ── VRR / G-SYNC (suite default; benchmark on VRR/Pulsar displays) ─────
+    @{ Id=278196567;  Value=0;          Name="VRR global feature: OFF (suite default)" }
+    @{ Id=278196727;  Value=0;          Name="VRR requested state: OFF (suite default)" }
+    @{ Id=279476652;  Value=1;          Name="G-SYNC: FORCE_OFF (suite default)" }
     # Removed: Id=279476686 (0x10A879CE) — not in NPI, likely inert; other 6 G-SYNC settings cover VRR
-    @{ Id=279476687;  Value=1;          Name="G-SYNC (2): FORCE_OFF" }
-    @{ Id=294973784;  Value=0;          Name="G-SYNC globally: OFF" }
+    @{ Id=279476687;  Value=1;          Name="G-SYNC (2): FORCE_OFF (suite default)" }
+    @{ Id=294973784;  Value=0;          Name="G-SYNC globally: OFF (suite default)" }
     @{ Id=5912412;    Value=2525368439; Name="VSync tear control: disabled" }
 
     # ── Ansel ────────────────────────────────────────────────────────────────
@@ -81,12 +81,10 @@ $NV_DRS_SETTINGS = @(
 
     # ── Resizable BAR ───────────────────────────────────────────────────────
     # NPI CustomSettingNames.xml: 0x000F00BA = "rBAR - Enable"
-    # ThourCS2 2026 benchmark (FPSHeaven Dust2 + offline bots): rBAR OFF gives
-    # ~6% better 1% lows in CS2. CS2's memory access patterns don't benefit from
-    # full VRAM access — the overhead of the larger BAR window hurts frametime
-    # consistency. Disabled per-app for CS2; system-wide BIOS rBAR stays enabled
-    # (other titles like Cyberpunk, Hogwarts Legacy benefit from rBAR).
-    @{ Id=983226;     Value=0;          Name="rBAR: Disabled for CS2 (ThourCS2 2026: ~6% better 1% lows with OFF)" }
+    # Community benchmark heuristic: some CS2 benches reported better 1% lows with
+    # per-app rBAR disabled, but this is not a universal NVIDIA recommendation.
+    # Keep system-wide BIOS rBAR enabled unless your own benchmarks suggest otherwise.
+    @{ Id=983226;     Value=0;          Name="rBAR: Disabled for CS2 by suite default (community benchmark heuristic)" }
     @{ Id=983227;     Value=0;          Name="rBAR - Options: Disabled (companion setting)" }
 
     # ── Shader Cache ─────────────────────────────────────────────────────────
@@ -218,7 +216,7 @@ function Apply-NvidiaCS2Profile {
     Write-Host "  │  ✔  Texture Filtering:   High Performance                   │" -ForegroundColor White
     Write-Host "  │  ✔  Triple Buffering:    OFF                                │" -ForegroundColor White
     Write-Host "  │  ✔  VSync:               Force OFF                          │" -ForegroundColor White
-    Write-Host "  │  ✔  G-SYNC / VRR:        All disabled                       │" -ForegroundColor White
+    Write-Host "  │  ✔  G-SYNC / VRR:        Disabled by suite default          │" -ForegroundColor White
     Write-Host "  │  ✔  FXAA / Ansel:        OFF                                │" -ForegroundColor White
     Write-Host "  │  ✔  Max Pre-rendered:    1 frame                            │" -ForegroundColor White
     Write-Host "  │  ✔  Frame Rate Limiter:  $frlLabel$((' ' * [math]::Max(0, 36 - $frlLabel.Length)))│" -ForegroundColor White

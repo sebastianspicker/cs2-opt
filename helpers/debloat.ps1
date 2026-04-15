@@ -95,7 +95,7 @@ function Invoke-GamingDebloat {
     foreach ($svc in $telemetryServices) {
         $svcObj = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
         if (-not $svcObj) {
-            if ($svc.Optional) { Write-Info "Service '$($svc.Name)' not present (removed in newer Windows) — skipping." }
+            if ($svc.Contains('Optional') -and $svc.Optional) { Write-Info "Service '$($svc.Name)' not present (removed in newer Windows) — skipping." }
             else { Write-Warn "Service '$($svc.Name)' not found on this system — skipping." }
             continue
         }
@@ -132,7 +132,7 @@ function Invoke-GamingDebloat {
         }
         foreach ($t in $tasks) {
             # Skip already-disabled tasks (idempotent re-run)
-            if ($t.State -eq "Disabled") {
+            if ($t.PSObject.Properties['State'] -and $t.State -eq "Disabled") {
                 Write-Sub "Task '$($t.TaskName)': already disabled — skipped."
                 continue
             }

@@ -172,9 +172,18 @@ function Initialize-PhaseCounters {
     $Script:_phaseFailed  = 0
 }
 
-function Add-PhaseApplied { if ($null -eq $Script:_phaseApplied) { $Script:_phaseApplied = 0 }; $Script:_phaseApplied++ }
-function Add-PhaseSkipped { if ($null -eq $Script:_phaseSkipped) { $Script:_phaseSkipped = 0 }; $Script:_phaseSkipped++ }
-function Add-PhaseFailed  { if ($null -eq $Script:_phaseFailed) { $Script:_phaseFailed = 0 }; $Script:_phaseFailed++ }
+function Add-PhaseApplied {
+    if (-not (Get-Variable -Name _phaseApplied -Scope Script -ErrorAction SilentlyContinue)) { $Script:_phaseApplied = 0 }
+    $Script:_phaseApplied++
+}
+function Add-PhaseSkipped {
+    if (-not (Get-Variable -Name _phaseSkipped -Scope Script -ErrorAction SilentlyContinue)) { $Script:_phaseSkipped = 0 }
+    $Script:_phaseSkipped++
+}
+function Add-PhaseFailed  {
+    if (-not (Get-Variable -Name _phaseFailed -Scope Script -ErrorAction SilentlyContinue)) { $Script:_phaseFailed = 0 }
+    $Script:_phaseFailed++
+}
 
 function Write-PhaseSummary {
     <#  Displays a summary box after a phase with applied/skipped/failed counts.  #>

@@ -506,7 +506,7 @@ Describe "Corrupted backup.json recovery" {
         Get-BackupDataRaw
 
         # A .corrupt.*.json file should have been created
-        $corruptFiles = Get-ChildItem (Split-Path $CFG_BackupFile -Parent) -Filter "backup.corrupt.*.json"
+        $corruptFiles = @(Get-ChildItem (Split-Path $CFG_BackupFile -Parent) -Filter "backup.corrupt.*.json")
         $corruptFiles.Count | Should -BeGreaterOrEqual 1
     }
 

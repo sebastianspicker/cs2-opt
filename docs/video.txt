@@ -68,7 +68,7 @@
     "setting.msaa_samples"                     "4"    // 0=None, 2=2x, 4=4x, 8=8x
 
     // CMAA2 (Conservative Morphological AA) — post-process edge smoothing.
-    // Near-zero FPS cost. Use EITHER msaa_samples OR cmaa_enable, not both.
+    // Usually low FPS cost in community benchmarks. Use EITHER msaa_samples OR cmaa_enable, not both.
     // H/M: 0 (MSAA handles AA)    L: 1 (CMAA2 when msaa_samples=0 — free AA)
     "setting.r_csgo_cmaa_enable"               "0"    // H/M: 0  |  L: 1
 
@@ -194,13 +194,13 @@
 //  SETTINGS CONTROLLED IN autoexec.cfg (NOT here)
 // ===========================================================================
 //
-//  r_player_visibility_mode 1     Boost Player Contrast (ThourCS2: zero FPS cost)
+//  r_player_visibility_mode 1     Boost Player Contrast (suite default; benchmark-dependent)
 //  mat_monitorgamma_tv_enabled 0  Computer Monitor color mode
 //  r_fullscreen_gamma 2.2         Brightness (exclusive fullscreen only; try 1.6-1.8)
-//  speaker_config 1               Headphones mode (required for HRTF)
-//  snd_headphone_eq 0             Natural EQ (2026: 62.5% pros)
-//  snd_spatialize_lerp 0          No extra L/R isolation (correct with HRTF on)
-//  snd_mixahead 0.05              50ms audio lookahead (standard)
+//  speaker_config 1               Headphone-mode suite baseline
+//  snd_headphone_eq 0             Natural EQ (community-preferred default)
+//  snd_spatialize_lerp 0          Current headphone/spatial suite default
+//  snd_mixahead 0.05              Stability-oriented suite default
 //  snd_musicvolume / snd_*_volume Music fully muted (8 CVars)
 //
 // ===========================================================================

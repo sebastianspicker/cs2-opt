@@ -136,7 +136,7 @@ function Get-SteamPath {
     <#  Returns the Steam installation root directory from the registry, or $null.
         Single source of truth for all callers that need the Steam base path.  #>
     $reg = Get-ItemProperty "HKCU:\SOFTWARE\Valve\Steam" -Name "SteamPath" -ErrorAction SilentlyContinue
-    if ($reg -and $reg.SteamPath) { return $reg.SteamPath }
+    if ($reg -and $reg.PSObject.Properties['SteamPath'] -and $reg.SteamPath) { return $reg.SteamPath }
     return $null
 }
 
@@ -287,12 +287,16 @@ function Test-DualChannel {
         # Check BankLabel first, but some BIOSes report the same BankLabel for all DIMMs
         # (e.g., "BANK 0" for everything). Fall back to DeviceLocator which is more reliable
         # on modern systems (e.g., "DIMM_A1", "DIMM_B1" — different letters = different channels).
-        $banks = $sticks | ForEach-Object { $_.BankLabel } | Where-Object { $_ } | Select-Object -Unique
+        $banks = @($sticks | ForEach-Object {
+            if ($_.PSObject.Properties['BankLabel']) { $_.BankLabel }
+        } | Where-Object { $_ } | Select-Object -Unique)
         if ($banks.Count -ge 2) {
             return @{ DualChannel = $true;  Sticks = $sticks.Count; Reason = "$($sticks.Count) sticks in $($banks.Count) banks — dual-channel likely." }
         }
         # BankLabel was same or empty — check DeviceLocator for channel letters (A/B, 0/1)
-        $locators = $sticks | ForEach-Object { $_.DeviceLocator } | Where-Object { $_ } | Select-Object -Unique
+        $locators = @($sticks | ForEach-Object {
+            if ($_.PSObject.Properties['DeviceLocator']) { $_.DeviceLocator }
+        } | Where-Object { $_ } | Select-Object -Unique)
         if ($locators.Count -ge 2) {
             # Extract channel identifiers (e.g., "A" from "DIMM_A1", "B" from "DIMM_B2")
             $channels = $locators | ForEach-Object {
@@ -394,15 +398,15 @@ function Get-Ddr5TimingInfo {
     $ram = Get-RamInfo
     if (-not $ram -or -not $ram.IsDDR5) { return $null }
 
-    # DDR5 active transfer rate: ConfiguredClockSpeed * 2
-    $activeMTs = $ram.ActiveMhz * 2
+    # Get-RamInfo already normalizes DDR5 active speed to MT/s.
+    $activeMTs = $ram.ActiveMhz
     # FCLK on AM5: max stable 1:1 is 2000 MHz (DDR5-6000, MCLK 3000).
     # This is an approximation — actual FCLK ceiling varies by silicon quality.
     # For display purposes only; not used in any gating logic.
     $expectedFclk = [math]::Min($ram.ActiveMhz, 2000)
     # Detect if kit is downclocked (rated > active, e.g., 8200 → 6000)
     $isDownclocked = ($ram.SpeedMhz -gt ($activeMTs * 1.05))
-    # Optimal 1:1 check: ActiveMhz should be exactly 3000 for DDR5-6000
+    # Optimal AM5/X3D window is centered around DDR5-6000 MT/s.
     $isOptimal1to1 = ($activeMTs -ge 5600 -and $activeMTs -le 6400)
 
     return @{
