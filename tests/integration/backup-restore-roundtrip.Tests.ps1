@@ -263,22 +263,18 @@ Describe "BootConfig backup and restore roundtrip" {
     }
 
     It "BootConfig restore calls bcdedit /set for existing values" {
-        # bcdedit /enum /v outputs hex element IDs, not localized names
-        Mock bcdedit {
-            return @("identifier  {current}", "0x26000060  No")
-        }
-
-        Backup-BootConfig -Key "disabledynamictick" -StepTitle "Boot Test Step"
-        Flush-BackupBuffer
-
-        # Mock bcdedit for restore
         Mock bcdedit {
             $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
+            if (($capturedArgs -join " ") -match "/enum") {
+                return @("identifier  {current}", "0x26000060  No")
+            }
             $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
 
+        Backup-BootConfig -Key "disabledynamictick" -StepTitle "Boot Test Step"
+        Flush-BackupBuffer
         Restore-StepChanges -StepTitle "Boot Test Step"
 
         $SCRIPT:MockTracker.Bcdedit.Count | Should -BeGreaterThan 0
@@ -289,19 +285,17 @@ Describe "BootConfig backup and restore roundtrip" {
 
     It "BootConfig restore calls bcdedit /deletevalue for non-existent values" {
         Mock bcdedit {
-            return @("identifier  {current}")
-        }
-
-        Backup-BootConfig -Key "testkey" -StepTitle "Boot Test Step"
-        Flush-BackupBuffer
-
-        Mock bcdedit {
             $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
+            if (($capturedArgs -join " ") -match "/enum") {
+                return @("identifier  {current}")
+            }
             $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
 
+        Backup-BootConfig -Key "testkey" -StepTitle "Boot Test Step"
+        Flush-BackupBuffer
         Restore-StepChanges -StepTitle "Boot Test Step"
 
         $SCRIPT:MockTracker.Bcdedit.Count | Should -BeGreaterThan 0
