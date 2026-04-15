@@ -264,11 +264,11 @@ Describe "BootConfig backup and restore roundtrip" {
 
     It "BootConfig restore calls bcdedit /set for existing values" {
         Mock bcdedit {
-            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
-            if (($capturedArgs -join " ") -match "/enum") {
-                return @("identifier  {current}", "0x26000060  No")
-            }
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
+            return @("identifier  {current}", "0x26000060  No")
+        }
+
+        Mock Invoke-BootConfigRestoreCommand {
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = @($Arguments) })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
@@ -285,11 +285,11 @@ Describe "BootConfig backup and restore roundtrip" {
 
     It "BootConfig restore calls bcdedit /deletevalue for non-existent values" {
         Mock bcdedit {
-            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
-            if (($capturedArgs -join " ") -match "/enum") {
-                return @("identifier  {current}")
-            }
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
+            return @("identifier  {current}")
+        }
+
+        Mock Invoke-BootConfigRestoreCommand {
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = @($Arguments) })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
@@ -577,11 +577,11 @@ Describe "Restore security validation" {
         })
         New-TestBackupFile -Entries $malicious
 
-        Mock bcdedit {}
+        Mock Invoke-BootConfigRestoreCommand {}
 
         Restore-StepChanges -StepTitle "BCD Tamper"
 
-        Should -Not -Invoke bcdedit
+        Should -Not -Invoke Invoke-BootConfigRestoreCommand
     }
 
     It "Rejects powerplan restore with invalid GUID" {

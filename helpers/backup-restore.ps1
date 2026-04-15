@@ -370,6 +370,16 @@ function Backup-BootConfig {
     $SCRIPT:_backupPending.Add($entry)
 }
 
+function Invoke-BootConfigRestoreCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+
+    & bcdedit @Arguments 2>&1
+}
+
 function Backup-ScheduledTask {
     <#  Records whether a scheduled task existed and its enabled state before we modify it.
         Entries are buffered in memory and flushed at step boundaries.  #>
@@ -894,11 +904,11 @@ function Restore-StepChanges {
                             $restoreFail++
                             continue
                         }
-                        $bcdOut = bcdedit /set $e.key $e.originalValue 2>&1
+                        $bcdOut = Invoke-BootConfigRestoreCommand -Arguments @('/set', $e.key, $e.originalValue)
                         if ($LASTEXITCODE -ne 0) { Write-Warn "bcdedit restore failed for $($e.key): $bcdOut"; $restoreFail++ }
                         else { Write-OK "Restored: bcdedit $($e.key) = $($e.originalValue)"; $restoreOk++ }
                     } else {
-                        $bcdOut = bcdedit /deletevalue $e.key 2>&1
+                        $bcdOut = Invoke-BootConfigRestoreCommand -Arguments @('/deletevalue', $e.key)
                         if ($LASTEXITCODE -ne 0) { Write-Warn "bcdedit deletevalue failed for $($e.key): $bcdOut"; $restoreFail++ }
                         else { Write-OK "Removed: bcdedit $($e.key)"; $restoreOk++ }
                     }
