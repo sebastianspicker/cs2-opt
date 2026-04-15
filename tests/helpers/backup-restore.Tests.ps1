@@ -53,13 +53,29 @@ Describe "Initialize-Backup" {
         (Get-Content $versionedFiles[0].FullName -Raw) | Should -Match "Existing Step"
     }
 
-    It "warns when backup lock exists" {
+    It "warns and aborts when backup lock exists" {
         Mock Test-BackupLock { $true }
         Mock Write-Warn {}
 
-        Initialize-Backup
+        { Initialize-Backup } | Should -Throw
 
         Should -Invoke Write-Warn -Exactly -Times 1
+    }
+
+    It "aborts when a live backup lock exists and does not steal the lock" {
+        $script:InitOrder = [System.Collections.Generic.List[string]]::new()
+        Mock Test-BackupLock { $true }
+        Mock Write-Warn {}
+        Mock Set-BackupLock { $script:InitOrder.Add("lock") | Out-Null }
+        Mock Move-Item { $script:InitOrder.Add("move") | Out-Null }
+        Mock Prune-BackupVersions { $script:InitOrder.Add("prune") | Out-Null }
+        Mock New-BackupFile { $script:InitOrder.Add("new") | Out-Null }
+        Mock Set-SecureAcl { $script:InitOrder.Add("acl") | Out-Null }
+
+        { Initialize-Backup } | Should -Throw
+
+        Should -Invoke Write-Warn -Exactly -Times 1
+        $script:InitOrder | Should -BeNullOrEmpty
     }
 
     It "acquires the backup lock before rotating or pruning existing backups" {

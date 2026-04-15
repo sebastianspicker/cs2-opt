@@ -134,7 +134,7 @@ The suite's NVIDIA profile was derived from public NVIDIA DRS documentation (`Nv
 | Frame Rate Limiter | `FRL_FPS_ID (NVCPL)` | 500 (or fpsCap) | If your FPS cap is calculated, it's written directly to the FRL setting |
 | FXAA Disallow | `FXAA_ALLOW_ID` | `DISALLOWED` | Stronger than `FXAA_ENABLE=0` — master gate prevents injection |
 | RT Disabled | DXR + Vulkan RT | 0 | CS2 doesn't use RT; prevents accidental activation |
-| All G-SYNC/VRR | 6 settings | Off/Force Off | Zero VRR overhead; `279476686` removed (inert) |
+| All G-SYNC/VRR | 6 settings | Off/Force Off | Suite default for fixed-refresh competitive play; benchmark-dependent rather than universal |
 | Texture Filtering | `QUALITY_ENHANCEMENTS_ID` | `HIGHPERFORMANCE` | Maximum driver-side quality reduction for GPU headroom |
 
 **Three excluded settings:**

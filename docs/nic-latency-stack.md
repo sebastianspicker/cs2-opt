@@ -90,7 +90,7 @@ Medium coalescing collects packets within a ~50–200µs window and delivers one
 
 ### The suite's choice
 
-**Medium for all profiles** — including COMPETITIVE. This is one of the few settings where the suite specifically overrides the "more aggressive = better" intuition based on empirical data. If you use a headless server with zero background traffic, Disabled might be correct. On a gaming PC with Discord, Steam, and a browser open, it is not.
+**Medium for all profiles** — including COMPETITIVE. This is the suite's current default based on community measurement, not an Intel or Microsoft universal-best recommendation. If you use a headless server with zero background traffic, Disabled might be correct. On a gaming PC with Discord, Steam, and a browser open, the suite currently prefers Medium.
 
 ---
 
@@ -130,7 +130,7 @@ This goes further: pinning the NIC's interrupt handling to a specific non-game c
 
 ### What URO is
 
-Introduced in Windows 11 (build 22000+), URO is a feature where the NIC coalesces multiple UDP datagrams from the same flow into a single large kernel-mode delivery. The goal is to reduce CPU interrupt overhead for high-throughput UDP applications — video streaming servers, DNS resolvers, etc.
+Per current Microsoft documentation, URO is a Windows 11 **24H2+** feature where the NIC coalesces multiple UDP datagrams from the same flow into a single large kernel-mode delivery. The goal is to reduce CPU interrupt overhead for high-throughput UDP applications — video streaming servers, DNS resolvers, etc.
 
 For those workloads, URO is appropriate. For CS2, it is not.
 
@@ -146,7 +146,7 @@ At 128 pkt/sec, URO can delay a packet by up to ~15ms if it's waiting for a batc
 netsh int udp set global uro=disabled
 ```
 
-On Windows 10 this command silently does nothing (URO doesn't exist). On Windows 11 it disables the feature system-wide. This is the only `netsh` command the suite uses because it's the only one that affects UDP — all other `netsh int tcp` commands are irrelevant to CS2's game traffic.
+On Windows versions without URO support, this command is a no-op or unsupported. On Windows 11 24H2+ it disables the feature system-wide. This is the only `netsh` command the suite uses because it's the only one in this area that directly targets UDP receive behavior.
 
 ---
 

@@ -70,7 +70,7 @@ These aren't wrong — but they're not universally applicable, which is why they
 | C-states off (BIOS) | Tournament PCs where every µs matters. | Increases idle temp 10–20°C. Interferes with Turbo/PBO frequency algorithms. |
 | `SystemResponsiveness=0` vs `10` | May marginally help in CPU-bound scenarios. | 0 vs 10 delta unmeasured in CS2. Suite uses 10. |
 | `Win32PrioritySeparation=0x28` vs `0x2A` | Both are "foreground boost" variants. `0x28` = long fixed quantum. | `0x2A` = short fixed quantum (2025 Blur Busters: better 1% lows). Suite uses 0x2A. |
-| HAGS | Required for DLSS 3+ Frame Generation. May reduce scheduling latency. | 2026: ON recommended for RTX 40/50 post-MPO removal (Win11 24H2). Older GPUs: benchmark both. Suite defaults ON for RTX 40/50, OFF for X3D. |
+| HAGS | Required for DLSS 3+ Frame Generation. May reduce scheduling latency. | Suite default leans ON on newer GPUs, but benchmark both. Keep claims benchmark-dependent rather than universal. |
 | fTPM → Discrete TPM (AMD) | Random 1–2s stutters from SMI interrupts on some Ryzen platforms. | Systems already using hardware TPM or not experiencing fTPM spikes. |
 
 ---

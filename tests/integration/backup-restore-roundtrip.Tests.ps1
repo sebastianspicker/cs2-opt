@@ -263,22 +263,18 @@ Describe "BootConfig backup and restore roundtrip" {
     }
 
     It "BootConfig restore calls bcdedit /set for existing values" {
-        # bcdedit /enum /v outputs hex element IDs, not localized names
         Mock bcdedit {
             return @("identifier  {current}", "0x26000060  No")
         }
 
-        Backup-BootConfig -Key "disabledynamictick" -StepTitle "Boot Test Step"
-        Flush-BackupBuffer
-
-        # Mock bcdedit for restore
-        Mock bcdedit {
-            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
+        Mock Invoke-BootConfigRestoreCommand {
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = @($Arguments) })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
 
+        Backup-BootConfig -Key "disabledynamictick" -StepTitle "Boot Test Step"
+        Flush-BackupBuffer
         Restore-StepChanges -StepTitle "Boot Test Step"
 
         $SCRIPT:MockTracker.Bcdedit.Count | Should -BeGreaterThan 0
@@ -292,16 +288,14 @@ Describe "BootConfig backup and restore roundtrip" {
             return @("identifier  {current}")
         }
 
-        Backup-BootConfig -Key "testkey" -StepTitle "Boot Test Step"
-        Flush-BackupBuffer
-
-        Mock bcdedit {
-            $capturedArgs = if ($null -ne $CmdArgs) { @($CmdArgs) } else { @($args) }
-            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = $capturedArgs })
+        Mock Invoke-BootConfigRestoreCommand {
+            $SCRIPT:MockTracker.Bcdedit.Add(@{ Args = @($Arguments) })
             $global:LASTEXITCODE = 0
             return "The operation completed successfully."
         }
 
+        Backup-BootConfig -Key "testkey" -StepTitle "Boot Test Step"
+        Flush-BackupBuffer
         Restore-StepChanges -StepTitle "Boot Test Step"
 
         $SCRIPT:MockTracker.Bcdedit.Count | Should -BeGreaterThan 0
@@ -506,7 +500,7 @@ Describe "Corrupted backup.json recovery" {
         Get-BackupDataRaw
 
         # A .corrupt.*.json file should have been created
-        $corruptFiles = Get-ChildItem (Split-Path $CFG_BackupFile -Parent) -Filter "backup.corrupt.*.json"
+        $corruptFiles = @(Get-ChildItem (Split-Path $CFG_BackupFile -Parent) -Filter "backup.corrupt.*.json")
         $corruptFiles.Count | Should -BeGreaterOrEqual 1
     }
 
@@ -583,11 +577,11 @@ Describe "Restore security validation" {
         })
         New-TestBackupFile -Entries $malicious
 
-        Mock bcdedit {}
+        Mock Invoke-BootConfigRestoreCommand {}
 
         Restore-StepChanges -StepTitle "BCD Tamper"
 
-        Should -Not -Invoke bcdedit
+        Should -Not -Invoke Invoke-BootConfigRestoreCommand
     }
 
     It "Rejects powerplan restore with invalid GUID" {

@@ -231,7 +231,7 @@ function Test-VerifyDnsConfiguration {
             $dnsInfo = Get-DnsClientServerAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
             $current = if ($dnsInfo -and $dnsInfo.ServerAddresses) { [string[]]@($dnsInfo.ServerAddresses) } else { @() }
             if ($current.Count -eq 0) {
-                $results.Add((New-VerifyCheckResult -Status "MISSING" -Label "DNS: $($adapter.Name)" -Detail "set to automatic/DHCP")) | Out-Null
+                $results.Add((New-VerifyCheckResult -Status "INFO" -Label "DNS: $($adapter.Name)" -Detail "set to automatic/DHCP")) | Out-Null
                 continue
             }
 
@@ -250,6 +250,28 @@ function Test-VerifyDnsConfiguration {
     }
 
     return @($results)
+}
+
+function Test-VerifyTrimConfiguration {
+    try {
+        $trim = Get-TrimHealthStatus
+        if (-not $trim -or @($trim.States).Count -eq 0) {
+            return New-VerifyCheckResult -Status "MISSING" -Label "Storage maintenance: TRIM" -Detail "state not readable"
+        }
+
+        if ($trim.AnyTrimDisabled) {
+            $disabled = @($trim.States | Where-Object { -not $_.TrimEnabled } | ForEach-Object { $_.FileSystem }) -join ', '
+            return New-VerifyCheckResult -Status "CHANGED" -Label "Storage maintenance: TRIM" -Detail "(disabled on: $disabled)"
+        }
+
+        $detail = $trim.Summary
+        if ($trim.RetrimAvailable) {
+            $detail += "; retrim available on: $(@($trim.RetrimmableVolumes) -join ', ')"
+        }
+        return New-VerifyCheckResult -Status "OK" -Label "Storage maintenance: TRIM" -Detail "($detail)"
+    } catch {
+        return New-VerifyCheckResult -Status "MISSING" -Label "Storage maintenance: TRIM" -Detail "verification failed"
+    }
 }
 
 function Test-VerifyScheduledTasks {
@@ -658,6 +680,9 @@ Write-Host "`n  ═══ DNS CONFIGURATION ═══" -ForegroundColor Cyan
 foreach ($result in @(Test-VerifyDnsConfiguration)) {
     Write-VerifyCheckResult $result
 }
+
+Write-Host "`n  ═══ STORAGE HEALTH ═══" -ForegroundColor Cyan
+Write-VerifyCheckResult (Test-VerifyTrimConfiguration)
 
 Write-Host "`n  ═══ SCHEDULED TASKS ═══" -ForegroundColor Cyan
 Write-VerifyCheckResult (Test-VerifyScheduledTasks)

@@ -252,9 +252,9 @@ function Load-State($path) {
         Write-Warn "State file corrupt — preserved as $corruptPath"
         throw "State file corrupt — preserved as $corruptPath"
     }
-    $SCRIPT:Mode     = $s.mode
-    $SCRIPT:LogLevel = if ($s.logLevel) { $s.logLevel } else { "NORMAL" }
-    $SCRIPT:Profile  = if ($s.profile) { $s.profile } else { "RECOMMENDED" }
+    $SCRIPT:Mode     = if ($s.PSObject.Properties['mode']) { $s.mode } else { $null }
+    $SCRIPT:LogLevel = if ($s.PSObject.Properties['logLevel'] -and $s.logLevel) { $s.logLevel } else { "NORMAL" }
+    $SCRIPT:Profile  = if ($s.PSObject.Properties['profile'] -and $s.profile) { $s.profile } else { "RECOMMENDED" }
     if (-not $SCRIPT:Mode) {
         Write-DebugLog "Load-State: mode was null/empty — defaulting to CONTROL"
         $SCRIPT:Mode = "CONTROL"
@@ -315,7 +315,7 @@ function Set-RunOnce {
         Write-Host "    After rebooting, launch Phase 3 manually: START.bat -> [P]" -ForegroundColor Cyan
         return
     }
-    $allowedPolicies = @("Bypass", "RemoteSigned", "Unrestricted", "AllSigned")
+    $allowedPolicies = @("Bypass", "RemoteSigned", "AllSigned")
     $executionPolicy = [string]$CFG_RunOnceExecutionPolicy
     if ($executionPolicy -eq "Undefined") {
         Write-Warn "Set-RunOnce: CFG_RunOnceExecutionPolicy 'Undefined' is unsupported on client systems due to policy precedence and GPOs; use one of: $($allowedPolicies -join ', ')"

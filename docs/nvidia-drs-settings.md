@@ -56,9 +56,9 @@ The suite writes 52 DWORD settings directly to the NVIDIA DRS binary database (`
 | Frame Rate Limiter (legacy) | `277041154` | `0` (OFF) | Disables the legacy per-app FRL. |
 | Frame Rate Limiter NVCPL | `277041162` | `500` | Sets the NVCP frame rate limiter to 500 FPS (effectively unlimited). If the FPS Cap Calculator computed a cap value, that value is used instead. |
 
-### VRR / G-SYNC (All Disabled)
+### VRR / G-SYNC (Suite Default: Disabled)
 
-G-SYNC and VRR add frame pacing overhead per CS2's rendering model. CS2 does not benefit from variable refresh rate — it targets maximum consistent framerate above monitor Hz.
+The suite disables the remaining VRR / G-SYNC profile paths by default because many competitive CS2 users target framerate well above monitor refresh and prefer the lowest-latency fixed-refresh path. This should be treated as a suite default, not as a universal NVIDIA-documented truth for every monitor and workflow.
 
 | Name | DRS ID | Value |
 |------|--------|-------|
@@ -89,7 +89,7 @@ G-SYNC and VRR add frame pacing overhead per CS2's rendering model. CS2 does not
 
 | Name | DRS ID | Value | Explanation |
 |------|--------|-------|-------------|
-| rBAR Enable | `983226` | `0` (Disabled) | Disables per-application Resizable BAR for CS2. ThourCS2 2026 benchmarks show ~6% better 1% lows with rBAR OFF in CS2 specifically (Source2 engine doesn't benefit from full VRAM addressing). System-wide BIOS rBAR stays enabled for other titles. NPI `CustomSettingNames.xml`: `0x000F00BA`. |
+| rBAR Enable | `983226` | `0` (Disabled) | Sets per-application Resizable BAR to OFF for this suite's CS2 default. Community benchmarking has reported better 1% lows with rBAR OFF in CS2 on some systems, but this remains benchmark-dependent rather than settled vendor-backed guidance. System-wide BIOS rBAR stays enabled for other titles. NPI `CustomSettingNames.xml`: `0x000F00BA`. |
 | rBAR Options | `983227` | `0` (Disabled) | Companion setting — mirrors rBAR Enable state. Both must be 0 to disable per-application rBAR in the DRS profile. |
 
 ### Shader Cache

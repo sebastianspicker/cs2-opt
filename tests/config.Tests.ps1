@@ -90,8 +90,8 @@ Describe "CS2 Autoexec configuration" {
     }
 
     It "has at least 50 CVars defined" {
-        # The project documents 74 CVars; this is a lower-bound sanity check
-        $CFG_CS2_Autoexec.Count | Should -BeGreaterOrEqual 50 -Because "suite documents 74 CVars across 10 categories"
+        # The project documents 73 CVars; this is a lower-bound sanity check
+        $CFG_CS2_Autoexec.Count | Should -BeGreaterOrEqual 50 -Because "suite documents 73 CVars across 10 categories"
     }
 
     It "all CVar values are strings (autoexec format requirement)" {
@@ -113,7 +113,21 @@ Describe "CS2 Autoexec configuration" {
         $CFG_CS2_Autoexec["m_rawinput"] | Should -Be "1"
     }
 
-    It "speaker_config is 1 (headphones mode required for HRTF)" {
+    It "does not emit the removed snd_use_hrtf CVar" {
+        $CFG_CS2_Autoexec.Keys | Should -Not -Contain "snd_use_hrtf"
+    }
+
+    It "Optimize-GameConfig treats m_rawinput as a no-op documentation stub" {
+        $content = Get-Content "$script:ProjectRoot/Optimize-GameConfig.ps1" -Raw
+
+        $content | Should -Match "m_rawinput 1 kept as a harmless documentation/forward-compatibility stub"
+        $content | Should -Match "m_rawinput 1 is retained only as a no-op documentation stub"
+        $content | Should -Not -Match "m_rawinput 1: reads from HID device"
+        $content | Should -Not -Match "snd_use_hrtf 1"
+        $content | Should -Not -Match "requires fps_max cap to function"
+    }
+
+    It "speaker_config is 1 (headphone-mode suite baseline)" {
         $CFG_CS2_Autoexec["speaker_config"] | Should -Be "1"
     }
 }
@@ -160,6 +174,10 @@ Describe "Path format validation" {
 
     It "CFG_ProgressFile uses backslash path format" {
         $SCRIPT:_OriginalCfgProgressFile | Should -Not -Match "[^:]/" -Because "Windows paths should use backslashes"
+    }
+
+    It "CFG_LatencyHistoryFile uses backslash path format" {
+        $SCRIPT:_OriginalCfgLatencyHistoryFile | Should -Not -Match "[^:]/" -Because "Windows paths should use backslashes"
     }
 
     It "CFG_BackupMaxVersions defaults to 3" {
@@ -221,6 +239,10 @@ Describe "DNS configuration" {
         foreach ($ip in $allDns) {
             $ip | Should -Match "^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$" -Because "'$ip' should be a valid IPv4 address"
         }
+    }
+
+    It "latency target definition file exists in cfgs" {
+        Test-Path $CFG_LatencyTargetsFile | Should -Be $true
     }
 }
 

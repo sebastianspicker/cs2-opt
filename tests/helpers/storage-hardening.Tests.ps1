@@ -174,4 +174,13 @@ Describe "Set-RunOnce configurable ExecutionPolicy" {
         Should -Invoke Write-Warn -Exactly 1 -ParameterFilter { $t -match 'unsupported on client systems' }
         Should -Invoke Set-ItemProperty -Exactly 0
     }
+
+    It "rejects Unrestricted to keep the RunOnce trust surface narrow" {
+        $CFG_RunOnceExecutionPolicy = "Unrestricted"
+
+        Set-RunOnce -name "CS2_Phase3" -scriptPath "C:\CS2_OPTIMIZE\PostReboot-Setup.ps1"
+
+        Should -Invoke Write-Warn -Exactly 1 -ParameterFilter { $t -match 'invalid CFG_RunOnceExecutionPolicy' }
+        Should -Invoke Set-ItemProperty -Exactly 0
+    }
 }

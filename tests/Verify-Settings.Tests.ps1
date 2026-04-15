@@ -29,6 +29,7 @@ BeforeAll {
         $script:VerifyDnsResults = @(
             (New-VerifyCheckResult -Status "OK" -Label "DNS: Ethernet" -Detail "(Cloudflare = 1.1.1.1, 1.0.0.1)")
         )
+        $script:VerifyTrimResult = New-VerifyCheckResult -Status "OK" -Label "Storage maintenance: TRIM" -Detail "(NTFS: enabled)"
         $script:VerifyScheduledTaskResult = New-VerifyCheckResult -Status "INFO" -Label "Scheduled task: CS2 CCD affinity" -Detail "N/A (not a dual-CCD X3D system)"
         $script:VerifyDrsResult = New-VerifyCheckResult -Status "INFO" -Label "NVIDIA DRS profile" -Detail "N/A (no NVIDIA GPU detected)"
         $script:VerifyWindowsUpdateServices = @{
@@ -126,6 +127,7 @@ Describe "Invoke-VerifySettings" {
         Mock Test-VerifyPowerPlan { $script:VerifyPowerPlanResult }
         Mock Test-VerifyQosPolicies { $script:VerifyQosResults }
         Mock Test-VerifyDnsConfiguration { $script:VerifyDnsResults }
+        Mock Test-VerifyTrimConfiguration { $script:VerifyTrimResult }
         Mock Test-VerifyScheduledTasks { $script:VerifyScheduledTaskResult }
         Mock Test-VerifyNvidiaDrsProfile { $script:VerifyDrsResult }
         Mock Test-VerifyRuntimeCompatibility { [PSCustomObject]@{ Supported = $true; Message = "" } }
@@ -226,6 +228,29 @@ Describe "Invoke-VerifySettings" {
         $counts.missingCount | Should -Be 1
         (@($script:VerifyOutput) -join "`n") | Should -Match "CHANGED:\s+1"
         (@($script:VerifyOutput) -join "`n") | Should -Match "MISSING:\s+1"
+    }
+
+    It "accepts DHCP DNS as informational instead of missing" {
+        $script:VerifyDnsResults = @(
+            New-VerifyCheckResult -Status "INFO" -Label "DNS: Ethernet" -Detail "set to automatic/DHCP"
+        )
+
+        Invoke-VerifySettings
+
+        $counts = Get-VerifyCounters
+        $counts.missingCount | Should -Be 0
+        $counts.infoCount | Should -BeGreaterThan 0
+        (@($script:VerifyOutput) -join "`n") | Should -Match "automatic/DHCP"
+    }
+
+    It "marks TRIM as changed when storage maintenance is disabled" {
+        $script:VerifyTrimResult = New-VerifyCheckResult -Status "CHANGED" -Label "Storage maintenance: TRIM" -Detail "(disabled on: ReFS)"
+
+        Invoke-VerifySettings
+
+        $counts = Get-VerifyCounters
+        $counts.changedCount | Should -Be 1
+        (@($script:VerifyOutput) -join "`n") | Should -Match "Storage maintenance: TRIM"
     }
 
     It "marks NIC advanced properties as changed when a tweak differs" {

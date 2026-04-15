@@ -23,8 +23,11 @@ cs2_blur_fix.nip
 state.json
 progress.json
 backup.json
-backup.json.corrupt.*
+backup.lock
+backup.*.json
+backup.corrupt.*.json
 benchmark_history.json
+latency_history.json
 cs2_optimize.log
 
 # Secrets and credentials — never commit these
@@ -49,7 +52,7 @@ service-account*.json
 *_sebastian.*
 
 # Agent orchestration files (loop definitions, progress tracking)
-.claude/loops/
+.claude/
 progress.md
 
 # Local harness and audit workspace

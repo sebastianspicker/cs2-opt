@@ -20,11 +20,11 @@ The theoretical benefit: fewer CPU-to-GPU context switches, lower DPC overhead f
 
 HAGS requires three things working correctly in concert: the GPU hardware (adequate hardware queue support), the driver (WDDM 2.7+ with proper HAGS implementation), and the game engine (using the GPU memory APIs correctly).
 
-The primary source of HAGS-related stutters was **Multi-Plane Overlay (MPO)** interaction with DWM compositing, not HAGS itself. Windows 11 24H2 removed MPO as a default behavior, resolving most reported HAGS stutter cases.
+One commonly reported variable in HAGS-related stutter reports was **Multi-Plane Overlay (MPO)** interaction with DWM compositing. The repo no longer treats "24H2 removed MPO by default" as an established Microsoft-documented fact; treat HAGS results as build-, driver-, and hardware-dependent.
 
 ### 2026 evidence
 
-**RTX 40/50 + AMD RX 9000:** HAGS ON is recommended. Post-MPO removal, ThourCS2 and Blur Busters 2026 testing shows neutral-to-positive results. The CPU scheduling overhead reduction from GPU-side VRAM management is now reliably measurable without MPO interference.
+**RTX 40/50 + AMD RX 9000:** the suite currently leans HAGS ON on the basis of recent community benchmarking. Treat this as a benchmark-driven default, not as a vendor-backed universal rule.
 
 **RTX 30 / RDNA2:** Neutral to slightly positive. Test both on your specific system.
 
@@ -50,11 +50,7 @@ valleyofdoom/PC-Tuning documented that Windows Game Mode could interfere with "p
 
 **First,** the priority interference concern is resolved by Phase 3 Step 10's IFEO PerfOptions (`CpuPriorityClass=3`). IFEO is a kernel mechanism applied at process creation — it assigns the process priority before any MMCSS or Game Mode scheduling decisions run. IFEO supersedes Game Mode scheduling. There is no interference in practice when both are active.
 
-**Second, and more importantly,** Game Mode has a benefit that 2020–2022 guides couldn't evaluate: **Windows Update suppression during active gaming sessions.**
-
-Windows Update in 2024–2026 has become increasingly aggressive about scheduling driver installs, cumulative updates, and optional updates. Without Game Mode, updates can begin downloading and installing (including driver updates) while CS2 is running. Driver installs trigger device re-enumeration events that cause DPC spikes. Windows Update background workers compete for CPU and disk I/O.
-
-Game Mode tells the Windows kernel that the foreground application is a game and to defer all maintenance tasks. This is the only lightweight mechanism that provides update suppression without fully disabling Windows Update (which is the CRITICAL-risk Step 15 option that most users should skip).
+**Second,** the suite still prefers enabling Game Mode, but the reasoning is now narrower. Official Microsoft material supports the general idea that Game Mode prioritizes gaming activity; it does not give a strong enough contract to present "suppresses Windows Update installations during gameplay" here as a proved guarantee.
 
 **Third,** Game Mode activates the MMCSS `Games` scheduling path for threads that register under that category — the same CPU priority boost configured in Step 27.
 
@@ -216,7 +212,7 @@ The Windows multimedia timer (`timeBeginPeriod`) defaults to a 15.6ms resolution
 
 CS2 internally calls `timeBeginPeriod(1)` to request 1ms timer resolution when it launches. However, this request is per-process and affects only the requesting process's timer behavior.
 
-Step 28 ensures the global timer resolution is locked to 1ms via the registry approach (works on Windows 10 build 19041+ via `HKLM:\...\Control\Session Manager\kernel → GlobalTimerResolutionRequests = 1`). This prevents the timer from reverting to 15.6ms if CS2 crashes and restarts before re-requesting 1ms.
+Step 28 enables the registry path that allows applications to request the lowest supported timer resolution (works on Windows 10 build 19041+ via `HKLM:\...\Control\Session Manager\kernel → GlobalTimerResolutionRequests = 1`). It does not itself force a permanent global 1ms timer.
 
 **What timer resolution actually affects in CS2:** Thread sleep accuracy in the frame limiter, audio buffer timing, and the granularity of scheduler quantum transitions. The improvement is measured in frametime variance reduction, not raw FPS. On systems already at 1ms due to other applications (audio apps often request this), the setting has no additional effect.
 
@@ -228,7 +224,7 @@ Step 28 ensures the global timer resolution is locked to 1ms via the registry ap
 
 `MouseSpeed=0` + `MouseThreshold1=0` + `MouseThreshold2=0` in `HKCU:\Control Panel\Mouse` disables Windows pointer acceleration globally. This is the most universally applied competitive gaming setting — it ensures that moving the mouse 10cm always translates to the same cursor movement regardless of speed.
 
-CS2's `m_rawinput 1` (set in Step 34's autoexec) bypasses Windows pointer processing entirely for in-game mouse input, so this setting primarily affects CS2's main menu and Windows itself, not in-game aiming. However, consistent behavior everywhere reduces muscle memory confusion.
+Current CS2 builds already force raw input on, so the generated `m_rawinput 1` line in Step 34 is mainly a documentation/forward-compatibility stub. Step 29 still matters because it keeps Windows pointer acceleration disabled for the desktop, menus, and any non-CS2 input path, while the CS2-side `m_mouseaccel*` guards keep the in-game config explicit.
 
 ### mouclass kernel queue
 

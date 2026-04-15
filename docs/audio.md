@@ -2,37 +2,33 @@
 
 > Covers Phase 1 Step 33 and the audio CVars in Phase 1 Step 34 (`$CFG_CS2_Autoexec`).
 
-CS2's audio is a Steam Audio (Valve's HRTF engine) implementation running on top of Windows WASAPI. The optimization path has two layers: the Windows audio subsystem configuration (Step 33), and the CS2-side CVars written to autoexec.cfg (Step 34).
+CS2's audio is a Steam Audio-based pipeline running on top of Windows WASAPI. The optimization path has two layers: the Windows audio subsystem configuration (Step 33), and the CS2-side CVars written to autoexec.cfg (Step 34).
 
 ---
 
-## The HRTF Chain
+## The Headphone Spatial Baseline
 
 Head-Related Transfer Function (HRTF) is the mechanism by which the audio engine simulates 3D sound positioning using stereo headphones. Instead of simple left/right panning, HRTF applies per-frequency filtering that mimics how sound waves interact with the shape of a human head and ears, creating the perception of sounds coming from specific directions including above, below, and behind.
 
 For competitive CS2, accurate directional audio — hearing whether footsteps are above you, in front, or behind — is directly relevant to gameplay. HRTF is not a "premium feature"; it is the correct mode for headphone users.
 
-### The chain requires four CVars in the correct order
+### The current suite baseline
 
 **1. `speaker_config "1"` — Headphones mode**
 
-This must be set first. `speaker_config` tells the Steam Audio mixer which speaker configuration to target. Value `1` is Headphones (2-channel stereo). This is the prerequisite for HRTF — the HRTF convolution only activates when the mixer is in headphone mode.
+`speaker_config` tells the mixer which speaker configuration to target. Value `1` is Headphones (2-channel stereo). The suite keeps this as the current headphone-focused baseline.
 
-Common misconception: setting `snd_use_hrtf 1` without `speaker_config 1` does not enable HRTF. The HRTF path requires both.
+The repo no longer documents a separate `snd_use_hrtf` toggle as an active CS2 CVar, because it does not appear in the current public convar dump.
 
-**2. `snd_use_hrtf "1"` — Activate Steam Audio HRTF**
-
-Explicitly activates HRTF processing. Without this, `speaker_config 1` puts the mixer in headphone mode but uses simple stereo panning instead of HRTF convolution.
-
-**3. `snd_spatialize_lerp "0"` — Disable spatial lerp**
+**2. `snd_spatialize_lerp "0"` — Suite default**
 
 Controls how quickly the HRTF filter updates as a sound source moves. Value `0.5` (default) interpolates between HRTF positions over time, smoothing transitions but introducing a subtle smearing of the 3D position during movement. Value `0` snaps to the correct HRTF position immediately.
 
-With HRTF disabled, `snd_spatialize_lerp 0.5` is appropriate — it smooths simple left/right panning. With HRTF enabled, the lerp introduces a brief incorrect impulse response before settling to the accurate position. Setting `0` is physically correct when HRTF is active.
+The suite uses `0` as its current headphone-focused spatial default. Treat this as a community-preferred setting rather than as a Valve requirement.
 
 62.5% of professional CS2 players use `snd_spatialize_lerp 0` (source: esportfire.com pro settings study, 2026).
 
-**4. `snd_steamaudio_enable_perspective_correction "1"`**
+**3. `snd_steamaudio_enable_perspective_correction "1"`**
 
 Enables perspective correction in the Steam Audio engine — adjusts HRTF filtering based on listener head orientation rather than using a fixed forward-facing response. This makes sounds that pass across the listener's field of view track more accurately.
 
@@ -55,11 +51,11 @@ The headphone EQ setting applies a frequency response curve to the final audio o
 
 Controls how many seconds ahead the audio mixer prepares audio buffers. This is the audio equivalent of a frame buffer — it trades latency for stability.
 
-**Why the default `"0.05"` and not lower:**
+**Why the suite default is `"0.05"` and not lower:**
 
 The minimum value of `0.001` (1ms) was previously recommended by some guides. At 1ms, the audio buffer contains approximately 48 samples at 48 kHz. The Windows scheduler's minimum quantum on a 15.6ms timer (default timer resolution) is larger than 1ms — meaning the audio buffer can be exhausted before the next scheduler tick allows the audio thread to refill it, causing dropout (clicking, crackling) under any scheduling pressure (Windows Update activity, antivirus scan, brief CPU spike).
 
-After Step 28 (1ms timer resolution), the scheduler operates at finer granularity, but a 1ms audio buffer is still extremely tight. The suite uses `0.05` (50ms) — the community competitive standard. This is well below the point where audio delay is perceptible in gameplay, and tolerant of CPU scheduling jitter.
+After Step 28, the registry setting only allows applications to request a lower timer resolution; it does not force a permanent global 1ms timer. The suite still uses `0.05` (50ms) as a conservative, community-preferred default because it is tolerant of CPU scheduling jitter.
 
 The 50ms buffer does not affect the timing of sound events relative to gameplay. The audio thread keeps the buffer filled and the sound engine submits events to the buffer in real-time. What you hear is current; the buffer is a safety margin, not a delay.
 
@@ -118,4 +114,4 @@ Windows WASAPI exclusive mode gives the audio application direct hardware access
 - Steam Audio's HRTF processing already runs in the driver's shared mode path efficiently
 - The latency benefit (1–3ms) is below the threshold of human audio-visual perception in gameplay
 
-The suite does not force exclusive mode. It focuses on `snd_mixahead` (correct buffer size), the full HRTF chain (correct spatial audio), and audio ducking (correct volume behavior).
+The suite does not force exclusive mode. It focuses on `snd_mixahead` (chosen buffer size), the current headphone/spatial defaults, and audio ducking (correct volume behavior).
