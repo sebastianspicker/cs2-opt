@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+---
+
+## [v2.2] - 2026-04-18
+
 ### Added
 - Phase 3 Step 7: VBS / Core Isolation (Memory Integrity) disable — detects HVCI via `Win32_DeviceGuard`, disables via registry, warns about FACEIT/Vanguard dependency. Replaces the previously reserved step slot.
 - DRS profile: rBAR Enable (`983226`) + rBAR Options (`983227`) — per-application Resizable BAR control. Set to `0` (Disabled) for CS2 — ThourCS2 2026: ~6% better 1% lows with rBAR OFF. System-wide BIOS rBAR stays enabled for other titles
@@ -20,6 +24,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Process priority: 9900X3D asymmetric CCD mask — 8+4 layout detected per-model instead of assuming symmetric `Floor(totalCores/2)`
 - NVIDIA driver: laptop GPU `psid`/`pfid` entries for RTX 30/40/50 Laptop series
 - Debloat: `Microsoft.Windows.PhoneLink` (Win11 23H2+ renamed package, alongside existing `Microsoft.YourPhone`)
+- `helpers/network-diagnostics.ps1` — Valve-region latency diagnostics and GUI DNS workflow; reads `cfgs/valve-latency-targets.json`
+- `cfgs/valve-latency-targets.json` — Valve relay latency target definitions for network diagnostics
+- `helpers/storage-health.ps1` — TRIM/ReTrim health helpers (enable TRIM, run ReTrim, check DisableDeleteNotify state)
+- GUI: Network panel (latency diagnostics, DNS workflow) and Storage panel (TRIM health) — dashboard now has 8 panels
+- `docs/network-diagnostics.md`, `docs/storage-health.md` — deep-dive docs for new helpers
+
+### Refactored
+- `helpers/backup-restore.ps1` split into three focused submodules: `backup-restore/core.ps1`, `backup-restore/backup-capture.ps1`, `backup-restore/restore.ps1`
+- `helpers/gui-panels.ps1` split into five panel submodules under `helpers/gui-panels/`
+- `CS2-Optimize-GUI.ps1`: XAML extracted to `ui/CS2-Optimize-GUI.xaml`
+- `tests/integration/backup-restore-roundtrip.Tests.ps1` split into 7 per-type test files (36 tests) under `tests/integration/backup-restore-roundtrip/`
 
 ### Changed
 - DRS profile: removed `279476686` (Variable refresh rate) — not present in NPI, likely inert; 6 remaining G-SYNC/VRR settings cover all paths
