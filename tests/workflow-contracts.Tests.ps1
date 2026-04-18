@@ -7,6 +7,7 @@ BeforeAll {
     $script:ProjectRoot = (Resolve-Path "$PSScriptRoot/..").Path
     $script:LintWorkflow = Get-Content (Join-Path $script:ProjectRoot ".github/workflows/lint.yml") -Raw
     $script:SecurityWorkflow = Get-Content (Join-Path $script:ProjectRoot ".github/workflows/security.yml") -Raw
+    $script:Readme = Get-Content (Join-Path $script:ProjectRoot "README.md") -Raw
 }
 
 AfterAll {
@@ -69,5 +70,13 @@ Describe "security workflow contract" {
     It "pins START-GUI.bat to the trusted GUI script target" {
         $script:SecurityWorkflow | Should -Match 'CS2-Optimize-GUI\.ps1'
         $script:SecurityWorkflow | Should -Match 'START-GUI\.bat no longer launches CS2-Optimize-GUI\.ps1'
+    }
+}
+
+Describe "README workflow contract" {
+
+    It "describes the GUI as launching terminal phase entrypoints rather than running them inline" {
+        $script:Readme | Should -Match 'launch the terminal phase entrypoints'
+        $script:Readme | Should -Not -Match 'The GUI does not run optimizations'
     }
 }

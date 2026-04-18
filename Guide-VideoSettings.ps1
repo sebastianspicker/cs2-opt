@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-#  Guide-VideoSettings.ps1  —  CS2 Video Settings Guide (Feb 2026 Meta)
+#  Guide-VideoSettings.ps1  —  CS2 Video Settings Guide (Feb 2026 community meta)
 # ==============================================================================
 
 function Show-CS2SettingsGuide {
@@ -93,21 +93,21 @@ function Show-CS2SettingsGuide {
         Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
         Write-Host "  │  NVIDIA CONTROL PANEL  ->  3D Settings  ->  CS2/cs2.exe    │" -ForegroundColor Cyan
         Write-Host "  │                                                              │" -ForegroundColor Cyan
-        Write-Host "  │  Shader Cache Size   -> Unlimited              [T1 proven]  │" -ForegroundColor Green
+        Write-Host "  │  Shader Cache Size   -> Unlimited      [widely recommended] │" -ForegroundColor Green
         if ($fpsCap -gt 0) {
             $capStr = "Max Frame Rate         -> $fpsCap (avg $avgFps - 9%)"
             Write-Host "  │  $($capStr.PadRight(60))│" -ForegroundColor Green
-            Write-Host "  │                                               [T1 proven]  │" -ForegroundColor Green
+            Write-Host "  │                                     [benchmark-derived cap] │" -ForegroundColor Green
         } else {
-            Write-Host "  │  Max Frame Rate       -> set after benchmark  [T1 proven]  │" -ForegroundColor Yellow
+            Write-Host "  │  Max Frame Rate       -> set after benchmark  [benchmark]  │" -ForegroundColor Yellow
         }
-        Write-Host "  │  Power Management     -> Prefer Maximum Perf.  [T2 likely]  │" -ForegroundColor Yellow
+        Write-Host "  │  Power Management     -> Prefer Maximum Perf. [low-latency] │" -ForegroundColor Yellow
         if ($reflexFlag) {
-            Write-Host "  │  Low Latency Mode     -> Ultra                 [T2 likely]  │" -ForegroundColor Yellow
+            Write-Host "  │  Low Latency Mode     -> Ultra              [heuristic]    │" -ForegroundColor Yellow
         } else {
-            Write-Host "  │  Low Latency Mode     -> Off (Reflex handles)  [T2 likely]  │" -ForegroundColor Yellow
+            Write-Host "  │  Low Latency Mode     -> Off (Reflex handles) [heuristic]  │" -ForegroundColor Yellow
         }
-        Write-Host "  │  Vertical Sync        -> Off                   [universal]  │" -ForegroundColor DarkGray
+        Write-Host "  │  Vertical Sync        -> Off         [common low-latency]   │" -ForegroundColor DarkGray
         if ($gpuInput -eq "1") {
             Write-Host "  │                                                              │" -ForegroundColor Cyan
             Write-Host "  │  RTX 5000: Scaling -> MONITOR (not GPU)                    │" -ForegroundColor Yellow
@@ -167,7 +167,7 @@ function Show-CS2SettingsGuide {
     Write-Host "  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "  ║  CS2 VIDEO SETTINGS — FEB 2026 META                        ║" -ForegroundColor Cyan
     Write-Host "  ║  Tailored for: $($pcTier.PadRight(9)) GPU  ·  $($resLabel.PadRight(14))                ║" -ForegroundColor Cyan
-    Write-Host "  ║  Sources: ThourCS2, prosettings.net (866 pros), Blur Busters║" -ForegroundColor DarkGray
+    Write-Host "  ║  Sources: community benchmarks, surveys, Blur Busters meta ║" -ForegroundColor DarkGray
     Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Blank
 
@@ -181,7 +181,7 @@ function Show-CS2SettingsGuide {
     Write-Blank
 
     # Determine recommended values per tier
-    $msaa       = switch ($pcTier) { "LOW" {"None + CMAA2"}    "MID" {"4x (sweet spot)"}  "HIGH" {"4x (proven: better 1% lows)"} }
+    $msaa       = switch ($pcTier) { "LOW" {"None + CMAA2"}    "MID" {"4x (sweet spot)"}  "HIGH" {"4x (community bench favorite)"} }
     $shadows    = switch ($pcTier) { "LOW" {"Low"}             "MID" {"Medium"}            "HIGH" {"Medium"} }
     $dynShadows = switch ($pcTier) { "LOW" {"Sun Only"}        "MID" {"All"}               "HIGH" {"All"} }
     $shaderDet  = switch ($pcTier) { "LOW" {"Low"}             "MID" {"Low"}               "HIGH" {"High"} }
@@ -193,10 +193,10 @@ function Show-CS2SettingsGuide {
     $msaaNote   = switch ($pcTier) {
         "LOW"  {"CMAA2: post-process, near-zero FPS cost."}
         "MID"  {"ThourCS2: 4x = better 1% lows than None. -12% avg."}
-        "HIGH" {"ThourCS2: 4x proven better lows. 8x: -18%, no benefit."}
+        "HIGH" {"ThourCS2 community benches: 4x better lows. 8x: -18%, no benefit."}
     }
 
-    Write-Host "  [PROVEN — Benchmark data, apply these regardless of tier]" -ForegroundColor Green
+    Write-Host "  [BENCHMARK-BACKED / COMMON DEFAULTS]" -ForegroundColor Green
     Write-Host @"
   ┌──────────────────────────────────────────────────────────────────────┐
   │ Setting                  │ Value          │ Proof / Source            │
@@ -259,7 +259,7 @@ function Show-CS2SettingsGuide {
         Write-Blank
         Write-Host "  HIGH-END TIPS:" -ForegroundColor Yellow
         Write-Host "  -> CPU is your bottleneck, not GPU. Higher settings won't cost FPS." -ForegroundColor White
-        Write-Host "  -> MSAA 4x: proven better 1% lows. Don't go 8x (-18% for nothing)." -ForegroundColor White
+        Write-Host "  -> MSAA 4x: community benches favor it for 1% lows. Don't go 8x (-18% for little return)." -ForegroundColor White
         Write-Host "  -> At 1080p you should see 400+ FPS. At 1440p: 300+ FPS." -ForegroundColor White
         Write-Host "  -> FPS cap is MORE important for you: high FPS = more frametime variance" -ForegroundColor DarkYellow
     }

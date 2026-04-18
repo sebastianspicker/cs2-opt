@@ -108,7 +108,7 @@ CS2 has structurally poor frame pacing in Valve's Source 2 engine. Games with si
 **Option A — GUI Dashboard** *(recommended for first-time users)*
 1. Extract the ZIP to any folder (e.g. `C:\CS2_OPT_SETUP\`)
 2. Right-click `START-GUI.bat` → **Run as administrator**
-3. Use the dashboard to analyze your system, review backups, and launch optimization phases
+3. Use the dashboard to analyze your system, review backups, and launch the terminal phase entrypoints when needed
 
 **Option B — Terminal** *(full optimization flow)*
 1. Extract the ZIP to any folder
@@ -123,14 +123,14 @@ CS2 has structurally poor frame pacing in Valve's Source 2 engine. Games with si
 
 `START-GUI.bat` → Run as administrator
 
-Seven panels: **Dashboard** (hardware summary, progress), **Analyze** (40+ setting health scan), **Optimize** (step catalog reference), **Backup** (per-step restore), **Benchmark** (FPS history + cap calculator), **Video** (video.txt comparison + one-click write), **Settings** (profile/mode config).
+Eight panels: **Dashboard** (hardware summary, progress), **Analyze** (40+ setting health scan + storage health), **Optimize** (step catalog reference), **Backup** (per-step restore), **Benchmark** (FPS history + cap calculator), **Network** (Valve Region Latency Diagnostic + DNS workflow), **Video** (video.txt comparison + one-click write), **Settings** (profile/mode config).
 
 | | | |
 |---|---|---|
 | ![Dashboard](docs/screenshots/01-dashboard.png) | ![Analyze](docs/screenshots/02-analyze.png) | ![Optimize](docs/screenshots/03-optimize.png) |
 | ![Benchmark](docs/screenshots/05-benchmark.png) | ![Video](docs/screenshots/06-video.png) | ![Settings](docs/screenshots/07-settings.png) |
 
-The GUI does not run optimizations — Phases 1–3 use the terminal. The dashboard handles analysis, backup, benchmarking, and configuration.
+The GUI can launch the terminal entrypoints for Phase 1, the Safe Mode handoff, and manual Phase 3 recovery, but it does not execute optimization steps inside the WPF process. The dashboard handles analysis, backup, benchmarking, network diagnostics, storage maintenance, and configuration.
 
 For full panel documentation, see [`docs/gui.md`](docs/gui.md).
 
@@ -154,11 +154,13 @@ CS2-Optimize-Suite/
 │   ├── hardware-detect.ps1    RAM, CPU, GPU detection
 │   ├── logging.ps1            Output formatting
 │   ├── msi-interrupts.ps1     MSI interrupt configuration
+│   ├── network-diagnostics.ps1 Valve-region latency diagnostics + GUI DNS workflow
 │   ├── nvidia-driver.ps1      Driver download + silent install
 │   ├── nvidia-drs.ps1         C# P/Invoke to nvapi64.dll for DRS
 │   ├── nvidia-profile.ps1     Native NVIDIA profile (replaces Profile Inspector)
 │   ├── power-plan.ps1         Native tiered power plan (replaces FPSHeaven .pow)
 │   ├── process-priority.ps1   IFEO priority + CCD affinity (replaces Process Lasso)
+│   ├── storage-health.ps1     TRIM health + ReTrim maintenance helpers
 │   ├── step-state.ps1         Progress tracking (state.json / progress.json)
 │   ├── step-catalog.ps1       Step metadata for GUI
 │   ├── system-analysis.ps1    Health checks for GUI Analyze panel
@@ -181,11 +183,12 @@ CS2-Optimize-Suite/
 │   ├── net_stable.cfg         Optimal — stable wired/fiber (also use to reset)
 │   ├── net_highping.cfg       60ms+ ping, stable route
 │   ├── net_unstable.cfg       Jitter + loss, ping OK
-│   └── net_bad.cfg            High ping + jitter/loss
-└── docs/                      Deep-dive documentation (17 files — see below)
+│   ├── net_bad.cfg            High ping + jitter/loss
+│   └── valve-latency-targets.json Heuristic target definitions for the Valve Region Latency Diagnostic
+└── docs/                      Deep-dive documentation (19+ files — see below)
 ```
 
-All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Backups in `C:\CS2_OPTIMIZE\backup.json`.
+All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Backups in `C:\CS2_OPTIMIZE\backup.json`. FPS history stays in `benchmark_history.json`; latency runs are stored separately in `latency_history.json`.
 
 ---
 
@@ -203,16 +206,16 @@ All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Back
 | 4 | Fullscreen Optimizations off | T1 | SAFE | `AppCompatFlags\Layers` = `~ DISABLEDXMAXIMIZEDWINDOWEDMODE` for cs2.exe |
 | 5 | NVIDIA driver version check | T2 | AGGRESSIVE | R570+ regression warning (566.36 stable fallback) |
 | 6 | CS2 Optimized Power Plan | T1 | MODERATE | Tiered `powercfg` calls: T1 (9 settings), T2 (+15–16 vendor-aware), T3 (+5 C-states). 4 bugs fixed from FPSHeaven original |
-| 7 | HAGS toggle | T2 | MODERATE | HwSchMode registry; 2026: ON for RTX 40/50 post-MPO removal. Older GPUs: test both |
+| 7 | HAGS toggle | T2 | MODERATE | HwSchMode registry; suite default leans ON on newer GPUs, but benchmark both |
 | 8 | Pagefile fixed size | T2 | MODERATE | Auto-skipped if ≥32 GB RAM |
 | 9 | Resizable BAR / SAM | T2 | SAFE | BIOS guide only — no PowerShell changes |
-| 10 | Dynamic Tick + Platform Timer | T3 | MODERATE | `bcdedit /set disabledynamictick Yes` + `useplatformtick Yes` |
+| 10 | Dynamic Tick | T3 | MODERATE | `bcdedit /set disabledynamictick Yes` |
 | 11 | MPO disabled | T3 | SAFE | `OverlayTestMode = 5` — prevents DWM multiplane overlay microstutter |
-| 12 | Game Mode enabled | T3 | SAFE | `AutoGameModeEnabled=1` — WU suppression + MMCSS Games priority (2026 reversal) |
+| 12 | Game Mode enabled | T3 | SAFE | `AutoGameModeEnabled=1` — suite default for Windows gaming priority path |
 | 13 | Gaming Debloat (native) | T2 | MODERATE | AppX removal + telemetry task/service disable |
 | 14 | Autostart cleanup | T2 | SAFE | Configurable list in `config.env.ps1` |
 | 15 | Windows Update Blocker | T3 | CRITICAL | Security risk — CUSTOM profile only |
-| 16 | NIC latency stack | T2 | MODERATE | 6-layer: PHY power-save off, ITR Medium, RSS off Core 0, URO off (Win11), DSCP EF=46 + NLA key, IPv6 left enabled |
+| 16 | NIC latency stack | T2 | MODERATE | 6-layer: PHY power-save off, ITR Medium, RSS off Core 0, URO off (Win11 24H2+), DSCP EF=46 + NLA key, IPv6 left enabled |
 | 17 | Baseline benchmark | T1 | SAFE | CapFrameX capture for before/after comparison |
 | 18 | GPU driver clean prep | T1 | SAFE | Prepares native driver removal for Phase 2 |
 | 19 | NVIDIA driver download | T1 | SAFE | Downloads driver .exe from nvidia.com |
@@ -230,7 +233,7 @@ All state is stored in `C:\CS2_OPTIMIZE\`. Logs in `C:\CS2_OPTIMIZE\Logs\`. Back
 | 31 | Game Bar / Game DVR off | T2 | SAFE | `AppCaptureEnabled=0`, `GameDVR_Enabled=0`, `AllowGameDVR=0` |
 | 32 | Overlay disable | T2 | SAFE | Steam `GameOverlayDisabled=1` + GeForce Experience guide |
 | 33 | Audio optimization | T2 | SAFE | Exclusive mode guide + `UserDuckingPreference=3` (ducking off) |
-| 34 | Autoexec.cfg + launch options | T2 | SAFE | 74 CVars (10 categories), 4 network CFGs deployed, Intel `thread_pool_option=2` auto-detected |
+| 34 | Autoexec.cfg + launch options | T2 | SAFE | 73 CVars (10 categories), 4 network CFGs deployed, Intel `thread_pool_option=2` auto-detected |
 | 35 | Chipset driver check | T2 | SAFE | AMD/Intel chipset update links |
 | 36 | Visual effects + Defender + HDR | T3 | SAFE | `VisualFXSetting=2`, cs2.exe Defender exclusion, `AutoHDREnabled=0` |
 | 37 | Services disable | T3 | MODERATE | SysMain, WSearch, qWave (DSCP survives), 4 Xbox services (warns about wireless controllers) |
@@ -293,9 +296,9 @@ Intuitively, per-packet interrupts (Disabled) should be better than coalesced de
 
 The reason: a gaming PC always has background network traffic (Discord, Steam, Windows telemetry). With Disabled, each background packet fires a separate interrupt, creating an interrupt storm that makes DPC scheduling *less* predictable. Medium coalesces within ~50–200µs — well within CS2's 7.8ms tick interval — but prevents the storm. The suite uses **Medium for all profiles**, rejecting the intuitive-but-wrong recommendation found in most guides. → [`docs/nic-latency-stack.md`](docs/nic-latency-stack.md)
 
-### Game Mode: Why We Enable It (2026 Reversal)
+### Game Mode: Why We Still Enable It
 
-Many 2020–2022 guides recommended disabling Game Mode, citing valleyofdoom/PC-Tuning findings about "thread priority interference." This has not been reproduced in CS2 benchmarks and is overridden by a more important benefit: Game Mode suppresses Windows Update installation during active gaming. It also activates the MMCSS `Games` scheduling path. Critically, Game Mode and Game DVR/Bar are *separate systems* despite the same Settings panel — Step 31 disables DVR (recording overhead), Step 12 enables the scheduler's game-priority path. → [`docs/windows-scheduler.md`](docs/windows-scheduler.md)
+Many 2020–2022 guides recommended disabling Game Mode, citing valleyofdoom/PC-Tuning findings about "thread priority interference." The suite still prefers enabling Game Mode, but the repo now treats that as a Windows gaming-default choice rather than a proved Windows Update suppression contract. Critically, Game Mode and Game DVR/Bar are *separate systems* despite the same Settings panel — Step 31 disables DVR (recording overhead), Step 12 keeps the game-priority path enabled. → [`docs/windows-scheduler.md`](docs/windows-scheduler.md)
 
 ### NetworkThrottlingIndex: Why We Do NOT Set It
 
@@ -404,12 +407,14 @@ The README covers the *what*. These docs cover the *why* — architecture decisi
 | [`docs/evidence.md`](docs/evidence.md) | Per-optimization impact estimates, cumulative improvement, risk trade-off analysis, full step decision matrix |
 | [`docs/debunked.md`](docs/debunked.md) | 40+ debunked settings with evidence, contested optimizations, AMD Anti-Lag history, known limitations |
 | [`docs/gui.md`](docs/gui.md) | GUI dashboard panels, interaction details, layout examples |
-| [`docs/audio.md`](docs/audio.md) | HRTF dependency chain (`speaker_config` → `snd_use_hrtf` → `snd_spatialize_lerp`), headphone EQ pro study, ducking, voice CVars |
-| [`docs/video-settings.md`](docs/video-settings.md) | 2026 competitive meta per setting, why MSAA 4x beats None, video.txt vs autoexec, Reflex deep-dive |
+| [`docs/network-diagnostics.md`](docs/network-diagnostics.md) | Valve Region Latency Diagnostic, DNS workflow, history model, wording constraints |
+| [`docs/storage-health.md`](docs/storage-health.md) | TRIM health, enable flow, ReTrim maintenance, evidence posture |
+| [`docs/audio.md`](docs/audio.md) | Headphone-mode spatial baseline (`speaker_config` + `snd_spatialize_lerp`), headphone EQ preference study, ducking, voice CVars |
+| [`docs/video-settings.md`](docs/video-settings.md) | 2026 competitive baseline per setting, evidence tiers for MSAA/HDR/Boost Player Contrast, video.txt vs autoexec, Reflex deep-dive |
 | [`docs/network-cfgs.md`](docs/network-cfgs.md) | Connection condition 2×2 matrix, `cl_interp_ratio` (loss) vs `cl_net_buffer_ticks` (jitter), why `net_bad` uses 3 ticks not 4 |
-| [`docs/nic-latency-stack.md`](docs/nic-latency-stack.md) | 6-layer NIC stack: PHY wake latency, interrupt coalescing empirical results, RSS core assignment, URO, QoS DSCP + NLA trap, IPv6 reversal |
+| [`docs/nic-latency-stack.md`](docs/nic-latency-stack.md) | 6-layer NIC stack: PHY wake latency, interrupt coalescing empirical results, RSS core assignment, URO (Win11 24H2+), QoS DSCP + NLA trap, IPv6 reversal |
 | [`docs/msi-interrupts.md`](docs/msi-interrupts.md) | Line-based vs MSI/MSI-X delivery, why cold boot is required, NIC Core 0 contention, RSS queue distribution |
-| [`docs/windows-scheduler.md`](docs/windows-scheduler.md) | MMCSS, Game Mode reversal, `Win32PrioritySeparation` (Variable→Fixed, Blur Busters 2025), FTH heap slowdown, Automatic Maintenance CPU spike, Intel PowerThrottling auto-detection |
+| [`docs/windows-scheduler.md`](docs/windows-scheduler.md) | MMCSS, narrower Game Mode rationale, `Win32PrioritySeparation` (Variable→Fixed, Blur Busters 2025), FTH heap slowdown, Automatic Maintenance CPU spike, Intel PowerThrottling auto-detection |
 | [`docs/process-priority.md`](docs/process-priority.md) | IFEO kernel mechanism, why it beats `-high` and Process Lasso, X3D CCD topology (dual-CCD only), affinity mask calculation, task design |
 | [`docs/nvidia-optimization.md`](docs/nvidia-optimization.md) | DRS binary database vs `d3d\` registry path, clean driver install methodology, R570 regression |
 | [`docs/nvidia-drs-settings.md`](docs/nvidia-drs-settings.md) | All 52 DRS settings: IDs, values, decoded meanings, 13-section breakdown (incl. rBAR), registry keys, 3 excluded settings |

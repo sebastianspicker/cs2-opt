@@ -233,18 +233,16 @@ function Install-NvidiaDriverClean {
     if ($sig -and $sig.Status -eq 'Valid') {
         $sigSubject = $sig.SignerCertificate.Subject
         if ($sigSubject -notmatch 'NVIDIA') {
-            Write-Warn "Driver .exe is signed but NOT by NVIDIA (signer: $sigSubject)"
-            Write-Warn "This may not be a genuine NVIDIA driver. Proceed with caution."
-            $sigConfirm = Read-Host "  Continue anyway? [y/N]"
-            if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
+            Write-Err "Driver .exe is signed but NOT by NVIDIA (signer: $sigSubject)"
+            Write-Err "Rejecting installer — only NVIDIA-signed driver packages are allowed."
+            return $false
         } else {
             Write-DebugLog "Driver Authenticode signature valid: $sigSubject"
         }
     } else {
-        Write-Warn "Driver .exe has no valid Authenticode signature (status: $(if($sig){$sig.Status}else{'N/A'}))"
-        Write-Warn "NVIDIA drivers are always code-signed. This file may be tampered."
-        $sigConfirm = Read-Host "  Continue anyway? [y/N]"
-        if ($sigConfirm -notmatch '^[jJyY]$') { return $false }
+        Write-Err "Driver .exe has no valid Authenticode signature (status: $(if($sig){$sig.Status}else{'N/A'}))"
+        Write-Err "Rejecting installer — NVIDIA drivers are always code-signed."
+        return $false
     }
 
     # ── 1. Extract driver package ───────────────────────────────────────────

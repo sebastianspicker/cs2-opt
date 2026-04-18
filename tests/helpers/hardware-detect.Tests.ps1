@@ -340,6 +340,86 @@ Describe "Test-XmpActive" {
     }
 }
 
+Describe "Get-RamInfo" {
+
+    It "normalizes DDR5 ConfiguredClockSpeed from half-rate clock to MT/s" {
+        Mock Get-CimInstance {
+            @([PSCustomObject]@{
+                Capacity             = 17179869184
+                Speed                = 6000
+                ConfiguredClockSpeed = 3000
+                SMBIOSMemoryType     = 34
+                BankLabel            = "BANK 0"
+            })
+        } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
+
+        $ram = Get-RamInfo
+
+        $ram.IsDDR5    | Should -Be $true
+        $ram.SpeedMhz  | Should -Be 6000
+        $ram.ActiveMhz | Should -Be 6000
+    }
+
+    It "preserves DDR5 ConfiguredClockSpeed when firmware already reports MT/s" {
+        Mock Get-CimInstance {
+            @([PSCustomObject]@{
+                Capacity             = 17179869184
+                Speed                = 6400
+                ConfiguredClockSpeed = 6400
+                SMBIOSMemoryType     = 34
+                BankLabel            = "BANK 0"
+            })
+        } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
+
+        $ram = Get-RamInfo
+
+        $ram.IsDDR5    | Should -Be $true
+        $ram.SpeedMhz  | Should -Be 6400
+        $ram.ActiveMhz | Should -Be 6400
+    }
+}
+
+Describe "Get-Ddr5TimingInfo" {
+
+    It "uses the normalized DDR5 active speed without doubling it again" {
+        Mock Get-CimInstance {
+            @([PSCustomObject]@{
+                Capacity             = 17179869184
+                Speed                = 6000
+                ConfiguredClockSpeed = 3000
+                SMBIOSMemoryType     = 34
+                BankLabel            = "BANK 0"
+            })
+        } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
+
+        $ddr5 = Get-Ddr5TimingInfo
+
+        $ddr5.IsDDR5        | Should -Be $true
+        $ddr5.ActiveMhz     | Should -Be 6000
+        $ddr5.ActiveMTs     | Should -Be 6000
+        $ddr5.IsOptimal1to1 | Should -Be $true
+        $ddr5.IsDownclocked | Should -Be $false
+    }
+
+    It "detects a downclocked DDR5 kit from rated-vs-active MT/s gap" {
+        Mock Get-CimInstance {
+            @([PSCustomObject]@{
+                Capacity             = 17179869184
+                Speed                = 8200
+                ConfiguredClockSpeed = 3000
+                SMBIOSMemoryType     = 34
+                BankLabel            = "BANK 0"
+            })
+        } -ParameterFilter { $ClassName -eq "Win32_PhysicalMemory" }
+
+        $ddr5 = Get-Ddr5TimingInfo
+
+        $ddr5.ActiveMTs     | Should -Be 6000
+        $ddr5.RatedMTs      | Should -Be 8200
+        $ddr5.IsDownclocked | Should -Be $true
+    }
+}
+
 # ── Test-DualChannel ──────────────────────────────────────────────────────────
 Describe "Test-DualChannel" {
 

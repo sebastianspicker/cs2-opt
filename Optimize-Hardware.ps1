@@ -5,22 +5,21 @@
 # ==============================================================================
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 10 — DYNAMIC TICK + PLATFORM TIMER  [T3]
+# STEP 10 — DYNAMIC TICK  [T3]
 # ══════════════════════════════════════════════════════════════════════════════
 if ($startStep -le 10) {
     Write-Section "Step 10 — Timer Optimization (bcdedit)"
-    Invoke-TieredStep -Tier 3 -Title "Disable Dynamic Tick + Platform Timer" `
+    Invoke-TieredStep -Tier 3 -Title "Disable Dynamic Tick" `
         -Why "Adaptive Windows timer saves power via irregular CPU wakeups -> theoretical frametime irregularities." `
-        -Evidence "Community consensus. No isolated CS2 benchmark clearly proving this. No measurable harm." `
+        -Evidence "Community consensus around disabledynamictick only. Microsoft documents useplatformtick as a debugging-only BCDEdit option, so it is not applied here." `
         -Caveat "Minimal impact on laptop battery life." `
         -Risk "MODERATE" -Depth "BOOT" `
-        -Improvement "Theoretically more consistent frametimes — no isolated CS2 proof" `
+        -Improvement "Theoretically more consistent frametimes from disabling dynamic tick — no isolated CS2 proof" `
         -SideEffects "Slightly higher power consumption on laptops" `
-        -Undo "bcdedit /set disabledynamictick no && bcdedit /deletevalue useplatformtick" `
+        -Undo "bcdedit /set disabledynamictick no" `
         -Action {
             Set-BootConfig "disabledynamictick" "yes" "Constant timer resolution"
-            Set-BootConfig "useplatformtick"    "yes" "Hardware timer instead of software timer"
-            Write-Info "Undo: bcdedit /set disabledynamictick no | bcdedit /deletevalue useplatformtick"
+            Write-Info "Undo: bcdedit /set disabledynamictick no"
             Complete-Step $PHASE 10 "Timer"
         } `
         -SkipAction { Skip-Step $PHASE 10 "Timer" }

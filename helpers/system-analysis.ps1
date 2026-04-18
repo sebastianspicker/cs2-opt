@@ -423,8 +423,8 @@ function Invoke-CheckCS2 {
             if ($vtxt) {
                 $vtContent = Get-Content $vtxt.FullName -Raw -ErrorAction SilentlyContinue
                 $vtChecks = @(
-                    @{ Key="setting.msaa_samples";         Expected="4";  Label="MSAA";            Impact="4x better 1% lows than None per ThourCS2 benchmark" }
-                    @{ Key="setting.r_low_latency";        Expected="1";  Label="NVIDIA Reflex";   Impact="−3-4ms input latency" }
+                    @{ Key="setting.msaa_samples";         Expected="4";  Label="MSAA";            Impact="Community benchmark default for stronger 1% lows" }
+                    @{ Key="setting.r_low_latency";        Expected="1";  Label="NVIDIA Reflex";   Impact="Common low-latency default; benchmark if unsure" }
                     @{ Key="setting.mat_vsync";            Expected="0";  Label="VSync";           Impact="Must be OFF — adds 1-3 frames render queue latency" }
                     @{ Key="setting.sc_hdr_enabled_override"; Expected="3"; Label="HDR Shader"; Impact="Performance mode — Quality washes out window/sun areas" }
                     @{ Key="setting.fullscreen";           Expected="1";  Label="Fullscreen Mode"; Impact="Exclusive FS bypasses DWM compositor — lower input latency" }

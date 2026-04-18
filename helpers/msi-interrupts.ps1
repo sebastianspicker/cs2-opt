@@ -13,7 +13,7 @@ function Enable-DeviceMSI {
     Write-Step "Enabling MSI interrupts for PCI devices..."
 
     $deviceClasses = @(
-        @{ Class = "Display";       Label = "GPU";     MsiLimit = 16 },  # 16 MSI vectors for GPU
+        @{ Class = "Display";       Label = "GPU";     MsiLimit = 16 },  # Suite default heuristic, not a universal vendor recommendation
         @{ Class = "Net";           Label = "NIC";     MsiLimit = 0  },  # Default (no vector limit)
         @{ Class = "Media";        Label = "Audio";   MsiLimit = 0  }   # Default (no vector limit)
     )
@@ -37,7 +37,8 @@ function Enable-DeviceMSI {
             Set-RegistryValue $msiPath "MSISupported" 1 "DWord" `
                 "MSI enabled for $($dc.Label): $($dev.FriendlyName)"
 
-            # Set MSI vector count limit for GPU (16 vectors = full multi-queue support)
+            # Set MSI vector count limit for GPU using the suite's default heuristic.
+            # Windows documents the key, but the exact value remains workload/device-specific.
             if ($dc.MsiLimit -gt 0) {
                 Set-RegistryValue $msiPath "MessageNumberLimit" $dc.MsiLimit "DWord" `
                     "MSI vector limit ($($dc.MsiLimit)) for $($dc.Label): $($dev.FriendlyName)"
@@ -238,7 +239,7 @@ function Set-NicRssConfig {
 
 function Set-NicInterruptAffinity {
     <#
-    .SYNOPSIS  Sets NIC interrupt affinity to last physical core (avoids Core 0).
+    .SYNOPSIS  Sets NIC interrupt affinity using the suite's last-core heuristic (avoids Core 0).
                Replaces GoInterruptPolicy for NIC interrupt binding.
     #>
 
@@ -307,10 +308,10 @@ function Set-NicInterruptAffinity {
     }
 
     # Calculate affinity mask for target core.
-    # On hybrid CPUs (Intel 12th+), NIC interrupts should target an E-core
-    # (efficiency core) to avoid contending with game threads on P-cores.
-    # E-cores are typically the last physical cores in the topology.
-    # On non-hybrid CPUs, use the last physical core to avoid Core 0 (OS-heavy).
+    # On hybrid CPUs (Intel 12th+), the suite heuristically targets the E-core region
+    # to avoid contending with game threads on P-cores. On non-hybrid CPUs it uses the
+    # last physical core to avoid Core 0. This is a tuning heuristic, not a universal
+    # Microsoft recommendation for every topology.
     # Clamp to 63 — processor group 0 supports max 64 logical processors;
     # systems with >64 LPs require GROUP_AFFINITY which needs a different API.
     # Target last physical core to avoid Core 0 (OS-heavy); on hybrid CPUs this lands in the E-core region
@@ -351,7 +352,7 @@ function Set-NicInterruptAffinity {
             $mask = $mask -bor ([uint64]1 -shl $siblingLP)
         }
     }
-    if ($hybridCpu) { Write-DebugLog "Hybrid CPU ($hybridCpu) — targeting last core for NIC affinity (no SMT sibling on E-core)" }
+    if ($hybridCpu) { Write-DebugLog "Hybrid CPU ($hybridCpu) — applying suite heuristic: target last-core/E-core region for NIC affinity" }
 
     # Convert mask to 8-byte array for registry (binary value)
     $maskBytes = [BitConverter]::GetBytes([uint64]$mask)

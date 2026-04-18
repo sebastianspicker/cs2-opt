@@ -24,6 +24,7 @@ $_projectRoot  = (Resolve-Path "$_testInitRoot/../..").Path
 $SCRIPT:_OriginalCfgWorkDir      = $CFG_WorkDir
 $SCRIPT:_OriginalCfgStateFile    = $CFG_StateFile
 $SCRIPT:_OriginalCfgProgressFile = $CFG_ProgressFile
+$SCRIPT:_OriginalCfgLatencyHistoryFile = $CFG_LatencyHistoryFile
 
 # Create a per-run temp directory for all test artifacts
 $SCRIPT:TestTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "cs2opt-tests-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
@@ -38,6 +39,8 @@ $CFG_ProgressFile   = Join-Path $SCRIPT:TestTempRoot "progress.json"
 $CFG_BackupFile     = Join-Path $SCRIPT:TestTempRoot "backup.json"
 $CFG_BackupLockFile = Join-Path $SCRIPT:TestTempRoot "backup.lock"
 $CFG_BenchmarkFile  = Join-Path $SCRIPT:TestTempRoot "benchmark_history.json"
+$CFG_LatencyHistoryFile = Join-Path $SCRIPT:TestTempRoot "latency_history.json"
+$CFG_LatencyTargetsFile = Join-Path $_projectRoot "cfgs/valve-latency-targets.json"
 
 # Ensure log directory exists (logging.ps1 functions reference it)
 New-Item -ItemType Directory -Path $CFG_LogDir -Force | Out-Null
@@ -129,6 +132,27 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
             $null
         }
     }
+    if (-not (Get-Command Test-Connection -ErrorAction SilentlyContinue)) {
+        function global:Test-Connection {
+            param($ComputerName, $Count, $Quiet, $ErrorAction, $TimeoutSeconds, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command fsutil -ErrorAction SilentlyContinue)) {
+        function global:fsutil { param([Parameter(ValueFromRemainingArguments)]$CmdArgs) $null }
+    }
+    if (-not (Get-Command Get-Volume -ErrorAction SilentlyContinue)) {
+        function global:Get-Volume {
+            param([Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            @()
+        }
+    }
+    if (-not (Get-Command Optimize-Volume -ErrorAction SilentlyContinue)) {
+        function global:Optimize-Volume {
+            param($DriveLetter, [switch]$ReTrim, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
     if (-not (Get-Command Stop-ScheduledTask -ErrorAction SilentlyContinue)) {
         function global:Stop-ScheduledTask {
             param($TaskName, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
@@ -194,6 +218,8 @@ $_helpersDir = "$_projectRoot/helpers"
 . "$_helpersDir/system-utils.ps1"
 . "$_helpersDir/hardware-detect.ps1"
 . "$_helpersDir/backup-restore.ps1"
+. "$_helpersDir/network-diagnostics.ps1"
+. "$_helpersDir/storage-health.ps1"
 # Note: debloat, msi-interrupts, gpu-driver-clean, nvidia-driver, nvidia-drs,
 # nvidia-profile, benchmark-history, power-plan, process-priority are NOT loaded
 # here because they have heavy external dependencies (nvapi64.dll, bcdedit, etc.)

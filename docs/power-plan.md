@@ -112,7 +112,7 @@ Settings with hardware dependencies or mild thermal tradeoffs:
 - **EPP = 0** — tells the firmware to prioritize maximum performance. Correct for gaming desktops; on laptops may increase heat under sustained load.
 - **CPU min perf state (AMD/Intel split)** — as described in Bug 2 above
 - **Max idle state C1E** — allows C1 and C1E but blocks C6/C8 deep sleep. C1/C1E exit in <10µs; C6 exits in >100µs.
-- **NVMe APST off** — disables NVMe Autonomous Power State Transitions. NVMe sleep exit can take 5–20ms for deep states. Gaming involves frequent small file accesses (shader cache reads, config files).
+- **AHCI adaptive link-power timeout tuning** — the hidden storage setting discussed here is an AHCI adaptive link-power control, not NVMe/APST. The repo no longer presents that GUID as NVMe-specific control.
 - **Wi-Fi power saving off** — relevant for wireless players; reduces ping variance during transitions
 
 ### T3 — COMPETITIVE+ (5 settings)
@@ -122,8 +122,8 @@ Settings with real, measurable thermal costs that require the user to consciousl
 - **All C-states off** — eliminates all idle states. CPU never leaves C0. Eliminates >100µs wake latency entirely. Cost: +5–15°C idle temperature, louder fans, higher power draw.
 - **Duty cycling off** — as described in Bug 3 above
 - **Performance history count = 1** — no averaging; governor responds to instantaneous load
-- **Performance increase time = 100µs** — fastest allowed frequency ramp
-- **Performance decrease time = 250ms** — holds max clock for 250ms during brief load dips
+- **Performance increase time = 0** — minimum documented interval setting for faster ramp checks
+- **Performance decrease time = 100** — maximum documented interval setting so the CPU does not drop quickly during brief load dips
 
 ---
 
@@ -140,19 +140,11 @@ When the next mouse movement arrives, the host controller must:
 
 This 0.5–2ms latency is intermittent and irregular — it appears as mouse input stutters that disappear immediately after the mouse starts moving (because the device is no longer idle). Disabling USB selective suspend keeps the host controller always active.
 
-### The NVMe APST Impact
+### The Storage Power-Management Caveat
 
-NVMe drives have Autonomous Power State Transition (APST) enabled by default. The drive firmware moves between power states (PS0=active through PS4=deepest sleep) based on access patterns.
+Older revisions of this repo described the hidden storage setting as NVMe/APST control. That was wrong. The corrected code and this document now treat the relevant hidden setting as the **AHCI adaptive link-power timeout**. That makes it relevant to SATA/AHCI storage power management, not a general NVMe/APST master switch.
 
-CS2 accesses the NVMe drive frequently:
-- Shader cache reads on map load and mid-game (shader compilation is ongoing in CS2)
-- Config file reads when switching settings
-- Replay system writes
-- Log writes
-
-If the drive enters PS3 or PS4 during a momentary lull, the next read request incurs the APST exit latency — 5–20ms for deep states. This appears as intermittent "hitches" that are especially noticeable on map load and during the first 10 seconds of a new map when shaders are being compiled.
-
-Disabling APST (`NVMe Power Management Off = 0`) keeps the drive in PS0 at all times. Power draw increases by ~0.5–1W idle. On an NVMe drive rated for 10+ Watt active power, this is negligible.
+The practical conclusion is narrower than older versions of this guide suggested: the suite is still opinionated about reducing storage-side latency transitions where Windows exposes them, but it no longer claims to disable NVMe APST through that particular GUID.
 
 ---
 

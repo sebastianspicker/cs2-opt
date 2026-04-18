@@ -34,7 +34,7 @@ These flags are processed by the engine before any config files load. Use them f
 
 ---
 
-## Video Settings — 2026 Competitive Meta
+## Video Settings — 2026 Competitive Baseline
 
 Based on: ThourCS2 benchmarks (driver 581.08), prosettings.net aggregation of 866 professional CS2 players, and Blur Busters forum testing.
 
@@ -64,7 +64,7 @@ In **exclusive fullscreen**, the game bypasses DWM entirely. The GPU writes dire
 "setting.r_csgo_cmaa_enable" "1"  // LOW tier only
 ```
 
-Counter-intuitive finding from ThourCS2: 4x MSAA produces better 1% lows than no AA on many systems.
+Counter-intuitive finding from some community benchmarks: 4x MSAA can produce better 1% lows than no AA on some systems.
 
 The explanation: without anti-aliasing, the rasterizer must render more complex geometry per-pixel at edges (sub-pixel accuracy issues cause more branching in edge shaders). MSAA stabilizes this by resolving coverage at 4 samples per pixel — the rasterization pipeline becomes more predictable, reducing per-frame GPU work variance. The result is more consistent frametimes.
 
@@ -114,7 +114,7 @@ What 16x AF does: sharpens textures viewed at oblique angles (floors, walls, the
 
 CS2's HDR setting is a tone-mapping preference, not a resolution or sample count change. The FPS difference between Quality and Performance is less than 1%.
 
-**Why Performance, not Quality?** ThourCS2 documented that HDR Quality mode causes overbright rendering in areas with direct light sources — sun coming through windows, map lamps, skyboxes. These overbright areas wash out contrast, making it harder to distinguish player models in lit areas. HDR Performance preserves the competitive lighting profile.
+**Why Performance, not Quality?** This is the suite's current default based on community benchmarking and player preference. Some benchmarkers report that HDR Quality washes out high-contrast lit areas, but this is not a Valve-documented competitive rule. Benchmark and compare visually on your own display.
 
 ### FidelityFX Super Resolution: Always Off
 
@@ -152,7 +152,7 @@ The tradeoff: reduced horizontal FOV (you see less of the scene on the sides). T
 
 ---
 
-## Autoexec.cfg — 74 CVars (10 Categories)
+## Autoexec.cfg — 73 CVars (10 Categories)
 
 The autoexec is generated and written by Step 34. Here's the rationale for each category.
 
@@ -246,37 +246,35 @@ cl_hud_telemetry_serverrecvmargin_graph_show 0
 
 All set to 0 (hidden) in the autoexec. Show them individually if you're diagnosing specific issues.
 
-### Audio Spatial + System (9 CVars)
+### Audio Spatial + System (8 CVars)
 
-**`speaker_config 1`** — Sets the speaker configuration to Headphones. This is a prerequisite for Steam Audio HRTF processing.
+**`speaker_config 1`** — Sets the speaker configuration to Headphones. The suite treats this as the current headphone-focused spatial baseline.
 
-**`snd_use_hrtf 1`** — Explicitly enables HRTF (Head-Related Transfer Function) spatialization. `speaker_config 1` is necessary but not sufficient — you must also set `snd_use_hrtf 1` to activate HRTF. This is a common confusion point: setting `speaker_config 1` alone does not enable HRTF.
+The repo no longer documents a separate `snd_use_hrtf` toggle as an active CS2 CVar, because it does not appear in the current public convar dump. Older guidance in the CS2 community often referenced it, but this repo now aligns to the currently visible convar surface.
 
-**What HRTF does:** HRTF processes stereo output through a model of human pinna (outer ear) and head acoustic filtering. The result is that sounds appear to come from specific 3D positions in space — above, behind, to the sides — rather than simply left/right panning. In CS2, this makes enemy footsteps and grenade pings significantly easier to locate.
+**`snd_headphone_eq 0`** — Sets the EQ preset to "Natural" (0). Current pro-settings aggregation trends still lean Natural over Crisp, but this is a community preference rather than a Valve recommendation.
 
-**`snd_headphone_eq 0`** — Sets the EQ preset to "Natural" (0). A 2026 competitive audio study found that 62.5% of surveyed pro players preferred Natural EQ. The default "Front Speakers" (1) boosts frequencies that can mask directionality cues. Natural preserves the HRTF output without additional EQ coloring.
+**`snd_spatialize_lerp 0`** — Controls interpolation smoothness for spatialized audio positions. The suite uses `0` as its current headphone-focused spatial default. Treat this as benchmark/listening-dependent, not as a hard competitive law.
 
-**`snd_spatialize_lerp 0`** — Controls interpolation smoothness for spatialized audio positions. Value 0 = immediate position update (no interpolation). This is the correct setting when using HRTF — interpolation would smooth out position changes that the HRTF is trying to render precisely.
-
-**`snd_mixahead 0.05`** — Audio buffer size in seconds (50ms). Setting this too low (some guides suggest 0.001 or 0.01) causes audio dropouts when the system is under load. 0.05 (50ms) is the minimum that avoids dropouts under normal gaming conditions. The default is 0.1 (100ms) — 50ms is half the default latency with no dropout risk on modern hardware.
+**`snd_mixahead 0.05`** — Audio buffer size in seconds (50ms). The suite uses this as a conservative, stability-oriented default. Some guides push much lower values, but those can be less tolerant of scheduling jitter. The current public convar dump shows a much lower engine default than older guides documented, so this repo now treats `0.05` as a suite choice, not as the Valve default.
 
 **`snd_mute_losefocus 0`** — Keeps audio playing when CS2 is not the foreground window. Useful for hearing game sounds while Alt-Tabbed to a reference image or map.
 
 ### Audio Music Muting (8 CVars)
 
-All music categories are set to volume 0 — main menu, round start, round end, action music, MVP anthem, map objective music, death camera — except the 10-second warning which is kept at 0.1 (audible but not obnoxious). Music muting is universal in competitive play: music is overhead without competitive information value.
+All music categories are set to volume 0 — main menu, round start, round end, action music, MVP anthem, map objective music, death camera — except the 10-second warning which is kept at 0.1 (audible but not obnoxious). This is a widely used competitive preference, not a vendor-documented requirement.
 
 ### Mouse (4 CVars)
 
-**`m_rawinput 1`** — Bypass Windows pointer processing entirely. CS2 reads mouse data directly from the HID (Human Interface Device) driver layer, bypassing Windows' pointer acceleration, speed scaling, and any enhancement processing that runs in the input stack. This is the most important mouse setting for competitive consistency.
+**`m_rawinput 1`** — Kept in the generated config as a harmless documentation and forward-compatibility stub. Current CS2 builds already force raw input on, so this line is effectively a no-op today.
 
-The difference from Step 29's Windows-level acceleration disable: `m_rawinput 1` bypasses the entire Windows pointer pipeline for in-game input, while Step 29 disables acceleration for the Windows cursor (menus, desktop). Both should be set.
+The real active protection is the combination of Step 29's Windows-level acceleration disable plus **`m_mouseaccel1 0`**, **`m_mouseaccel2 0`**, and **`m_customaccel 0`** inside CS2. `m_rawinput 1` stays in the file mainly so the intent is explicit if Valve ever changes that behavior again.
 
 **`m_mouseaccel1 0`**, **`m_mouseaccel2 0`**, **`m_customaccel 0`** — Belt-and-suspenders mouse acceleration disables within CS2's own input processing (separate from Windows-level settings).
 
 ### Video (3 CVars)
 
-**`r_player_visibility_mode 1`** — Enables "Boost Player Contrast." Counter-intuitive: turning this on improves 1% lows. The shader applies a post-processing outline effect that makes player models stand out from backgrounds — and because it replaces more expensive ambient calculations with a predictable shader, frametime variance decreases. ThourCS2 confirmed this with CapFrameX before/after testing.
+**`r_player_visibility_mode 1`** — Enables "Boost Player Contrast." This is the suite's current default because the CVar exists, the feature is real, and many players prefer it for readability. Any claim that it improves 1% lows should be treated as benchmark-dependent rather than settled fact.
 
 **`r_fullscreen_gamma 2.2`** — Standard gamma for most monitors (sRGB). If your monitor is calibrated to a different gamma, adjust this value.
 
@@ -292,7 +290,7 @@ The difference from Step 29's Windows-level acceleration disable: `m_rawinput 1`
 
 **`-console`** — Enables the developer console at launch (same as `con_enable 1` in autoexec, but also enables the console before any config loads).
 
-**`+exec autoexec`** — Executes your autoexec.cfg on game launch. This is how the 74 CVars above take effect.
+**`+exec autoexec`** — Executes your autoexec.cfg on game launch. This is how the 73 CVars above take effect.
 
 ### -noreflex (optional)
 
@@ -326,7 +324,7 @@ For Intel 12th gen+ CPUs (Alder Lake, Raptor Lake), the autoexec generator adds 
 thread_pool_option 2
 ```
 
-This tells CS2's Source 2 thread pool to use all logical processors, including E-cores. Without this, the engine may use a default thread pool configuration that's not optimal for hybrid architectures. Auto-detected by matching `Win32_Processor.Name` against `1[2-9]\d{3}[A-Z]` (12th-19th gen series).
+This remains a suite heuristic for Intel hybrid CPUs, not a Valve-documented recommendation. It is auto-detected by matching `Win32_Processor.Name` against `1[2-9]\d{3}[A-Z]` (12th-19th gen series).
 
 ---
 
@@ -340,16 +338,18 @@ m_rawinput
 ```
 Should return `m_rawinput = 1`. If it returns 0, your autoexec isn't executing. Check that launch options contain `+exec autoexec` and that the file exists at the correct path.
 
-### Checking HRTF is active
+### Checking headphone-mode audio settings
 
-```
-snd_use_hrtf
-```
-Should return `snd_use_hrtf = 1`. Also verify:
 ```
 speaker_config
 ```
-Should return `speaker_config = 1` (Headphones). HRTF will not activate on any other speaker config.
+Should return `speaker_config = 1` (Headphones). You can also inspect:
+```
+snd_spatialize_lerp
+snd_headphone_eq
+snd_mixahead
+```
+to confirm the repo's current suite defaults were written.
 
 ### Checking video.txt is being read
 

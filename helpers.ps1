@@ -24,6 +24,8 @@ $helpersRoot = if ($PSScriptRoot) { "$PSScriptRoot\helpers" }
 . "$helpersRoot\nvidia-driver.ps1"
 . "$helpersRoot\nvidia-drs.ps1"
 . "$helpersRoot\backup-restore.ps1"
+. "$helpersRoot\network-diagnostics.ps1"
+. "$helpersRoot\storage-health.ps1"
 . "$helpersRoot\nvidia-profile.ps1"
 . "$helpersRoot\benchmark-history.ps1"
 . "$helpersRoot\power-plan.ps1"
