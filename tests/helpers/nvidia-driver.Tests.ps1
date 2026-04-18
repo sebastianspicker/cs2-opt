@@ -253,6 +253,50 @@ Describe "Install-NvidiaDriverClean" {
         $source | Should -Match "Get-AuthenticodeSignature"
         $source | Should -Match "NVIDIA"
     }
+
+    It "rejects non-NVIDIA-signed executables without prompting or execution" {
+        $SCRIPT:DryRun = $false
+        Mock Test-Path { $true } -ParameterFilter { $Path -eq "C:\fake\driver.exe" }
+        Mock Get-Item { [PSCustomObject]@{ PSIsContainer = $false } }
+        Mock Get-AuthenticodeSignature {
+            [PSCustomObject]@{
+                Status = 'Valid'
+                SignerCertificate = [PSCustomObject]@{ Subject = 'CN=Acme Driver Labs' }
+            }
+        }
+        Mock Read-Host { 'y' }
+        Mock Start-Process {}
+        Mock Write-Warn {}
+        Mock Write-Err {}
+
+        $result = Install-NvidiaDriverClean -DriverExe "C:\fake\driver.exe"
+
+        $result | Should -Be $false
+        Should -Not -Invoke Read-Host
+        Should -Not -Invoke Start-Process
+    }
+
+    It "rejects invalidly signed executables without prompting or execution" {
+        $SCRIPT:DryRun = $false
+        Mock Test-Path { $true } -ParameterFilter { $Path -eq "C:\fake\driver.exe" }
+        Mock Get-Item { [PSCustomObject]@{ PSIsContainer = $false } }
+        Mock Get-AuthenticodeSignature {
+            [PSCustomObject]@{
+                Status = 'NotSigned'
+                SignerCertificate = $null
+            }
+        }
+        Mock Read-Host { 'y' }
+        Mock Start-Process {}
+        Mock Write-Warn {}
+        Mock Write-Err {}
+
+        $result = Install-NvidiaDriverClean -DriverExe "C:\fake\driver.exe"
+
+        $result | Should -Be $false
+        Should -Not -Invoke Read-Host
+        Should -Not -Invoke Start-Process
+    }
 }
 
 # ── Apply-NvidiaPostInstallTweaks ──────────────────────────────────────────

@@ -293,6 +293,16 @@ Describe "Startup drift helpers" {
     }
 }
 
+Describe "Phase launch wiring" {
+
+    It "routes the Phase 2 button through the Safe Mode bootstrap entrypoint" {
+        $source = Get-Content "$PSScriptRoot/../../helpers/gui-panels.ps1" -Raw
+
+        $source | Should -Match 'BtnOptPhase2"\s*\)\.Add_Click\(\{ Launch-Terminal "Boot-SafeMode\.ps1" \}\)'
+        $source | Should -Not -Match 'BtnOptPhase2"\s*\)\.Add_Click\(\{ Launch-Terminal "SafeMode-DriverClean\.ps1" \}\)'
+    }
+}
+
 Describe "Save-SettingsToState" {
 
     BeforeEach {

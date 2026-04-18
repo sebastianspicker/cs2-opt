@@ -83,3 +83,4 @@ debug-*.ps1
 # Temp
 *.tmp
 *.bak
+.kilo/

@@ -50,23 +50,22 @@ try {
     Write-Host "    Error detail: $_" -ForegroundColor DarkGray
     Write-Host "" -ForegroundColor Yellow
     Write-Host "  $([char]0x2139) What to do:" -ForegroundColor Cyan
-    Write-Host "    Option 1: Press [Y] below to continue with safe defaults." -ForegroundColor White
-    Write-Host "    Option 2: Exit Safe Mode manually by opening an admin Command Prompt" -ForegroundColor White
-    Write-Host "              and running these two commands:" -ForegroundColor White
+    Write-Host "    Exit Safe Mode manually by opening an admin Command Prompt" -ForegroundColor White
+    Write-Host "    and running these two commands:" -ForegroundColor White
     Write-Host "                bcdedit /deletevalue safeboot" -ForegroundColor White
     Write-Host "                shutdown /r /t 0" -ForegroundColor White
     Write-Host ""
-    $r = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue with defaults? [y/N]" }
-    if ($r -notmatch "^[jJyY]$") { exit 1 }
-    $detectedGpu = "2"  # Default to NVIDIA RTX 4000
-    try {
-        $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
-               Where-Object { $_.Status -eq "OK" } | Select-Object -First 1
-        if ($gpu.Name -match "AMD|Radeon") { $detectedGpu = "3" }
-        elseif ($gpu.Name -match "Intel") { $detectedGpu = "4" }
-    } catch { Write-DebugLog "GPU auto-detection via WMI failed in Safe Mode: $_" }
-    $state = [PSCustomObject]@{ gpuInput=$detectedGpu; mode="CONTROL"; logLevel="NORMAL"; profile="RECOMMENDED"; fpsCap=0; avgFps=0; rollbackDriver=$null; nvidiaDriverPath=$null; appliedSteps=@(); baselineAvg=$null; baselineP1=$null }
-    $SCRIPT:Mode = "CONTROL"; $SCRIPT:LogLevel = "NORMAL"; $SCRIPT:Profile = "RECOMMENDED"; $SCRIPT:DryRun = $false
+    Write-Host "    Re-run START.bat -> [1] or START.bat -> [S] from Normal Mode to rebuild the runtime payload." -ForegroundColor White
+    exit 1
+}
+
+if (-not (Test-Phase1SafeModeReady -State $state)) {
+    Write-Host ""
+    Write-Host "  $([char]0x2718) Phase 2 launch rejected: the Phase 1 Safe Mode handoff is not marked ready." -ForegroundColor Red
+    Write-Host "  $([char]0x2139) What to do:" -ForegroundColor Cyan
+    Write-Host "    - Run START.bat -> [1] and complete Step 38, or use START.bat -> [S] Boot to Safe Mode." -ForegroundColor White
+    Write-Host "    - Then allow this script to run again in Safe Mode via RunOnce." -ForegroundColor White
+    exit 1
 }
 Initialize-Log
 Write-Banner 2 3 "Safe Mode  ·  GPU Driver Clean Removal"
@@ -82,15 +81,12 @@ try {
     # $env:SAFEBOOT_OPTION is set by winload.exe on Safe Mode boot ("MINIMAL" or "NETWORK").
     # Reliable on all Windows 10/11 editions. If absent, we're in normal boot.
     if (-not $env:SAFEBOOT_OPTION) {
-        Write-Warn "This script needs Safe Mode to work properly, but you booted normally."
+        Write-Err "This script needs Safe Mode to work properly, but you booted normally."
         Write-Host "  $([char]0x2139) Why it matters: Your GPU driver files are in use right now and cannot" -ForegroundColor Cyan
         Write-Host "    be cleanly removed. This could cause a black screen after restart." -ForegroundColor Cyan
-        Write-Host "  $([char]0x2139) Recommended: Go back to START.bat and let it boot into Safe Mode." -ForegroundColor Cyan
-        $confirm = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue anyway? [y/N]" }
-        if ($confirm -notmatch "^[jJyY]$") {
-            Write-Info "Aborted. Boot into Safe Mode first (START.bat -> [1])."
-            exit 0
-        }
+        Write-Host "  $([char]0x2139) What to do: Go back to START.bat and let it boot into Safe Mode." -ForegroundColor Cyan
+        Write-Info "Aborted. Boot into Safe Mode first (START.bat -> [1] or [S])."
+        exit 1
     }
 
     Write-Section "Step 1 — Disable Safe Mode"

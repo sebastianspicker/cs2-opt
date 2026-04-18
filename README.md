@@ -108,7 +108,7 @@ CS2 has structurally poor frame pacing in Valve's Source 2 engine. Games with si
 **Option A — GUI Dashboard** *(recommended for first-time users)*
 1. Extract the ZIP to any folder (e.g. `C:\CS2_OPT_SETUP\`)
 2. Right-click `START-GUI.bat` → **Run as administrator**
-3. Use the dashboard to analyze your system, review backups, and launch optimization phases
+3. Use the dashboard to analyze your system, review backups, and launch the terminal phase entrypoints when needed
 
 **Option B — Terminal** *(full optimization flow)*
 1. Extract the ZIP to any folder
@@ -130,7 +130,7 @@ Eight panels: **Dashboard** (hardware summary, progress), **Analyze** (40+ setti
 | ![Dashboard](docs/screenshots/01-dashboard.png) | ![Analyze](docs/screenshots/02-analyze.png) | ![Optimize](docs/screenshots/03-optimize.png) |
 | ![Benchmark](docs/screenshots/05-benchmark.png) | ![Video](docs/screenshots/06-video.png) | ![Settings](docs/screenshots/07-settings.png) |
 
-The GUI does not run optimizations — Phases 1–3 use the terminal. The dashboard handles analysis, backup, benchmarking, network diagnostics, storage maintenance, and configuration.
+The GUI can launch the terminal entrypoints for Phase 1, the Safe Mode handoff, and manual Phase 3 recovery, but it does not execute optimization steps inside the WPF process. The dashboard handles analysis, backup, benchmarking, network diagnostics, storage maintenance, and configuration.
 
 For full panel documentation, see [`docs/gui.md`](docs/gui.md).
 
