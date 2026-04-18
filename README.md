@@ -143,14 +143,18 @@ CS2-Optimize-Suite/
 ├── START.bat                  Main menu (run as Administrator)
 ├── START-GUI.bat              WPF dashboard launcher
 ├── CS2-Optimize-GUI.ps1       WPF dashboard
+├── ui/
+│   └── CS2-Optimize-GUI.xaml  WPF XAML layout (loaded at runtime)
 ├── config.env.ps1             Central config (paths, maps, NIC, DNS, autoexec CVars)
 ├── helpers.ps1                Module loader
 ├── helpers/
-│   ├── backup-restore.ps1     Auto-backup + per-step rollback
+│   ├── backup-restore.ps1     Auto-backup + per-step rollback (loader)
+│   ├── backup-restore/        Backup submodules (core / backup-capture / restore)
 │   ├── benchmark-history.ps1  Before/after benchmark tracking
 │   ├── debloat.ps1            Native system debloat
 │   ├── gpu-driver-clean.ps1   Native GPU driver removal (replaces DDU)
-│   ├── gui-panels.ps1         WPF panel builders for GUI dashboard
+│   ├── gui-panels.ps1         WPF panel builders for GUI dashboard (loader)
+│   ├── gui-panels/            Panel submodules (dashboard-analyze / optimize-backup / etc.)
 │   ├── hardware-detect.ps1    RAM, CPU, GPU detection
 │   ├── logging.ps1            Output formatting
 │   ├── msi-interrupts.ps1     MSI interrupt configuration
@@ -457,7 +461,7 @@ A modifier on any profile. `Set-RegistryValue` and `Set-BootConfig` intercept al
 Only if you have observable stutter absent on earlier drivers. The script offers the option; stable pre-R570 is 566.36 as of early 2026.
 
 **Q: XMP/EXPO — does it matter?**
-Activate it — it's free and your RAM should run at rated speed. But the CS2-specific 1% low benefit has not been isolated in controlled testing (one Blur Busters 7800X3D + 4070 Super test showed identical results). After activating, run TM5 or HCI MemTest to confirm stability. See [`docs/evidence.md`](docs/evidence.md#known-limitations--evidence-gaps).
+Activate it — it's free and your RAM should run at rated speed. But the CS2-specific 1% low benefit has not been isolated in controlled testing (one Blur Busters 7800X3D + 4070 Super test showed identical results). After activating, run TM5 or HCI MemTest to confirm stability. See [`docs/evidence.md`](docs/evidence.md).
 
 **Q: AMD / Intel Arc support?**
 AMD is supported for most steps. NVIDIA-specific steps (DRS profile, driver install) are skipped automatically. Intel Arc partially supported. **AMD gap:** No public API equivalent to `nvapi64.dll` DRS for AMD per-game profiles. Manually set Radeon Software → CS2 profile: disable Chill/Boost, AF/AA to App Settings, Power Efficiency to Max Performance.
