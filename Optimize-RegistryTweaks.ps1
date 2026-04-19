@@ -96,7 +96,7 @@ if ($startStep -le 25) {
                     $wifiUp = Get-NetAdapter -ErrorAction SilentlyContinue |
                         Where-Object { $_.Status -eq "Up" -and $_.InterfaceDescription -match "Wi-Fi|Wireless" }
                     if ($wifiUp) { $wifiOnly = $true }
-                } catch {}
+                } catch { Write-DebugLog "Wi-Fi adapter check failed: $_" }
                 if ($wifiOnly) {
                     Write-Warn "Wi-Fi connection detected — Nagle disable targets wired Ethernet adapters only."
                     Write-Info "For Wi-Fi: Settings -> Network -> Wi-Fi -> Hardware properties -> note the adapter GUID."

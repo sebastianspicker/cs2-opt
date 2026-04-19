@@ -1,7 +1,7 @@
 # PSScriptAnalyzer settings for CS2 Optimization Suite
 # Run: Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
 #
-# Last reviewed: 2026-03-21 (E3 CI audit)
+# Last reviewed: 2026-04-19 (v2.2 full audit)
 # All exclusions validated against current codebase — each has documented justification.
 @{
     Severity = @('Error', 'Warning')
@@ -14,9 +14,19 @@
         # UTF-8 without BOM is preferred (modern tooling, git compatibility)
         'PSUseBOMForUnicodeEncodedFile',
 
-        # Empty catches are intentional best-effort patterns (7 instances):
-        # Setup-Profile.ps1 state load, PostReboot-Setup.ps1 state save,
-        # process-priority.ps1 affinity, CS2-Optimize-GUI.ps1 teardown (4x)
+        # Empty catches are intentional best-effort patterns (10 instances).
+        # All intentional sites enumerated below — anything not listed should get Write-DebugLog.
+        #   CS2-Optimize-GUI.ps1:56   — RunspacePool teardown (WPF shutdown, must not throw)
+        #   CS2-Optimize-GUI.ps1:143  — state.json load on startup (file may not exist yet)
+        #   CS2-Optimize-GUI.ps1:151  — state.json load retry path (same rationale)
+        #   CS2-Optimize-GUI.ps1:178  — WPF timer Stop on close (teardown, must not throw)
+        #   CS2-Optimize-GUI.ps1:179  — RunspacePool Close/Dispose (teardown, must not throw)
+        #   helpers/logging.ps1:72    — file write failure inside Write-Log (anti-recursion: calling
+        #                               Write-DebugLog here would recurse back into Write-Log)
+        #   helpers/nvidia-driver.ps1:272 — Stop-Process cleanup after extraction (teardown)
+        #   PostReboot-Setup.ps1:87   — state.json save after reboot (best-effort, non-critical)
+        #   PostReboot-Setup.ps1:112  — bcdedit Safe Mode flag clear (best-effort; user warned below)
+        #   Setup-Profile.ps1:88      — state.json load (file absent = first run, silently ignored)
         'PSAvoidUsingEmptyCatchBlock',
 
         # $global:ProgressPreference needed for PS 5.1 Invoke-WebRequest compat

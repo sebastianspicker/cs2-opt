@@ -85,7 +85,7 @@ function Write-VerifyCheckResult {
 function Test-VerifyNicAdvancedProperties {
     $results = [System.Collections.Generic.List[object]]::new()
     $nic = $null
-    try { $nic = Get-ActiveNicAdapter } catch {}
+    try { $nic = Get-ActiveNicAdapter } catch { Write-DebugLog "Get-ActiveNicAdapter failed: $_" }
     if (-not $nic) {
         $results.Add((New-VerifyCheckResult -Status "MISSING" -Label "Active LAN adapter for NIC tweaks" -Detail "not found")) | Out-Null
         return @($results)
@@ -276,7 +276,7 @@ function Test-VerifyTrimConfiguration {
 
 function Test-VerifyScheduledTasks {
     $x3d = $null
-    try { $x3d = Get-X3DCcdInfo } catch {}
+    try { $x3d = Get-X3DCcdInfo } catch { Write-DebugLog "Get-X3DCcdInfo failed: $_" }
     if (-not $x3d -or -not $x3d.IsX3D -or -not $x3d.DualCCD) {
         return New-VerifyCheckResult -Status "INFO" -Label "Scheduled task: CS2 CCD affinity" -Detail "N/A (not a dual-CCD X3D system)"
     }

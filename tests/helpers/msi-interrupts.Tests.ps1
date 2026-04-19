@@ -190,6 +190,101 @@ Describe "Set-NicRssConfig" {
 
         { Set-NicRssConfig } | Should -Not -Throw
     }
+
+    Context "*RSS master switch" {
+
+        # Shared helper: builds the NIC + driver key mock scaffolding.
+        # Registers Get-ItemProperty mocks in specificity order (most-specific first).
+        function Set-RssTestScaffolding {
+            param([string]$NicDescription = "Realtek PCIe GbE", [long]$Speed = 1000000000)
+
+            $fakePath   = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\0001"
+            $fakeSubKey = [PSCustomObject]@{ PSChildName = "0001"; PSPath = $fakePath }
+
+            Mock Get-ActiveNicAdapter {
+                param() [PSCustomObject]@{ InterfaceDescription = $using:NicDescription; Speed = $using:Speed }
+            }
+            Mock Get-ChildItem { @($fakeSubKey) }
+            # DriverDesc match (first so it wins over the catch-all)
+            Mock Get-ItemProperty {
+                [PSCustomObject]@{ DriverDesc = $using:NicDescription }
+            } -ParameterFilter { $Name -eq "DriverDesc" }
+            # RSS sub-params — return null so Set-RegistryValue is called for each
+            Mock Get-ItemProperty { $null } -ParameterFilter { $Name -ne "DriverDesc" -and $Name -ne "*RSS" }
+            Mock Set-RegistryValue {}
+            Mock Write-Step {}; Mock Write-Info {}; Mock Write-OK {}; Mock Write-Sub {}; Mock Write-Warn {}
+        }
+
+        It "creates and enables *RSS when the key is absent" {
+            Set-RssTestScaffolding
+            Mock Get-ItemProperty { $null } -ParameterFilter { $Name -eq "*RSS" }
+
+            Set-NicRssConfig
+
+            Should -Invoke Set-RegistryValue -Times 1 -ParameterFilter { $name -eq "*RSS" -and $value -eq 1 }
+        }
+
+        It "re-enables *RSS when it is 0" {
+            Set-RssTestScaffolding
+            $rssDisabled = New-Object PSObject
+            $rssDisabled | Add-Member -MemberType NoteProperty -Name "*RSS" -Value 0
+            Mock Get-ItemProperty { $rssDisabled } -ParameterFilter { $Name -eq "*RSS" }
+
+            Set-NicRssConfig
+
+            Should -Invoke Set-RegistryValue -Times 1 -ParameterFilter { $name -eq "*RSS" -and $value -eq 1 }
+        }
+
+        It "does not write *RSS when it is already 1" {
+            Set-RssTestScaffolding
+            $rssEnabled = New-Object PSObject
+            $rssEnabled | Add-Member -MemberType NoteProperty -Name "*RSS" -Value 1
+            Mock Get-ItemProperty { $rssEnabled } -ParameterFilter { $Name -eq "*RSS" }
+
+            Set-NicRssConfig
+
+            Should -Invoke Set-RegistryValue -Times 0 -ParameterFilter { $name -eq "*RSS" }
+        }
+    }
+
+    Context "speed-aware RSS queue count" {
+
+        function Set-SpeedTestScaffolding {
+            param([long]$Speed)
+            $fakePath   = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\0001"
+            $fakeSubKey = [PSCustomObject]@{ PSChildName = "0001"; PSPath = $fakePath }
+            $rssEnabled = New-Object PSObject
+            $rssEnabled | Add-Member -MemberType NoteProperty -Name "*RSS" -Value 1
+
+            Mock Get-ActiveNicAdapter {
+                param() [PSCustomObject]@{ InterfaceDescription = "Test NIC"; Speed = $using:Speed }
+            }
+            Mock Get-ChildItem { @($fakeSubKey) }
+            Mock Get-ItemProperty {
+                [PSCustomObject]@{ DriverDesc = "Test NIC" }
+            } -ParameterFilter { $Name -eq "DriverDesc" }
+            Mock Get-ItemProperty { $rssEnabled } -ParameterFilter { $Name -eq "*RSS" }
+            Mock Get-ItemProperty { $null } -ParameterFilter { $Name -ne "DriverDesc" -and $Name -ne "*RSS" }
+            Mock Set-RegistryValue {}
+            Mock Write-Step {}; Mock Write-Info {}; Mock Write-OK {}; Mock Write-Sub {}; Mock Write-Warn {}
+        }
+
+        It "emits 5+ GbE speed-detection message for NICs at 5 Gbps or above" {
+            Set-SpeedTestScaffolding -Speed 5000000000
+
+            Set-NicRssConfig
+
+            Should -Invoke Write-Info -ParameterFilter { $t -match "5\+ GbE NIC detected" }
+        }
+
+        It "does not emit 5+ GbE detection message for 1 GbE NICs" {
+            Set-SpeedTestScaffolding -Speed 1000000000
+
+            Set-NicRssConfig
+
+            Should -Invoke Write-Info -Times 0 -ParameterFilter { $t -match "5\+ GbE NIC detected" }
+        }
+    }
 }
 
 # ── Set-NicInterruptAffinity ───────────────────────────────────────────────

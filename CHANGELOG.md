@@ -27,7 +27,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - `helpers/network-diagnostics.ps1` — Valve-region latency diagnostics and GUI DNS workflow; reads `cfgs/valve-latency-targets.json`
 - `cfgs/valve-latency-targets.json` — Valve relay latency target definitions for network diagnostics
 - `helpers/storage-health.ps1` — TRIM/ReTrim health helpers (enable TRIM, run ReTrim, check DisableDeleteNotify state)
-- GUI: Network panel (latency diagnostics, DNS workflow) and Storage panel (TRIM health) — dashboard now has 8 panels
+- GUI: Network panel (latency diagnostics, DNS workflow) — storage health (TRIM/ReTrim status) surfaced in the Analyze panel. Dashboard now has 8 panels
 - `docs/network-diagnostics.md`, `docs/storage-health.md` — deep-dive docs for new helpers
 
 ### Refactored

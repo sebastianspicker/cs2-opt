@@ -475,7 +475,7 @@ if ($startStep -le 7) {
                     "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" `
                     -Name "Enabled" -ErrorAction SilentlyContinue
                 if ($hvciVal -and $hvciVal.Enabled -eq 0) { $hvciPendingOff = $true }
-            } catch {}
+            } catch { Write-DebugLog "HVCI registry read failed: $_" }
 
             if (-not $vbsActive) {
                 Write-OK "VBS/Core Isolation: not active — no overhead to remove."

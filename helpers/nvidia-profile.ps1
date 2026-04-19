@@ -293,7 +293,7 @@ function Apply-NvidiaCS2ProfileDrs {
                 # Detect the Base Profile by handle comparison, not by name search,
                 # so we always write to the profile that actually owns cs2.exe.
                 $baseProfile = [IntPtr]::Zero
-                try { $baseProfile = [NvApiDrs]::FindProfileByName($session, "_GLOBAL_DRIVER_PROFILE") } catch { }
+                try { $baseProfile = [NvApiDrs]::FindProfileByName($session, "_GLOBAL_DRIVER_PROFILE") } catch { Write-DebugLog "DRS global profile lookup failed: $_" }
                 if ($baseProfile -ne [IntPtr]::Zero -and $drsProfile -eq $baseProfile) {
                     # cs2.exe is in the Base Profile — create a dedicated profile and move it
                     Write-DebugLog "DRS: cs2.exe found in Base Profile — creating dedicated CS2 profile"

@@ -28,6 +28,8 @@ Every optimization tracked by this suite, with estimated impact ranges from isol
 | SysMain Disable | T3 | MODERATE | 0–3 | 0–1 | LOW | Community consensus | Only on HDD or low RAM |
 | Visual Effects | T3 | SAFE | 0–1 | 0–1 | LOW | DWM overhead reduction | Minimal impact |
 | VBS/Core Isolation Off | T2 | MODERATE | 2–8 | 1–5 | MEDIUM | Microsoft VBS docs; Phoronix benchmarks | Removes hypervisor overhead on OEM Win11. Skip if FACEIT/Vanguard. |
+| rBAR DRS (per-app OFF) | T2 | SAFE | 0–6 | 0–3 | LOW | ThourCS2 2026: ~6% better 1% lows with rBAR OFF | Benchmark-dependent; applied via DRS settings 983226/983227; system-wide BIOS rBAR stays enabled |
+| TRIM / ReTrim (SSD maintenance) | T2 | SAFE | 0 | 0–2 | MEDIUM | Microsoft docs; community storage benchmarking | Prevents long-term SSD read degradation; no in-session FPS impact |
 | Windows Update Blocker | T3 | CRITICAL | 0 | 0 | N/A | Security trade-off | Disables security updates — not recommended |
 
 > **Reading this table:** "1% Low" is frametime consistency (higher = fewer stutters). "Avg FPS" is average framerate. Negative values mean intentional reduction (FPS Cap) or possible regression (HAGS on older GPUs). Confidence reflects the quality and reproducibility of the evidence.
@@ -111,7 +113,7 @@ Shows exactly how each step behaves under every profile. **DRY-RUN** is a modifi
 | 6 | CS2 Optimized Power Plan | T1 | MODERATE | `auto`† | `auto`† | `auto`† | `prompted` | †T1 settings always; T2 added in RECOMMENDED+; T3 in COMPETITIVE+ |
 | 7 | HAGS | T2 | MODERATE | `skip` | `prompted` | `prompted` | `prompted` | AMD/Intel GPU: informational only |
 | 8 | Pagefile fixed size | T2 | MODERATE | `skip` | `prompted` | `prompted` | `prompted` | Auto-skipped if RAM ≥ 32 GB regardless of profile |
-| 9 | Resizable BAR / Smart Access Memory | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | BIOS guide only — no PowerShell changes |
+| 9 | Resizable BAR / Smart Access Memory | T2 | SAFE | `auto` | `prompted` | `prompted` | `prompted` | Applied via DRS `983226`/`983227` (per-app rBAR OFF); system-wide BIOS rBAR stays enabled |
 | 10 | Dynamic Tick | T3 | MODERATE | `skip` | `skip` | `prompted` | `prompted` | Reversible: `bcdedit /set disabledynamictick no` |
 | 11 | Disable MPO | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | Eliminates DWM multiplane microstutter |
 | 12 | Enable Windows Game Mode | T3 | SAFE | `skip` | `skip` | `prompted` | `prompted` | Windows gaming-default scheduling path; DVR remains separately disabled |
