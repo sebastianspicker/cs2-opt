@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 #  Setup-Profile.ps1  —  Step 1: Profile, Configuration, Resume
 # ==============================================================================
 
@@ -138,15 +138,8 @@ if ($startStep -gt $TOTAL_STEPS) {
     $r = if (Test-YoloProfile) { "y" } else { Read-Host "  Continue with Phase 2 (Safe Mode GPU driver clean)? [y/N]" }
     if ($r -match "^[jJyY]$") {
         # Ensure safeboot flag is set before restarting
-        $bcdOut = bcdedit /set "{current}" safeboot minimal 2>&1
-        $bcdExit = $LASTEXITCODE
-        # Retry without {current} if first attempt failed
-        if ($bcdExit -ne 0) {
-            $bcdOut = bcdedit /set safeboot minimal 2>&1
-            $bcdExit = $LASTEXITCODE
-        }
-        # Trust exit code 0; fall back to BCD verification only if exit code is non-zero
-        if ($bcdExit -ne 0 -and -not (Test-BootConfigSet "safeboot")) {
+        $safeBootResult = Set-SafeBootMinimal
+        if (-not $safeBootResult.Success) {
             Write-Host ""
             Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Red
             Write-Host "  ║  Could not set Safe Mode boot flag.                     ║" -ForegroundColor Red
@@ -155,10 +148,11 @@ if ($startStep -gt $TOTAL_STEPS) {
             Write-Host "  ║    bcdedit /set {current} safeboot minimal              ║" -ForegroundColor Cyan
             Write-Host "  ║    shutdown /r /t 0                                     ║" -ForegroundColor Cyan
             Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Red
-            Write-Host "  bcdedit said: $($bcdOut | Out-String)".Trim() -ForegroundColor DarkGray
+            Write-Host "  bcdedit said: $($safeBootResult.Output)" -ForegroundColor DarkGray
             if (-not (Test-YoloProfile)) { Read-Host "`n  Press Enter to return to menu" }
             exit 0
         }
+        Write-DebugLog "Resume path safeboot set result: $($safeBootResult.Output)"
         # Show warning countdown, then restart
         $countdownSec = 10
         Write-Host ""

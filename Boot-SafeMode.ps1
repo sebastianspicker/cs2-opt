@@ -108,18 +108,12 @@ Write-OK "Phase 2 registered via RunOnce."
 # -- 3. Set Safe Mode boot flag -----------------------------------------------
 Write-Step "Setting Safe Mode boot flag..."
 
-$bcdOut = bcdedit /set "{current}" safeboot minimal 2>&1
-$bcdExit = $LASTEXITCODE
-
-if ($bcdExit -ne 0) {
-    Write-Warn "bcdedit exited with code $bcdExit -- retrying without {current}..."
-    $bcdOut = bcdedit /set safeboot minimal 2>&1
-    $bcdExit = $LASTEXITCODE
+$safeBootResult = Set-SafeBootMinimal
+if ($safeBootResult.Retried) {
+    Write-DebugLog "bcdedit safeboot required fallback retry; final exit code: $($safeBootResult.ExitCode)."
 }
 
-$safebootOk = ($bcdExit -eq 0) -or (Test-BootConfigSet "safeboot")
-
-if (-not $safebootOk) {
+if (-not $safeBootResult.Success) {
     Write-Host ""
     Write-Err "Safe Mode boot flag could NOT be set."
     Write-Host ""
@@ -131,6 +125,7 @@ if (-not $safebootOk) {
     exit 1
 }
 
+Write-DebugLog "bcdedit safeboot output: $($safeBootResult.Output)"
 Write-OK "Safe Mode boot flag set."
 
 # -- 4. Restart prompt ---------------------------------------------------------

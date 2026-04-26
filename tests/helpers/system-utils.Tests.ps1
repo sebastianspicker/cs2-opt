@@ -447,3 +447,29 @@ Describe "Phase 1 Safe Mode readiness marker" {
         Test-Phase1SafeModeReady -State ([PSCustomObject]@{ phase1SafeModeReady = $true }) | Should -Be $true
     }
 }
+
+# ── Set-SafeBootMinimal / Clear-SafeBootFlag DRY-RUN ───────────────────────
+Describe "SafeBoot helper DRY-RUN behavior" {
+
+    BeforeEach {
+        Reset-TestState
+        $SCRIPT:DryRun = $true
+    }
+
+    It "Set-SafeBootMinimal returns success result in DRY-RUN mode" {
+        $result = Set-SafeBootMinimal
+
+        $result.Success  | Should -Be $true
+        $result.ExitCode | Should -Be 0
+        $result.Output   | Should -Match "DRY-RUN"
+        $result.Retried  | Should -Be $false
+    }
+
+    It "Clear-SafeBootFlag returns success result in DRY-RUN mode" {
+        $result = Clear-SafeBootFlag
+
+        $result.Success  | Should -Be $true
+        $result.ExitCode | Should -Be 0
+        $result.Output   | Should -Match "DRY-RUN"
+    }
+}

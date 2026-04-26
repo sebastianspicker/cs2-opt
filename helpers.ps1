@@ -9,8 +9,11 @@
 Set-StrictMode -Version Latest
 
 $helpersRoot = if ($PSScriptRoot) { "$PSScriptRoot\helpers" }
+               elseif ($MyInvocation.MyCommand.Path) { "$(Split-Path -Parent $MyInvocation.MyCommand.Path)\helpers" }
                elseif ((Get-Variable -Name ScriptRoot -ErrorAction SilentlyContinue) -and $ScriptRoot) { "$ScriptRoot\helpers" }
-               else { ".\helpers" }
+               else {
+                   throw "Unable to resolve suite root for helper loading. Refusing relative .\helpers fallback."
+               }
 
 # ── Core modules (CLI + GUI) ──────────────────────────────────────────────
 . "$helpersRoot\logging.ps1"

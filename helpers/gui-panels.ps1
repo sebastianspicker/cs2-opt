@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 #  helpers/gui-panels.ps1  —  GUI Panel Functions & Event Handlers
 # ==============================================================================
 #
@@ -644,10 +644,10 @@ if ($env:SAFEBOOT_OPTION) {
             "This will remove the Safe Mode boot flag and restart into Normal Mode.`n`nRestart now?",
             "Boot to Normal Mode", "YesNo", "Question")
         if ($confirm -eq "Yes") {
-            $bcdOut = bcdedit /deletevalue safeboot 2>&1
-            if ($LASTEXITCODE -ne 0) {
+            $safeBootClear = Clear-SafeBootFlag
+            if (-not $safeBootClear.Success) {
                 [System.Windows.MessageBox]::Show(
-                    "Failed to remove Safe Mode flag (bcdedit exit $LASTEXITCODE).`n`n$($bcdOut | Out-String)`nReboot aborted — you are still in Safe Mode.",
+                    "Failed to remove Safe Mode flag (bcdedit exit $($safeBootClear.ExitCode)).`n`n$($safeBootClear.Output)`nReboot aborted — you are still in Safe Mode.",
                     "bcdedit Error", "OK", "Error")
                 return
             }

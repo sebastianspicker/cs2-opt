@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS  CS2 Optimization Suite — Post-Reboot Setup (Normal boot after GPU driver clean)
 
@@ -104,16 +104,20 @@ if ($env:SAFEBOOT_OPTION) {
     Write-Host ""
     Write-Host "  Clearing Safe Mode flag now..." -ForegroundColor White
     try {
-        $bcdResult = bcdedit /deletevalue safeboot 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $safeBootClear = Clear-SafeBootFlag -IgnoreDryRun
+        if ($safeBootClear.Success) {
             Write-Host "  $([char]0x2714) Safe Mode disabled. Restarting into Normal Mode..." -ForegroundColor Green
             Write-Host "    Phase 3 will run automatically on next boot." -ForegroundColor White
+            Write-DebugLog "Safe Mode clear output: $($safeBootClear.Output)"
             Set-RunOnce "CS2_Phase3" "$CFG_WorkDir\PostReboot-Setup.ps1"
             Start-Sleep -Seconds 2
             shutdown /r /t 0 /f
             exit 0
         }
-    } catch {}
+        Write-DebugLog "Safe Mode clear failed (exit $($safeBootClear.ExitCode)): $($safeBootClear.Output)"
+    } catch {
+        Write-DebugLog "Safe Mode clear threw exception: $_"
+    }
     Write-Host "  $([char]0x26A0) Could not clear Safe Mode flag automatically." -ForegroundColor Yellow
     Write-Host "  Run in elevated cmd.exe:" -ForegroundColor White
     Write-Host "    bcdedit /deletevalue safeboot" -ForegroundColor Cyan

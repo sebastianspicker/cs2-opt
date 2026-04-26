@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 #  Optimize-GameConfig.ps1  —  Steps 34-38: Autoexec, Chipset, Visual Effects,
 #                                Services, Safe Mode Preparation
 # ==============================================================================
@@ -642,26 +642,10 @@ if ($startStep -le 38) {
 
         Set-RunOnce "CS2_Phase2" "$CFG_WorkDir\SafeMode-DriverClean.ps1" -SafeMode
 
-        # Use explicit {current} identifier — some Windows builds ignore the implicit default.
-        # Capture exit code before piping (| Out-String resets $LASTEXITCODE in PS 5.1).
-        $bcdOut = bcdedit /set "{current}" safeboot minimal 2>&1
-        $bcdExit = $LASTEXITCODE
-        Write-DebugLog "bcdedit /set {current} safeboot minimal — exit $bcdExit — $($bcdOut | Out-String)"
+        $safeBootResult = Set-SafeBootMinimal
+        Write-DebugLog "Step 38 safeboot set output: $($safeBootResult.Output)"
 
-        # If first attempt failed, retry without {current}
-        if ($bcdExit -ne 0) {
-            Write-Warn "bcdedit /set exited with code $bcdExit — retrying without {current}..."
-            $bcdOut = bcdedit /set safeboot minimal 2>&1
-            $bcdExit = $LASTEXITCODE
-            Write-DebugLog "bcdedit retry exit $bcdExit — $($bcdOut | Out-String)"
-        }
-
-        # Trust bcdedit exit code 0 as success. Only use Test-BootConfigSet as a
-        # fallback when bcdedit reports failure (exit code might be wrong but BCD
-        # was actually written — e.g. bcdedit returns 0 on "already set").
-        $safebootOk = ($bcdExit -eq 0) -or (Test-BootConfigSet "safeboot")
-
-        if ($safebootOk) {
+        if ($safeBootResult.Success) {
             Set-Phase1SafeModeReadyFlag -Path $CFG_StateFile | Out-Null
             $SCRIPT:SafebootReady = $true
             Write-Blank

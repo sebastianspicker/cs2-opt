@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 #  helpers/system-utils.ps1  —  Download, Registry, Boot Config, Filesystem
 # ==============================================================================
 
@@ -372,6 +372,91 @@ function Set-BootConfig {
     }
     Write-OK "Set: $key = $val"
     return $true
+}
+
+function Set-SafeBootMinimal {
+    <#  Sets BCD safeboot=minimal with compatibility retry behavior.
+        Attempt order:
+          1) bcdedit /set "{current}" safeboot minimal
+          2) bcdedit /set safeboot minimal  (fallback for builds that reject {current})
+        Returns object:
+          Success   [bool]
+          ExitCode  [int]
+          Output    [string]
+          Retried   [bool]  #>
+    [CmdletBinding()]
+    param()
+
+    if ($SCRIPT:DryRun) {
+        return [pscustomobject]@{
+            Success  = $true
+            ExitCode = 0
+            Output   = "DRY-RUN: bcdedit /set {current} safeboot minimal"
+            Retried  = $false
+        }
+    }
+
+    $output = bcdedit /set "{current}" safeboot minimal 2>&1
+    $exitCode = $LASTEXITCODE
+    $retried = $false
+
+    if ($exitCode -ne 0) {
+        $retried = $true
+        $retryOutput = bcdedit /set safeboot minimal 2>&1
+        $exitCode = $LASTEXITCODE
+        $output = @($output; "--- retry without {current} ---"; $retryOutput)
+    }
+
+    $outputStr = ($output | Out-String).Trim()
+    $success = ($exitCode -eq 0) -or (Test-BootConfigSet "safeboot")
+
+    return [pscustomobject]@{
+        Success  = [bool]$success
+        ExitCode = [int]$exitCode
+        Output   = $outputStr
+        Retried  = [bool]$retried
+    }
+}
+
+function Clear-SafeBootFlag {
+    <#  Removes safeboot from the current BCD entry and verifies final state.
+        Returns object:
+          Success   [bool]
+          ExitCode  [int]
+          Output    [string] #>
+    [CmdletBinding()]
+    param(
+        [switch]$IgnoreDryRun
+    )
+
+    if ($SCRIPT:DryRun -and -not $IgnoreDryRun) {
+        return [pscustomobject]@{
+            Success  = $true
+            ExitCode = 0
+            Output   = "DRY-RUN: bcdedit /deletevalue safeboot"
+        }
+    }
+
+    $output = bcdedit /deletevalue safeboot 2>&1
+    $exitCode = $LASTEXITCODE
+    $outputStr = ($output | Out-String).Trim()
+
+    if ($exitCode -eq 0) {
+        return [pscustomobject]@{
+            Success  = $true
+            ExitCode = 0
+            Output   = $outputStr
+        }
+    }
+
+    # Fallback verification path: bcdedit can return non-zero when element is
+    # already absent, which is effectively a safe/desired state.
+    $isStillSet = Test-BootConfigSet "safeboot"
+    return [pscustomobject]@{
+        Success  = (-not $isStillSet)
+        ExitCode = [int]$exitCode
+        Output   = $outputStr
+    }
 }
 
 function Test-BootConfigSet($key) {
