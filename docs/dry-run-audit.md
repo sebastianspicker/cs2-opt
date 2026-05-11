@@ -77,7 +77,7 @@ registry, BCD, service, task, driver, or network settings.
 | PowerShell safety scan | Local equivalent of dangerous pattern checks | Passed: clean. |
 | Launcher safety scan | Local equivalent of launcher safety checks | Passed: clean. |
 | Workflow integrity scan | Local equivalent of workflow integrity checks | Passed: clean. |
-| Retired reference scan | EstimateKey/`CFG_ImprovementEstimates` cross-reference | Passed: retired surface is clean. |
+| Retired reference scan | CI retired-symbol cross-reference | Passed: retired surface is clean. |
 | Diff hygiene | `git diff --check` | Passed. |
 
 The entrypoint smoke attempt covered:
