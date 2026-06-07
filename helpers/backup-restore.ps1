@@ -32,7 +32,6 @@ $SCRIPT:DRS_FOUND_VIA_APP = "(found via cs2.exe)"
 $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
 
 function New-BackupDataObject {
-    [CmdletBinding(SupportsShouldProcess)]
     param()
 
     return [PSCustomObject]@{

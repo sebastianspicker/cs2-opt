@@ -392,7 +392,9 @@ function Invoke-TcpLatencyCandidateProbe {
             $sw.Stop()
             $timeouts++
         } finally {
-            try { $client.Close() } catch {}
+            try { $client.Close() } catch {
+                Write-DebugLog "Latency probe socket close failed: $($_.Exception.Message)"
+            }
         }
     }
 

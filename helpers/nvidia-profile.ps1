@@ -131,7 +131,6 @@ $NV_DRS_SETTINGS = @(
 # ─────────────────────────────────────────────────────────────────────────────
 
 function New-NvidiaProfileResult {
-    [CmdletBinding(SupportsShouldProcess)]
     param(
         [string]$Status,
         [bool]$CanCompleteStep,

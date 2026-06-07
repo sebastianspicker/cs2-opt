@@ -31,7 +31,7 @@ jobs:
         run: |
           echo "=== Scanning for hardcoded secrets ==="
           FOUND=0
-          EXCLUDE_ANALYSIS_PATHS='(^|/)(docs/archive|docs/agent|vendor|third_party|third-party|3rdparty|external)/|\.git/'
+          EXCLUDE_ANALYSIS_PATHS='(^|/)(docs/archive|docs/agent|vendor|third_party|third-party|3rdparty|external|\.codacy/generated)/|\.git/'
 
           # Patterns that should never appear in committed code
           PATTERNS=(
@@ -59,7 +59,7 @@ jobs:
           fi
 
           # Check for private keys
-          if grep -rn 'BEGIN.*PRIVATE KEY' . 2>/dev/null | grep -Ev "$EXCLUDE_ANALYSIS_PATHS"; then
+          if grep -rn 'BEGIN.*PRIVATE KEY' . 2>/dev/null | grep -Ev "$EXCLUDE_ANALYSIS_PATHS" | grep -v '.github/workflows/security.yml'; then
             echo "::error::Private key found in repository"
             FOUND=$((FOUND + 1))
           fi
@@ -84,7 +84,7 @@ jobs:
         run: |
           echo "=== Checking PowerShell scripts for dangerous patterns ==="
           FOUND=0
-          EXCLUDE_ANALYSIS_PATHS='(^|/)(docs/archive|docs/agent|vendor|third_party|third-party|3rdparty|external)/|\.git/'
+          EXCLUDE_ANALYSIS_PATHS='(^|/)(docs/archive|docs/agent|vendor|third_party|third-party|3rdparty|external|\.codacy/generated)/|\.git/'
 
           # Invoke-Expression / iex — remote code execution vector
           if grep -rEn '\b(Invoke-Expression|iex)\b' --include='*.ps1' . 2>/dev/null | grep -Ev "$EXCLUDE_ANALYSIS_PATHS" | grep -v '# safe:' | grep -v 'PSScriptAnalyzer'; then

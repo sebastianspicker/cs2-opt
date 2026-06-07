@@ -329,6 +329,7 @@ function Reset-TestState {
         Remove-Item $CFG_ProgressFile -Force -ErrorAction SilentlyContinue
         Remove-Item $CFG_BackupFile   -Force -ErrorAction SilentlyContinue
         Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $CFG_LatencyHistoryFile -Force -ErrorAction SilentlyContinue
         Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.*.json") -Force -ErrorAction SilentlyContinue
         Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.corrupt.*.json") -Force -ErrorAction SilentlyContinue
         Remove-Item (Join-Path $SCRIPT:TestTempRoot "state.json.corrupt*") -Force -ErrorAction SilentlyContinue

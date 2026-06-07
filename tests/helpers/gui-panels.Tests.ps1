@@ -22,7 +22,6 @@ namespace System.Windows {
     . "$Script:Root/helpers/step-catalog.ps1"
 
     function New-FakeGuiElement {
-        [CmdletBinding(SupportsShouldProcess)]
         param()
 
         $element = [PSCustomObject]@{
@@ -60,7 +59,6 @@ namespace System.Windows {
     }
 
     function New-Brush {
-        [CmdletBinding(SupportsShouldProcess)]
         param([string]$Color)
         $Color
     }
@@ -68,12 +66,10 @@ namespace System.Windows {
     function Launch-Terminal {}
     function Load-Dashboard {}
     function Start-Analysis {
-        [CmdletBinding(SupportsShouldProcess)]
         param()
     }
     function Load-Optimize {}
     function Start-InlineVerify {
-        [CmdletBinding(SupportsShouldProcess)]
         param()
     }
     function Load-Backup {}

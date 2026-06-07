@@ -433,7 +433,6 @@ function Initialize-ScriptDefaults {
 }
 
 function New-WriteOperationResult {
-    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [ValidateSet("Success", "Failed", "Skipped", "DryRun")]

@@ -31,7 +31,6 @@ function Save-StateDataSafe {
 }
 
 function New-DefaultState {
-    [CmdletBinding(SupportsShouldProcess)]
     param()
 
     return [PSCustomObject]@{
