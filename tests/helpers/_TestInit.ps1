@@ -232,6 +232,7 @@ $_helpersDir = "$_projectRoot/helpers"
 function New-TestStateFile {
     <#  Creates a minimal state.json in the test temp directory.
         Returns the file path.  #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [string]$TestProfile  = "RECOMMENDED",
         [string]$Mode         = "CONTROL",
@@ -242,7 +243,9 @@ function New-TestStateFile {
         mode     = $Mode
         logLevel = $LogLevel
     }
-    $state | ConvertTo-Json -Depth 5 | Set-Content $CFG_StateFile -Encoding UTF8
+    if ($PSCmdlet.ShouldProcess($CFG_StateFile, "Create test state file")) {
+        $state | ConvertTo-Json -Depth 5 | Set-Content $CFG_StateFile -Encoding UTF8
+    }
     return $CFG_StateFile
 }
 
@@ -250,6 +253,7 @@ function New-TestStateFile {
 function New-TestProgressFile {
     <#  Creates a minimal progress.json in the test temp directory.
         Returns the file path.  #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [int]$Phase = 1,
         [int]$LastStep = 0,
@@ -263,7 +267,9 @@ function New-TestProgressFile {
         skippedSteps      = $SkippedSteps
         timestamps        = @{}
     }
-    $prog | ConvertTo-Json -Depth 5 | Set-Content $CFG_ProgressFile -Encoding UTF8
+    if ($PSCmdlet.ShouldProcess($CFG_ProgressFile, "Create test progress file")) {
+        $prog | ConvertTo-Json -Depth 5 | Set-Content $CFG_ProgressFile -Encoding UTF8
+    }
     return $CFG_ProgressFile
 }
 
@@ -271,6 +277,7 @@ function New-TestProgressFile {
 function New-TestBackupFile {
     <#  Creates a minimal backup.json in the test temp directory.
         Returns the file path.  #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [array]$Entries = @()
     )
@@ -278,7 +285,9 @@ function New-TestBackupFile {
         entries = $Entries
         created = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    $backup | ConvertTo-Json -Depth 10 | Set-Content $CFG_BackupFile -Encoding UTF8
+    if ($PSCmdlet.ShouldProcess($CFG_BackupFile, "Create test backup file")) {
+        $backup | ConvertTo-Json -Depth 10 | Set-Content $CFG_BackupFile -Encoding UTF8
+    }
     return $CFG_BackupFile
 }
 
@@ -286,6 +295,9 @@ function New-TestBackupFile {
 function Reset-TestState {
     <#  Resets script-scope variables and cleans test temp files.
         Call in BeforeEach blocks for isolation between tests.  #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
     $SCRIPT:DryRun   = $false
     $SCRIPT:Profile  = "RECOMMENDED"
     $SCRIPT:Mode     = "CONTROL"
@@ -294,14 +306,16 @@ function Reset-TestState {
     $SCRIPT:_backupPending = [System.Collections.Generic.List[object]]::new()
 
     # Remove test JSON files so each test starts clean
-    Remove-Item $CFG_StateFile    -Force -ErrorAction SilentlyContinue
-    Remove-Item $CFG_ProgressFile -Force -ErrorAction SilentlyContinue
-    Remove-Item $CFG_BackupFile   -Force -ErrorAction SilentlyContinue
-    Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.*.json") -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.corrupt.*.json") -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $SCRIPT:TestTempRoot "state.json.corrupt*") -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $SCRIPT:TestTempRoot "progress.json.corrupt*") -Force -ErrorAction SilentlyContinue
+    if ($PSCmdlet.ShouldProcess($SCRIPT:TestTempRoot, "Remove test state files")) {
+        Remove-Item $CFG_StateFile    -Force -ErrorAction SilentlyContinue
+        Remove-Item $CFG_ProgressFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $CFG_BackupFile   -Force -ErrorAction SilentlyContinue
+        Remove-Item $CFG_BackupLockFile -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.*.json") -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $SCRIPT:TestTempRoot "backup.corrupt.*.json") -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $SCRIPT:TestTempRoot "state.json.corrupt*") -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $SCRIPT:TestTempRoot "progress.json.corrupt*") -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ── Cleanup hook ──────────────────────────────────────────────────────────────
