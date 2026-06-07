@@ -175,9 +175,16 @@ Describe "Invoke-VerifySettings" {
         Mock Write-LogoBanner {}
         Mock Write-Blank {}
         Mock -CommandName $writeHostCommand {
-            param($Object)
+            param(
+                [Parameter(Position = 0, ValueFromRemainingArguments)]
+                [object[]]$Object,
+                [ConsoleColor]$ForegroundColor,
+                [ConsoleColor]$BackgroundColor,
+                [switch]$NoNewline,
+                [object]$Separator
+            )
             if ($null -ne $Object) {
-                $script:VerifyOutput.Add("$Object") | Out-Null
+                $script:VerifyOutput.Add(($Object -join " ")) | Out-Null
             }
         }
         Mock Test-RegistryCheck {
