@@ -163,6 +163,10 @@ function Set-SecureAcl {
         $acl.SetAccessRule($systemRule)
         if (-not $PSCmdlet.ShouldProcess($Path, "Apply restricted Administrators/SYSTEM ACL")) { return }
         Set-Acl -Path $Path -AclObject $acl -ErrorAction Stop
+    }
+
+    try {
+        Set-SuiteDacl -TargetPath $Path -AdministratorsAccount $admins -SystemAccount $system -SetOwner
     } catch {
         $ownerError = $_
         try {
