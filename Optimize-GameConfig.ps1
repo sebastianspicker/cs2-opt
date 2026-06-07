@@ -14,19 +14,13 @@ if ($startStep -le 34) {
         -Caveat "net_client_steamdatagram_enable_override 1 forces Valve SDR — disable if your direct routing is already clean. snd_headphone_eq 0 (Natural) vs 1 (Crisp): Crisp boosts highs but can cause ear fatigue; change to 1 in config.env.ps1 if preferred. snd_spatialize_lerp 0 is a suite default for the current headphone-focused spatial path, not a Valve-documented competitive requirement. r_fullscreen_gamma 2.2 only applies in exclusive fullscreen. snd_tensecondwarning_volume kept at 0.1 (tactical cue). m_rawinput 1 is kept for documentation clarity and future compatibility, not because current CS2 needs it to enable raw input." `
         -Risk "SAFE" -Depth "APP" `
         -Improvement "73 CS2 CVars: network + hit prediction + CS2-side mouse acceleration guards + audio spatial defaults + music muting + video + HUD cleanup + gameplay (autowepswitch)" `
-        -SideEffects "autoexec.cfg untouched except one appended line: 'exec optimization.cfg'. optimization.cfg overrides any same-named CVars appearing earlier in autoexec.cfg. snd_headphone_eq 0 changes EQ from Crisp to Natural. cl_autowepswitch 0 disables auto weapon pickup switch. Intel only: thread_pool_option 2 limits CS2 to P-cores. m_rawinput 1 remains in the generated file as a harmless no-op/documentation stub in current CS2 builds." `
+        -SideEffects "autoexec.cfg untouched except one appended line: 'exec optimization.cfg'. optimization.cfg overrides any same-named CVars appearing earlier in autoexec.cfg. snd_headphone_eq 0 changes EQ from Crisp to Natural. cl_autowepswitch 0 disables auto weapon pickup switch. m_rawinput 1 remains in the generated file as a harmless no-op/documentation stub in current CS2 builds." `
         -Undo "Remove 'exec optimization.cfg' from autoexec.cfg, or delete optimization.cfg from game\csgo\cfg\" `
         -Action {
-            # Build effective autoexec: start with config defaults, add hardware-specific CVars
+            # Build effective autoexec from config defaults. Thread-pool forcing is
+            # intentionally omitted; keep it user/benchmark-driven.
             $effectiveAutoexec = [ordered]@{}
             foreach ($kv in $CFG_CS2_Autoexec.GetEnumerator()) { $effectiveAutoexec[$kv.Key] = $kv.Value }
-
-            # Intel 12th gen+ hybrid: prefer P-cores for CS2 thread pool
-            $intelHybridName = Get-IntelHybridCpuName
-            if ($intelHybridName) {
-                $effectiveAutoexec["thread_pool_option"] = "2"
-                Write-Info "Intel hybrid CPU ($intelHybridName) — adding thread_pool_option 2 (prefer P-cores)"
-            }
 
             $cs2Path = Get-CS2InstallPath
             if (-not $cs2Path) {

@@ -135,6 +135,24 @@ if ((Get-Variable IsWindows -Scope Global -ErrorAction SilentlyContinue) -and $I
             $null
         }
     }
+    if (-not (Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) {
+        function global:Get-NetFirewallRule {
+            param($DisplayName, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) {
+        function global:New-NetFirewallRule {
+            param($DisplayName, $Description, $Direction, $Action, $RemoteAddress, $Protocol, $Profile, $Enabled, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
+    if (-not (Get-Command Remove-NetFirewallRule -ErrorAction SilentlyContinue)) {
+        function global:Remove-NetFirewallRule {
+            param($DisplayName, $ErrorAction, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)
+            $null
+        }
+    }
     if (-not (Get-Command Test-Connection -ErrorAction SilentlyContinue)) {
         function global:Test-Connection {
             param($ComputerName, $Count, $Quiet, $ErrorAction, $TimeoutSeconds, [Parameter(ValueFromRemainingArguments)]$RemainingArgs)

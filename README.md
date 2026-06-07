@@ -225,9 +225,22 @@ If you are reading the code rather than running the suite, start with [`docs/arc
 The CI source of truth is [`.github/workflows/lint.yml`](.github/workflows/lint.yml). Before opening a PR, run the relevant local checks:
 
 ```powershell
-pwsh -NoProfile -Command "Invoke-Pester tests -CI"
-pwsh -NoProfile -Command "Invoke-Pester tests/e2e -CI"
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\Invoke-LocalTests.ps1 -Path .\tests\integration\dryrun-compliance.Tests.ps1 .\tests\e2e\entrypoints.Tests.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\Invoke-LocalTests.ps1 -Path .\tests\e2e
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\CS2-Optimize-GUI.ps1 -SmokeTest
+```
+
+`scripts/Invoke-LocalTests.ps1` imports Pester 5.x explicitly and installs it in
+CurrentUser scope when only the legacy Windows PowerShell Pester 3.x module is
+available. It uses PowerShellGet's publisher-supersedence override so Windows
+PowerShell 5.1 can install gallery Pester 5 alongside the built-in Microsoft
+Pester 3 module. The shipped entrypoints also allow `-SmokeTest` from a
+non-elevated shell; normal execution still requires Administrator rights.
+
+For the full suite, run the wrapper from an elevated shell or use CI:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\Invoke-LocalTests.ps1
 ```
 
 The E2E suite is process-level Pester coverage: it starts the shipped entry scripts as real `pwsh` child processes in `-SmokeTest` mode and checks exit code, stderr, smoke markers, and repo-local state artifacts. It does not use external services, secrets, sleeps, or machine-specific paths.
@@ -488,7 +501,7 @@ evidence remains ignored under `docs/agent/` unless it is intentionally archived
 | [fREQUENCYcs / FPSHeaven](https://fpsheaven.com) | Power plan (original .pow, which we decoded and bug-fixed), FPS cap formula, benchmark maps |
 | [valleyofdoom/PC-Tuning](https://github.com/valleyofdoom/PC-Tuning) | MPO, timer resolution, MSI interrupts, `tscsyncpolicy` WinDbg analysis, general Windows optimization |
 | [djdallmann/GamingPCSetup](https://github.com/djdallmann/GamingPCSetup) | NIC interrupt coalescing empirical test, MMCSS/NetworkThrottlingIndex xperf, FTH analysis, Automatic Maintenance CPU measurement, PS/2 vs USB DPC |
-| [prosettings.net](https://prosettings.net/guides/cs2-options/) | Pro settings aggregation (866 players), damage prediction study |
+| [prosettings.net](https://prosettings.net/guides/cs2-options/) | Pro settings aggregation (883 players, Apr 2026), damage prediction study |
 | [Orbmu2k/nvidiaProfileInspector](https://github.com/Orbmu2k/nvidiaProfileInspector) | `NvApiDriverSettings.h` + `CustomSettingNames.xml` for DRS setting decode |
 | [CXWorld/CapFrameX](https://github.com/CXWorld/CapFrameX) | Benchmark measurement tool |
 
